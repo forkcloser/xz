@@ -12,7 +12,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/mycophonic/xz/internal/randtxt"
+	"github.com/forkcloser/xz/internal/randtxt"
 )
 
 func TestWriter(t *testing.T) {

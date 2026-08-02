@@ -7,7 +7,7 @@
 // Use gxz -h to get information about supported flags.
 package main
 
-//go:generate xb cat -o licenses.go xzLicense:github.com/mycophonic/xz/LICENSE goLicense:~/go/LICENSE
+//go:generate xb cat -o licenses.go xzLicense:github.com/forkcloser/xz/LICENSE goLicense:~/go/LICENSE
 //go:generate xb version-file -o version.go
 
 import (
@@ -19,9 +19,9 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/mycophonic/xz/internal/gflag"
-	"github.com/mycophonic/xz/internal/term"
-	"github.com/mycophonic/xz/internal/xlog"
+	"github.com/forkcloser/xz/internal/gflag"
+	"github.com/forkcloser/xz/internal/term"
+	"github.com/forkcloser/xz/internal/xlog"
 )
 
 const (
@@ -51,7 +51,7 @@ in place).
 
 With no file, or when FILE is -, read standard input.
 
-Report bugs using <https://github.com/mycophonic/xz/issues>.
+Report bugs using <https://github.com/forkcloser/xz/issues>.
 `
 )
 
@@ -61,7 +61,7 @@ func usage(w io.Writer) {
 
 func licenses(w io.Writer) {
 	out := `
-github.com/mycophonic/xz -- xz for Go
+github.com/forkcloser/xz -- xz for Go
 ====================================
 
 {{.xz}}

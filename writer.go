@@ -10,7 +10,7 @@ import (
 	"hash"
 	"io"
 
-	"github.com/mycophonic/xz/lzma"
+	"github.com/forkcloser/xz/lzma"
 )
 
 // WriterConfig describe the parameters for an xz writer.

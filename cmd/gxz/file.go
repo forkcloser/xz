@@ -15,9 +15,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/mycophonic/xz"
-	"github.com/mycophonic/xz/internal/xlog"
-	"github.com/mycophonic/xz/lzma"
+	"github.com/forkcloser/xz"
+	"github.com/forkcloser/xz/internal/xlog"
+	"github.com/forkcloser/xz/lzma"
 )
 
 // signalHandler establishes the signal handler for SIGTERM(1) and

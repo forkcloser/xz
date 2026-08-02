@@ -14,8 +14,8 @@ import (
 	"hash"
 	"io"
 
-	"github.com/mycophonic/xz/internal/xlog"
-	"github.com/mycophonic/xz/lzma"
+	"github.com/forkcloser/xz/internal/xlog"
+	"github.com/forkcloser/xz/lzma"
 )
 
 // ReaderConfig defines the parameters for the xz reader. The

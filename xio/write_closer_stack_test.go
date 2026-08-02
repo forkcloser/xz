@@ -8,8 +8,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/mycophonic/xz"
-	"github.com/mycophonic/xz/xio"
+	"github.com/forkcloser/xz"
+	"github.com/forkcloser/xz/xio"
 )
 
 func ExampleWriteCloserStack() {

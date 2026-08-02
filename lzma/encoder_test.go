@@ -11,7 +11,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/mycophonic/xz/internal/randtxt"
+	"github.com/forkcloser/xz/internal/randtxt"
 )
 
 var testString = `LZMA decoder test example

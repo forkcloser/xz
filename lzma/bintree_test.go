@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mycophonic/xz/internal/randtxt"
+	"github.com/forkcloser/xz/internal/randtxt"
 )
 
 func TestBinTree_Find(t *testing.T) {

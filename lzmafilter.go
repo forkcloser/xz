@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/mycophonic/xz/lzma"
+	"github.com/forkcloser/xz/lzma"
 )
 
 // LZMA filter constants.

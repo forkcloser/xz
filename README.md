@@ -56,7 +56,7 @@ import (
     "log"
     "os"
 
-    "github.com/mycophonic/xz"
+    "github.com/forkcloser/xz"
 )
 
 func main() {
@@ -86,7 +86,7 @@ func main() {
 
 ## Documentation
 
-You can find the full documentation at [pkg.go.dev](https://pkg.go.dev/github.com/mycophonic/xz).
+You can find the full documentation at [pkg.go.dev](https://pkg.go.dev/github.com/forkcloser/xz).
 
 ## Using the gxz compression tool
 
@@ -95,7 +95,7 @@ decompression.
 
 Use following command for installation:
 
-    $ go get github.com/mycophonic/xz/cmd/gxz
+    $ go get github.com/forkcloser/xz/cmd/gxz
 
 To test it call the following command.
 
@@ -116,4 +116,4 @@ This implementation doesn't share any files with the original xz implementation
 and no patches or pull requests are accepted without a review.
 
 All security advisories for this project are published under
-[github.com/mycophonic/xz/security/advisories](https://github.com/mycophonic/xz/security/advisories?state=published).
+[github.com/forkcloser/xz/security/advisories](https://github.com/forkcloser/xz/security/advisories?state=published).

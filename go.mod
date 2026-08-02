@@ -1,4 +1,4 @@
-module github.com/mycophonic/xz
+module github.com/forkcloser/xz
 
 go 1.20
 

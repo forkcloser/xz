@@ -13,7 +13,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/mycophonic/xz"
+	"github.com/forkcloser/xz"
 )
 
 func main() {
