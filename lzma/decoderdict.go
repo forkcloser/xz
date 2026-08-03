@@ -11,20 +11,82 @@ import (
 
 // decoderDict provides the dictionary for the decoder. The whole
 // dictionary is used as reader buffer.
+//
+// The buffer starts small and grows towards dictCap as data is decoded, so it
+// only ever costs what the stream actually produces. The declared dictionary
+// capacity of an xz block is attacker controlled and reaches 4 GiB, and
+// allocating it up front turned a 104-byte file into a 4 GiB allocation.
 type decoderDict struct {
 	buf  buffer
 	head int64
+	// dictCap is the size the buffer may grow to, from the stream header.
+	dictCap int
+	// growAt is the value of buf.front at which a write would wrap the
+	// buffer and so must first consider growing it. It is set to maxInt once
+	// the buffer has reached dictCap, which disables the check and pins the
+	// point after which the buffer may wrap.
+	growAt int
 }
+
+// initialDictCap is the dictionary size allocated up front. Streams that
+// decode less than this never grow; larger ones double until they reach the
+// capacity their header declares.
+const initialDictCap = 64 * 1024
 
 // newDecoderDict creates a new decoder dictionary. The whole dictionary
 // will be used as reader buffer.
 func newDecoderDict(dictCap int) (d *decoderDict, err error) {
+	return newDecoderDictSize(dictCap, initialDictCap)
+}
+
+// newDecoderDictSize creates a decoder dictionary that starts at initial bytes
+// and grows towards dictCap. Splitting the initial size out lets tests drive
+// many growth steps over small dictionaries.
+func newDecoderDictSize(dictCap, initial int) (d *decoderDict, err error) {
 	// lower limit supports easy test cases
 	if !(1 <= dictCap && int64(dictCap) <= MaxDictCap) {
 		return nil, errors.New("lzma: dictCap out of range")
 	}
-	d = &decoderDict{buf: *newBuffer(dictCap)}
+	if initial > dictCap {
+		initial = dictCap
+	}
+	if initial < 1 {
+		initial = 1
+	}
+	d = &decoderDict{buf: *newBuffer(initial), dictCap: dictCap}
+	d.setGrowAt()
 	return d, nil
+}
+
+// setGrowAt recomputes the threshold at which grow must be consulted.
+func (d *decoderDict) setGrowAt() {
+	if d.buf.Cap() >= d.dictCap {
+		d.growAt = maxInt
+		return
+	}
+	d.growAt = d.buf.Cap()
+}
+
+// maxInt is the largest value of the int type.
+const maxInt = int(^uint(0) >> 1)
+
+// grow enlarges the dictionary so that n more bytes fit without wrapping the
+// buffer, up to the capacity the stream declared. Reaching that capacity ends
+// growth for good: from then on the buffer wraps and recycles, exactly as an
+// eagerly allocated dictionary always did.
+//
+// Because growth happens before the buffer would first wrap, buf.grow's
+// precondition holds and no index has to be rewritten.
+func (d *decoderDict) grow(n int) {
+	newCap := 2 * d.buf.Cap()
+	if need := d.buf.front + n; newCap < need {
+		newCap = need
+	}
+	if newCap > d.dictCap {
+		newCap = d.dictCap
+	}
+	d.buf.grow(newCap)
+	d.setGrowAt()
 }
 
 // Reset clears the dictionary. The read buffer is not changed, so the
@@ -36,6 +98,9 @@ func (d *decoderDict) Reset() {
 // WriteByte writes a single byte into the dictionary. It is used to
 // write literals into the dictionary.
 func (d *decoderDict) WriteByte(c byte) error {
+	if d.buf.front >= d.growAt {
+		d.grow(1)
+	}
 	if err := d.buf.WriteByte(c); err != nil {
 		return err
 	}
@@ -77,11 +142,17 @@ func (d *decoderDict) byteAt(dist int) byte {
 // the dictionary for writing. You need to read from the dictionary
 // first.
 func (d *decoderDict) writeMatch(dist int64, length int) error {
-	if !(0 < dist && dist <= int64(d.dictLen())) {
-		return errors.New("writeMatch: distance out of range")
-	}
 	if !(0 < length && length <= maxMatchLen) {
 		return errors.New("writeMatch: length out of range")
+	}
+	// Grow before validating the distance and the space: growing raises both
+	// dictLen and Available, so checking first could reject a distance the
+	// grown dictionary can serve.
+	if d.buf.front+length > d.growAt {
+		d.grow(length)
+	}
+	if !(0 < dist && dist <= int64(d.dictLen())) {
+		return errors.New("writeMatch: distance out of range")
 	}
 	if length > d.buf.Available() {
 		return ErrNoSpace
@@ -146,6 +217,9 @@ func (d *decoderDict) writeMatch(dist int64, length int) error {
 // Write writes the given bytes into the dictionary and advances the
 // head.
 func (d *decoderDict) Write(p []byte) (n int, err error) {
+	if d.buf.front+len(p) > d.growAt {
+		d.grow(len(p))
+	}
 	n, err = d.buf.Write(p)
 	d.head += int64(n)
 	return n, err
