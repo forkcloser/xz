@@ -101,7 +101,12 @@ func checkUncompressedSize(rec record) error {
 //
 // The ParallelReader verifies the block checks, the block sizes against
 // the index, and the header, footer and index checksums of every
-// stream. It is not safe for concurrent use.
+// stream.
+//
+// Read and WriteTo must be called from one goroutine at a time. Close is the
+// exception: it may be called from another goroutine to cancel a Read that is
+// waiting on a block, which is what makes it usable for abandoning a reader
+// whose input has gone slow.
 type ParallelReader struct {
 	ParallelReaderConfig
 
@@ -109,16 +114,43 @@ type ParallelReader struct {
 	blocks []blockDesc
 	size   int64
 
-	started   bool
-	queue     chan *blockWork
-	jobs      chan *blockWork
+	// done is closed by Close, and by the first read error, to tell the
+	// dispatcher and any waiting read to give up. It is created with the
+	// reader rather than by start, so that Close cannot race with a first
+	// Read that has not started the workers yet.
 	done      chan struct{}
 	closeOnce sync.Once
-	bufPool   chan []byte
 
-	cur    []byte
-	curPos int
-	err    error
+	// Owned by the reading goroutine.
+	started bool
+	queue   chan *blockWork
+	jobs    chan *blockWork
+	bufPool chan []byte
+	cur     []byte
+	curPos  int
+
+	// err is reachable from Close, so it is the one field that needs a lock.
+	mu  sync.Mutex
+	err error
+}
+
+// setErr records the first error the reader saw and returns the error it will
+// report from here on. Later errors do not displace the first, so the reason a
+// stream stopped stays stable across calls.
+func (r *ParallelReader) setErr(err error) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.err == nil {
+		r.err = err
+	}
+	return r.err
+}
+
+// getErr returns the error the reader is in, or nil.
+func (r *ParallelReader) getErr() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.err
 }
 
 // blockResult is the outcome of decoding one block.
@@ -157,6 +189,7 @@ func (c ParallelReaderConfig) NewParallelReader(xz io.ReaderAt, size int64) (r *
 		xz:                   xz,
 		blocks:               blocks,
 		size:                 total,
+		done:                 make(chan struct{}),
 	}, nil
 }
 
@@ -308,7 +341,6 @@ func (r *ParallelReader) start() {
 	r.started = true
 	r.queue = make(chan *blockWork, r.Workers+2)
 	r.jobs = make(chan *blockWork)
-	r.done = make(chan struct{})
 	r.bufPool = make(chan []byte, cap(r.queue)+1)
 	for i := 0; i < r.Workers; i++ {
 		go r.worker()
@@ -320,6 +352,11 @@ func (r *ParallelReader) start() {
 // the ordered queue (bounded capacity) throttles how many blocks are in
 // flight.
 func (r *ParallelReader) dispatch() {
+	// Both channels close on every exit path, including the cancelled one:
+	// jobs so the workers finish, and queue so a consumer waiting for the
+	// next block is released rather than left waiting on work that will
+	// never be dispatched.
+	defer close(r.queue)
 	defer close(r.jobs)
 	for i := range r.blocks {
 		w := &blockWork{
@@ -337,7 +374,6 @@ func (r *ParallelReader) dispatch() {
 			return
 		}
 	}
-	close(r.queue)
 }
 
 // worker decodes blocks until the job channel is closed.
@@ -440,27 +476,40 @@ func (r *ParallelReader) decodeBlock(d *blockDesc, buf []byte) ([]byte, error) {
 
 // nextBlock retires the current buffer and blocks until the next
 // decoded block is available. It returns io.EOF after the last block.
+// It gives up if the reader is cancelled: a cancelled dispatcher can leave a
+// block queued that no worker will ever report on, so both receives have to
+// watch done rather than only the queue.
 func (r *ParallelReader) nextBlock() error {
 	r.putBuf(r.cur)
 	r.cur = nil
 	r.curPos = 0
-	w, ok := <-r.queue
-	if !ok {
-		return io.EOF
+	var w *blockWork
+	select {
+	case queued, ok := <-r.queue:
+		if !ok {
+			return io.EOF
+		}
+		w = queued
+	case <-r.done:
+		return errReaderClosed
 	}
-	res := <-w.result
-	if res.err != nil {
-		return res.err
+	select {
+	case res := <-w.result:
+		if res.err != nil {
+			return res.err
+		}
+		r.cur = res.data
+		return nil
+	case <-r.done:
+		return errReaderClosed
 	}
-	r.cur = res.data
-	return nil
 }
 
 // Read reads the uncompressed data stream. The blocks are decoded
 // concurrently but delivered in order.
 func (r *ParallelReader) Read(p []byte) (n int, err error) {
-	if r.err != nil {
-		return 0, r.err
+	if err = r.getErr(); err != nil {
+		return 0, err
 	}
 	if !r.started {
 		r.start()
@@ -468,11 +517,10 @@ func (r *ParallelReader) Read(p []byte) (n int, err error) {
 	for n < len(p) {
 		if r.curPos == len(r.cur) {
 			if err = r.nextBlock(); err != nil {
-				r.err = err
 				if err != io.EOF {
 					r.stop()
 				}
-				return n, err
+				return n, r.setErr(err)
 			}
 			continue
 		}
@@ -487,8 +535,8 @@ func (r *ParallelReader) Read(p []byte) (n int, err error) {
 // avoids the intermediate copy of the Read interface by handing the
 // decoded block buffers directly to the writer.
 func (r *ParallelReader) WriteTo(w io.Writer) (n int64, err error) {
-	if r.err != nil {
-		return 0, r.err
+	if err = r.getErr(); err != nil {
+		return 0, err
 	}
 	if !r.started {
 		r.start()
@@ -496,12 +544,12 @@ func (r *ParallelReader) WriteTo(w io.Writer) (n int64, err error) {
 	for {
 		if r.curPos == len(r.cur) {
 			if err = r.nextBlock(); err != nil {
-				r.err = err
 				if err == io.EOF {
+					r.setErr(err)
 					return n, nil
 				}
 				r.stop()
-				return n, err
+				return n, r.setErr(err)
 			}
 			continue
 		}
@@ -509,29 +557,28 @@ func (r *ParallelReader) WriteTo(w io.Writer) (n int64, err error) {
 		n += int64(k)
 		r.curPos += k
 		if err != nil {
-			r.err = err
 			r.stop()
-			return n, err
+			return n, r.setErr(err)
 		}
 	}
 }
 
-// stop terminates the dispatcher and lets the workers drain.
+// stop cancels the dispatcher and releases any waiting read. The workers
+// finish the block in hand and exit once the dispatcher closes the job
+// channel.
 func (r *ParallelReader) stop() {
-	r.closeOnce.Do(func() {
-		if r.done != nil {
-			close(r.done)
-		}
-	})
+	r.closeOnce.Do(func() { close(r.done) })
 }
 
-// Close stops the background workers. It must be called when the
-// reader is abandoned before io.EOF was reached; it is a no-op
-// otherwise. The error is always nil.
+// Close stops the background workers. It must be called when the reader is
+// abandoned before io.EOF was reached; it is a no-op otherwise. The error is
+// always nil.
+//
+// Unlike Read and WriteTo, Close may be called from another goroutine, and
+// doing so cancels a read that is waiting on a block. A reader that already
+// reached io.EOF keeps reporting io.EOF rather than the close.
 func (r *ParallelReader) Close() error {
 	r.stop()
-	if r.err == nil {
-		r.err = errReaderClosed
-	}
+	r.setErr(errReaderClosed)
 	return nil
 }

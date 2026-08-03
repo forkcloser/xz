@@ -8,7 +8,9 @@ import (
 	"bytes"
 	"io"
 	"math/rand"
+	"runtime"
 	"testing"
+	"time"
 )
 
 // parallelTestData generates compressible data with literals, matches
@@ -140,6 +142,91 @@ func TestParallelReaderTruncated(t *testing.T) {
 		t.Fatalf("ReadAll on corrupted file: no error")
 	}
 	r.Close()
+}
+
+// slowReaderAt delays every read so that a decode is reliably still in flight
+// when the test calls Close.
+type slowReaderAt struct {
+	r     io.ReaderAt
+	delay time.Duration
+}
+
+func (s slowReaderAt) ReadAt(p []byte, off int64) (int, error) {
+	time.Sleep(s.delay)
+	return s.r.ReadAt(p, off)
+}
+
+// TestParallelReaderCloseUnblocksRead covers cancelling a read in progress.
+// Close is documented as the way to abandon a reader, and the natural moment
+// to want that is when the input has gone slow — which is exactly when Read is
+// parked waiting for a block. A cancelled dispatcher used to leave both the
+// block queue and the pending result unattended, so Read waited forever.
+func TestParallelReaderCloseUnblocksRead(t *testing.T) {
+	data := parallelTestData(1 << 20)
+	xz := compressMultiBlock(t, data, 16<<10)
+	src := slowReaderAt{r: bytes.NewReader(xz), delay: 2 * time.Millisecond}
+	before := runtime.NumGoroutine()
+
+	r, err := ParallelReaderConfig{Workers: 2}.NewParallelReader(src, int64(len(xz)))
+	if err != nil {
+		t.Fatalf("NewParallelReader error %s", err)
+	}
+
+	copyDone := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(io.Discard, r)
+		copyDone <- err
+	}()
+
+	// Let the copy get properly under way before pulling the rug.
+	time.Sleep(50 * time.Millisecond)
+	if err := r.Close(); err != nil {
+		t.Fatalf("Close error %s", err)
+	}
+
+	select {
+	case err := <-copyDone:
+		if err != errReaderClosed {
+			t.Fatalf("io.Copy returned %v; want %v", err, errReaderClosed)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Read did not return after Close: the reader is deadlocked")
+	}
+
+	// Releasing the reader is only half the job; the workers and the
+	// dispatcher have to wind up too, or Close just moves the leak.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		n := runtime.NumGoroutine()
+		if n <= before+2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d goroutines still running after Close; started from %d",
+				n, before)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestParallelReaderCloseAfterEOFKeepsEOF checks that cancelling a reader that
+// already finished does not rewrite why it finished.
+func TestParallelReaderCloseAfterEOFKeepsEOF(t *testing.T) {
+	data := parallelTestData(1 << 16)
+	xz := compressMultiBlock(t, data, 8<<10)
+	r, err := NewParallelReader(bytes.NewReader(xz), int64(len(xz)))
+	if err != nil {
+		t.Fatalf("NewParallelReader error %s", err)
+	}
+	if _, err = io.Copy(io.Discard, r); err != nil {
+		t.Fatalf("io.Copy error %s", err)
+	}
+	if err = r.Close(); err != nil {
+		t.Fatalf("Close error %s", err)
+	}
+	if _, err = r.Read(make([]byte, 8)); err != io.EOF {
+		t.Fatalf("Read after EOF then Close returned %v; want io.EOF", err)
+	}
 }
 
 func TestParallelReaderClose(t *testing.T) {
