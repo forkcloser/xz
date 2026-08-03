@@ -2,7 +2,10 @@
 
 ## Supported Versions
 
-Currently the last minor version v0.5.x is supported.
+This fork carries no release tags yet, so the supported version is the tip of
+the default branch. The `v0.5.x` line referred to here previously belongs to
+the upstream project, [ulikunitz/xz](https://github.com/ulikunitz/xz), and says
+nothing about this repository.
 
 ## Reporting a Vulnerability
 

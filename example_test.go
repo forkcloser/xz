@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/forkcloser/xz"
 )
@@ -44,10 +45,15 @@ func ExampleReader() {
 }
 
 func ExampleWriter() {
-	f, err := os.Create("example.xz")
+	// A temporary path keeps the example from dropping a file into whatever
+	// directory it is run from — which, when it runs as a test, is the
+	// package source directory.
+	name := filepath.Join(os.TempDir(), "example.xz")
+	f, err := os.Create(name)
 	if err != nil {
-		log.Fatalf("os.Create(%q) error %s", "example.xz", err)
+		log.Fatalf("os.Create(%q) error %s", name, err)
 	}
+	defer func() { _ = os.Remove(name) }()
 	defer func() {
 		if err := f.Close(); err != nil {
 			log.Printf("f.Close() error %s", err)

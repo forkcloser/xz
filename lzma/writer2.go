@@ -239,7 +239,11 @@ func (w *Writer2) writeCompressedChunk() error {
 func (w *Writer2) writeChunk() error {
 	u := int(uncompressedHeaderLen + w.encoder.Compressed())
 	c := headerLen(w.ctype) + w.buf.Len()
-	if u < c {
+	// The uncompressed form replays the chunk's input from the encoder
+	// dictionary. A dictionary smaller than the chunk has already dropped
+	// part of that input, so the compressed form is the only one that can
+	// be written, even when it is larger.
+	if u < c && int64(w.encoder.dict.Len()) >= w.encoder.Compressed() {
 		return w.writeUncompressedChunk()
 	}
 	return w.writeCompressedChunk()
