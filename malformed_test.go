@@ -7,6 +7,7 @@ package xz
 import (
 	"bytes"
 	"errors"
+	"hash/crc32"
 	"io"
 	"math/rand"
 	"testing"
@@ -340,5 +341,50 @@ func TestWriterCloseTwice(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("empty stream decoded to %d bytes", len(got))
+	}
+}
+
+// TestBlockHeaderPaddingIsCorrupt covers non-zero padding inside a block
+// header whose CRC has been repaired to match. The error used to be the plain
+// stream-padding sentinel, so it did not match ErrCorrupt and read as if
+// stream padding were involved; a caller sorting "reject the input" from
+// "retry the transport" would have retried a permanently corrupt file.
+func TestBlockHeaderPaddingIsCorrupt(t *testing.T) {
+	full := wellFormed(t)
+
+	// The first block header starts after the 12-byte stream header. The
+	// writer stores no sizes, so its layout is fixed: size byte, flags,
+	// 3 bytes of LZMA2 filter, 3 bytes of padding, then the CRC over
+	// everything before it.
+	const hdrOff = 12
+	hlen := (int(full[hdrOff]) + 1) * 4
+	bad := append([]byte{}, full...)
+	bad[hdrOff+hlen-5] ^= 0x40 // last padding byte
+	putUint32LE(bad[hdrOff+hlen-4:],
+		crc32.ChecksumIEEE(bad[hdrOff:hdrOff+hlen-4]))
+
+	r, err := NewReader(bytes.NewReader(bad))
+	if err == nil {
+		_, err = io.ReadAll(r)
+	}
+	if err == nil {
+		t.Fatal("sequential reader accepted non-zero block header padding")
+	}
+	if !errors.Is(err, ErrCorrupt) {
+		t.Errorf("sequential reader returned %v; want a match for ErrCorrupt",
+			err)
+	}
+
+	pr, err := NewParallelReader(bytes.NewReader(bad), int64(len(bad)))
+	if err == nil {
+		_, err = io.ReadAll(pr)
+		_ = pr.Close()
+	}
+	if err == nil {
+		t.Fatal("parallel reader accepted non-zero block header padding")
+	}
+	if !errors.Is(err, ErrCorrupt) {
+		t.Errorf("parallel reader returned %v; want a match for ErrCorrupt",
+			err)
 	}
 }

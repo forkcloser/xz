@@ -425,7 +425,7 @@ func (h *blockHeader) UnmarshalBinary(data []byte) error {
 	// The only reasonable approach seems to be to ignore the
 	// padding size. We still check that all padding bytes are zero.
 	if !allZeros(data[n-k : n]) {
-		return errPadding
+		return corruptf("xz: non-zero block header padding")
 	}
 	return nil
 }

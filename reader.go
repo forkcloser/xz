@@ -95,6 +95,12 @@ func (c ReaderConfig) NewReader(xz io.Reader) (r *Reader, err error) {
 var errUnexpectedData = corruptf("xz: unexpected data after stream")
 
 // Read reads uncompressed data from the stream.
+//
+// As the io.Reader contract permits, Read can return decoded data together
+// with an error. When the error reports corrupt or truncated input, the
+// trailing bytes of that data may stem from decoder state that was fed input
+// past the point of corruption; discard data received alongside such an error
+// rather than treating it as a correct prefix of the stream.
 func (r *Reader) Read(p []byte) (n int, err error) {
 	for n < len(p) {
 		if r.sr == nil {
@@ -330,7 +336,7 @@ func (br *blockReader) Read(p []byte) (n int, err error) {
 	if c >= 0 && br.compressedSize() > c {
 		return n, corruptf("xz: wrong compressed size for block")
 	}
-	if err != io.EOF {
+	if !errors.Is(err, io.EOF) {
 		return n, err
 	}
 	if br.uncompressedSize() < u || br.compressedSize() < c {
@@ -341,7 +347,7 @@ func (br *blockReader) Read(p []byte) (n int, err error) {
 	k := padLen(br.lxz.n)
 	q := make([]byte, k+s, k+2*s)
 	if _, err = io.ReadFull(br.lxz.r, q); err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
 		}
 		return n, err
