@@ -146,7 +146,11 @@ func (r *Reader2) startChunk() error {
 	case cLR:
 		r.decoder.State.Reset()
 	case cLRN, cLRND:
-		r.decoder.State = newState(header.props)
+		// Reset in place rather than building a new state: Reset keeps the
+		// probability arrays, so a chunk that changes the properties costs no
+		// allocation unless the literal codec actually has to change size.
+		r.decoder.State.Properties = header.props
+		r.decoder.State.Reset()
 	}
 	err = r.decoder.Reopen(br, size)
 	if err != nil {

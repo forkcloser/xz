@@ -46,14 +46,14 @@ func (dc *distCodec) deepcopy(src *distCodec) {
 // newDistCodec creates a new distance codec.
 func (dc *distCodec) init() {
 	for i := range dc.posSlotCodecs {
-		dc.posSlotCodecs[i] = makeTreeCodec(posSlotBits)
+		dc.posSlotCodecs[i].init(posSlotBits)
 	}
 	for i := range dc.posModel {
 		posSlot := startPosModel + i
 		bits := (posSlot >> 1) - 1
-		dc.posModel[i] = makeTreeReverseCodec(bits)
+		dc.posModel[i].init(bits)
 	}
-	dc.alignCodec = makeTreeReverseCodec(alignBits)
+	dc.alignCodec.init(alignBits)
 }
 
 // lenState converts the value l to a supported lenState value.

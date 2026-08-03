@@ -28,10 +28,12 @@ func (c *literalCodec) init(lc, lp int) {
 	case !(minLP <= lp && lp <= maxLP):
 		panic("lp out of range")
 	}
-	c.probs = make([]prob, 0x300<<uint(lc+lp))
-	for i := range c.probs {
-		c.probs[i] = probInit
+	n := 0x300 << uint(lc+lp)
+	if cap(c.probs) < n {
+		c.probs = make([]prob, n)
 	}
+	c.probs = c.probs[:n]
+	initProbSlice(c.probs)
 }
 
 // Encode encodes the byte s using a range encoder as well as the current LZMA

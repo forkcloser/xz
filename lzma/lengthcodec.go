@@ -48,12 +48,12 @@ func (lc *lengthCodec) init() {
 		lc.choice[i] = probInit
 	}
 	for i := range lc.low {
-		lc.low[i] = makeTreeCodec(3)
+		lc.low[i].init(3)
 	}
 	for i := range lc.mid {
-		lc.mid[i] = makeTreeCodec(3)
+		lc.mid[i].init(3)
 	}
-	lc.high = makeTreeCodec(8)
+	lc.high.init(8)
 }
 
 // Encode encodes the length offset. The length offset l can be compute by

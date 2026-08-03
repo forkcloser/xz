@@ -40,10 +40,16 @@ func (r *CyclicPoly) RollByte(x byte) uint64 {
 		r.h = ror(r.h, 1) ^ y
 		r.p = append(r.p, y)
 	} else {
-		r.h ^= ror(r.p[r.i], uint(cap(r.p)-1))
+		n := cap(r.p)
+		r.h ^= ror(r.p[r.i], uint(n-1))
 		r.h = ror(r.h, 1) ^ y
 		r.p[r.i] = y
-		r.i = (r.i + 1) % cap(r.p)
+		// r.i is always below n here, so advancing and wrapping on equality
+		// is the same as taking the remainder — without the hardware divide
+		// that a non-constant modulus costs on every input byte.
+		if r.i++; r.i == n {
+			r.i = 0
+		}
 	}
 	return r.h
 }

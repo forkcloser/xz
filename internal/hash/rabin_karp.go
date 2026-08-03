@@ -60,7 +60,11 @@ func (r *RabinKarp) RollByte(x byte) uint64 {
 		r.h += uint64(x)
 		r.h *= r.A
 		r.p[r.i] = x
-		r.i = (r.i + 1) % cap(r.p)
+		// See CyclicPoly.RollByte: r.i is below cap here, so this is the
+		// remainder without the divide.
+		if r.i++; r.i == cap(r.p) {
+			r.i = 0
+		}
 	}
 	return r.h
 }
