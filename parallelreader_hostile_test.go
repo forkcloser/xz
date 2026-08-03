@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"hash/crc32"
 	"io"
+	"runtime"
 	"testing"
 )
 
@@ -79,18 +80,40 @@ func hostileStream(blockArea []byte, recs []hostileRecord, recCount int64) []byt
 	return out.Bytes()
 }
 
-// readAllParallel runs a full parse-and-decode cycle and returns the error.
+// hostileAllocBudget is what a tiny malformed file may cost us. Real work
+// needs orders of magnitude less; the bombs these tests cover asked for
+// gigabytes to terabytes.
+const hostileAllocBudget = 8 << 20
+
+// readAllParallel runs a full parse-and-decode cycle and returns the error. It
+// fails the test if handling the file allocated more than the budget, which is
+// the property these fixtures exist to protect: rejecting the file is not
+// enough if we blow up the heap on the way to the error.
+//
 // Reaching this function at all means no panic escaped a worker goroutine,
 // because such a panic aborts the whole test binary.
 func readAllParallel(t *testing.T, file []byte, workers int) error {
 	t.Helper()
-	r, err := ParallelReaderConfig{Workers: workers}.NewParallelReader(
-		bytes.NewReader(file), int64(len(file)))
-	if err != nil {
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+
+	err := func() error {
+		r, err := ParallelReaderConfig{Workers: workers}.NewParallelReader(
+			bytes.NewReader(file), int64(len(file)))
+		if err != nil {
+			return err
+		}
+		defer r.Close()
+		_, err = io.Copy(io.Discard, r)
 		return err
+	}()
+
+	runtime.ReadMemStats(&after)
+	if used := after.TotalAlloc - before.TotalAlloc; used > hostileAllocBudget {
+		t.Errorf("a %d byte file allocated %d bytes; budget is %d",
+			len(file), used, hostileAllocBudget)
 	}
-	defer r.Close()
-	_, err = io.Copy(io.Discard, r)
 	return err
 }
 
@@ -114,6 +137,27 @@ func TestParallelReaderHostileUncompressedSize(t *testing.T) {
 			continue
 		}
 		t.Logf("uncompressed size %d (%d byte file): %s", size, len(file), err)
+	}
+}
+
+// TestParallelReaderHostileRecordCount covers an index that declares far more
+// records than it contains. The parallel reader parses the index before the
+// blocks and so cannot cross-check the count, which used to leave the declared
+// number feeding make([]record, n) directly: a 40-byte file reserved 16 TiB.
+func TestParallelReaderHostileRecordCount(t *testing.T) {
+	for _, count := range []int64{1 << 20, 1 << 40, 1 << 45, 1<<62 - 1} {
+		file := hostileStream([]byte{0, 0, 0, 0},
+			[]hostileRecord{{unpaddedSize: 1, uncompressedSize: 1}}, count)
+		if len(file) > 128 {
+			t.Fatalf("fixture grew to %d bytes; it must stay tiny to make "+
+				"the amplification obvious", len(file))
+		}
+		err := readAllParallel(t, file, 4)
+		if err == nil {
+			t.Errorf("record count %d: no error", count)
+			continue
+		}
+		t.Logf("record count %d (%d byte file): %s", count, len(file), err)
 	}
 }
 

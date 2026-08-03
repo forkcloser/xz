@@ -663,7 +663,9 @@ func writeIndex(w io.Writer, index []record) (n int64, err error) {
 // readIndexBody reads the index from the reader. It assumes that the
 // index indicator has already been read. A negative expectedRecordLen
 // disables the record-count check (used when the index is parsed before
-// the blocks, as the parallel reader does).
+// the blocks, as the parallel reader does); the records are read
+// incrementally, so a hostile count is bounded by the index itself rather
+// than by that check.
 func readIndexBody(r io.Reader, expectedRecordLen int) (records []record, n int64, err error) {
 	crc := crc32.NewIEEE()
 	// index indicator
@@ -687,14 +689,24 @@ func readIndexBody(r io.Reader, expectedRecordLen int) (records []record, n int6
 			recLen, expectedRecordLen)
 	}
 
-	// list of records
-	records = make([]record, recLen)
-	for i := range records {
-		records[i], k, err = readRecord(br)
+	// List of records. The count is attacker controlled and the parallel
+	// reader cannot cross-check it against blocks it has not read yet, so the
+	// slice grows with the records that actually arrive instead of being sized
+	// from the declared count. A hostile count simply runs into the end of the
+	// index; it never reaches an allocator.
+	initialCap := recLen
+	if initialCap > 64 {
+		initialCap = 64
+	}
+	records = make([]record, 0, initialCap)
+	for i := 0; i < recLen; i++ {
+		var rec record
+		rec, k, err = readRecord(br)
 		n += int64(k)
 		if err != nil {
 			return nil, n, err
 		}
+		records = append(records, rec)
 	}
 
 	p := make([]byte, padLen(int64(n+1)), 4)
