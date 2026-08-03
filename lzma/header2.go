@@ -223,25 +223,23 @@ func (h *chunkHeader) MarshalBinary() (data []byte, err error) {
 	return data, nil
 }
 
-// readChunkHeader reads the chunk header from the IO reader.
-func readChunkHeader(r io.Reader) (h *chunkHeader, err error) {
-	p := make([]byte, 1, 6)
+// readChunkHeader reads the chunk header from the IO reader into h. The
+// scratch slice p must have a capacity of at least six bytes; the caller
+// provides both so a reader that parses one header per chunk reuses them.
+func readChunkHeader(r io.Reader, p []byte, h *chunkHeader) (err error) {
+	p = p[:1]
 	if _, err = io.ReadFull(r, p); err != nil {
-		return
+		return err
 	}
 	c, err := headerChunkType(p[0])
 	if err != nil {
-		return
+		return err
 	}
 	p = p[:headerLen(c)]
 	if _, err = io.ReadFull(r, p[1:]); err != nil {
-		return
+		return err
 	}
-	h = new(chunkHeader)
-	if err = h.UnmarshalBinary(p); err != nil {
-		return nil, err
-	}
-	return h, nil
+	return h.UnmarshalBinary(p)
 }
 
 // uint16BE converts a big-endian uint16 representation to an uint16

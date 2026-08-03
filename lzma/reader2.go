@@ -12,7 +12,6 @@ import (
 )
 
 // Reader2Config stores the parameters for the LZMA2 reader.
-// format.
 type Reader2Config struct {
 	DictCap int
 }
@@ -55,6 +54,10 @@ type Reader2 struct {
 	compBuf []byte
 	compRd  byteSliceReader
 
+	// reusable chunk header and scratch space for parsing it, one per chunk.
+	hdr    chunkHeader
+	hdrBuf [6]byte
+
 	cstate chunkState
 }
 
@@ -79,6 +82,30 @@ func (c Reader2Config) NewReader2(lzma2 io.Reader) (r *Reader2, err error) {
 	return r, nil
 }
 
+// DictCap returns the dictionary capacity the reader was created with.
+func (r *Reader2) DictCap() int { return r.dict.dictCap }
+
+// Reset prepares the reader to decode a fresh LZMA2 chunk sequence from z,
+// reusing the reader's allocations: the decoder with its probability models,
+// the dictionary buffer and the chunk buffer. The dictionary capacity stays
+// what the reader was created with. As with NewReader2, the first chunk
+// header is read immediately, and the chunk sequence must start with a
+// dictionary reset; an error is deferred to the first Read.
+//
+// The xz reader decodes every block of a file with a fresh chunk sequence,
+// so without Reset each block rebuilt the whole decoder — around 110
+// allocations per block, paid most dearly on the multi-block files the
+// parallel reader exists for.
+func (r *Reader2) Reset(z io.Reader) {
+	r.r = z
+	r.err = nil
+	r.cstate = start
+	r.dict.Reset()
+	if err := r.startChunk(); err != nil {
+		r.err = err
+	}
+}
+
 // uncompressed tests whether the chunk type specifies an uncompressed
 // chunk.
 func uncompressed(ctype chunkType) bool {
@@ -88,14 +115,17 @@ func uncompressed(ctype chunkType) bool {
 // startChunk parses a new chunk.
 func (r *Reader2) startChunk() error {
 	r.chunkReader = nil
-	header, err := readChunkHeader(r.r)
+	header := &r.hdr
+	err := readChunkHeader(r.r, r.hdrBuf[:], header)
 	if err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
 		}
 		return err
 	}
-	xlog.Debugf("chunk header %v", header)
+	if xlog.DebugEnabled() {
+		xlog.Debugf("chunk header %v", header)
+	}
 	if err = r.cstate.next(header.ctype); err != nil {
 		return err
 	}
@@ -127,7 +157,7 @@ func (r *Reader2) startChunk() error {
 	}
 	r.compBuf = r.compBuf[:n]
 	if _, err = io.ReadFull(r.r, r.compBuf); err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
 		}
 		return err
@@ -147,7 +177,11 @@ func (r *Reader2) startChunk() error {
 	case cLR:
 		r.decoder.State.Reset()
 	case cLRN, cLRND:
-		r.decoder.State = newState(header.props)
+		// Reset in place rather than building a new state: Reset keeps the
+		// probability arrays, so a chunk that changes the properties costs no
+		// allocation unless the literal codec actually has to change size.
+		r.decoder.State.Properties = header.props
+		r.decoder.State.Reset()
 	}
 	err = r.decoder.Reopen(br, size)
 	if err != nil {
@@ -167,7 +201,7 @@ func (r *Reader2) Read(p []byte) (n int, err error) {
 		k, err = r.chunkReader.Read(p[n:])
 		n += k
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				err = r.startChunk()
 				if err == nil {
 					continue
@@ -218,7 +252,7 @@ func (ur *uncompressedReader) Reopen(r io.Reader, size int64) {
 func (ur *uncompressedReader) fill() error {
 	if !ur.eof {
 		n, err := io.CopyN(ur.Dict, &ur.lr, int64(ur.Dict.Available()))
-		if err != io.EOF {
+		if !errors.Is(err, io.EOF) {
 			return err
 		}
 		ur.eof = true

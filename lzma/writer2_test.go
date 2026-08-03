@@ -77,7 +77,7 @@ func TestCycle2(t *testing.T) {
 	}
 	// const txtlen = 1024
 	const txtlen = 2100000
-	io.CopyN(buf, randtxt.NewReader(rand.NewSource(42)), txtlen)
+	_, _ = io.CopyN(buf, randtxt.NewReader(rand.NewSource(42)), txtlen)
 	txt := buf.String()
 	buf.Reset()
 	n, err := io.Copy(w, strings.NewReader(txt))
@@ -105,5 +105,47 @@ func TestCycle2(t *testing.T) {
 	}
 	if txt != out.String() {
 		t.Fatal("decompressed data differs from original")
+	}
+}
+
+// TestWriter2SmallDictIncompressible verifies that a writer with a small
+// dictionary can encode incompressible data. Such data fills the 64 KiB
+// compressed-chunk limit before the chunk is cut, so the uncompressed form of
+// the chunk would be smaller — but a dictionary below that size can no longer
+// replay the chunk's input, and choosing the uncompressed form made Write and
+// Close fail with ErrNoSpace.
+func TestWriter2SmallDictIncompressible(t *testing.T) {
+	rnd := rand.New(rand.NewSource(13))
+	for _, dictCap := range []int{MinDictCap, 8192, 16384, 1 << 16} {
+		for _, size := range []int{5000, 10000, 100000} {
+			data := make([]byte, size)
+			rnd.Read(data)
+			var buf bytes.Buffer
+			w, err := Writer2Config{DictCap: dictCap}.NewWriter2(&buf)
+			if err != nil {
+				t.Fatalf("NewWriter2 error %s", err)
+			}
+			if _, err = w.Write(data); err != nil {
+				t.Fatalf("dictCap=%d size=%d: Write error %s",
+					dictCap, size, err)
+			}
+			if err = w.Close(); err != nil {
+				t.Fatalf("dictCap=%d size=%d: Close error %s",
+					dictCap, size, err)
+			}
+			r, err := NewReader2(&buf)
+			if err != nil {
+				t.Fatalf("NewReader2 error %s", err)
+			}
+			out := new(bytes.Buffer)
+			if _, err = io.Copy(out, r); err != nil {
+				t.Fatalf("dictCap=%d size=%d: decompress error %s",
+					dictCap, size, err)
+			}
+			if !bytes.Equal(out.Bytes(), data) {
+				t.Fatalf("dictCap=%d size=%d: decompressed data differs "+
+					"from original", dictCap, size)
+			}
+		}
 	}
 }

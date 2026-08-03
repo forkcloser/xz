@@ -6,6 +6,7 @@ package randtxt
 
 import (
 	"bufio"
+	"errors"
 	"io"
 	"unicode"
 )
@@ -51,7 +52,7 @@ func (r *GroupReader) Read(p []byte) (n int, err error) {
 			c = ' '
 		default:
 			c, err = r.R.ReadByte()
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				r.eof = true
 				if i > 0 {
 					switch p[i-1] {

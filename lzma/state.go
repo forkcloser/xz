@@ -33,14 +33,19 @@ func initProbSlice(p []prob) {
 	}
 }
 
-// Reset sets all state information to the original values.
+// Reset sets all state information to the original values, keeping the
+// probability arrays the codecs have already allocated.
+//
+// Assigning a fresh state value here would drop those arrays on the floor and
+// make every codec allocate again. LZMA2 chunks can reset the coder state, so
+// that turned a stream of small resetting chunks into a stream of allocations.
+// Every field is either assigned below or re-initialized by one of the codec
+// init calls; TestStateResetReusesWithoutDrift checks that none is missed.
 func (s *state) Reset() {
 	p := s.Properties
-	*s = state{
-		Properties: p,
-		// dict:       s.dict,
-		posBitMask: (uint32(1) << uint(p.PB)) - 1,
-	}
+	s.rep = [4]uint32{}
+	s.state = 0
+	s.posBitMask = (uint32(1) << uint(p.PB)) - 1
 	initProbSlice(s.isMatch[:])
 	initProbSlice(s.isRep[:])
 	initProbSlice(s.isRepG0[:])

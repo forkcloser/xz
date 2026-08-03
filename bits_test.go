@@ -6,11 +6,14 @@ package xz
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 )
 
 func TestUvarint(t *testing.T) {
-	tests := []uint64{0, 0x80, 0x100, 0xffffffff, 0x100000000, 1<<64 - 1}
+	// 1<<63-1 is the largest value the xz variable-length integer encoding
+	// can express, and it takes all nine permitted bytes.
+	tests := []uint64{0, 0x80, 0x100, 0xffffffff, 0x100000000, 1<<63 - 1}
 	p := make([]byte, 10)
 	for _, u := range tests {
 		p = p[:10]
@@ -38,7 +41,7 @@ func TestUvarIntCVE_2020_16845(t *testing.T) {
 
 	r := bytes.NewReader(a)
 	_, _, err := readUvarint(r)
-	if err != errOverflowU64 {
+	if !errors.Is(err, errOverflowU64) {
 		t.Fatalf("readUvarint overflow not detected")
 	}
 }

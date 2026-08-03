@@ -10,6 +10,7 @@ package xio
 import (
 	"errors"
 	"io"
+	"slices"
 )
 
 // WriteCloserStack allows to support multiple WriteClosers to be handled as
@@ -18,7 +19,7 @@ type WriteCloserStack struct {
 	Stack []io.WriteCloser
 }
 
-// NewWriteCloserStack creates a new WriteCloserStack. It will have an an empty
+// NewWriteCloserStack creates a new WriteCloserStack. It will have an empty
 // stack.
 func NewWriteCloserStack() *WriteCloserStack {
 	return &WriteCloserStack{}
@@ -38,8 +39,8 @@ func (w *WriteCloserStack) Write(p []byte) (n int, err error) {
 // the stack.
 func (w *WriteCloserStack) Close() error {
 	var errs []error
-	for k := len(w.Stack) - 1; k >= 0; k-- {
-		err := w.Stack[k].Close()
+	for _, v := range slices.Backward(w.Stack) {
+		err := v.Close()
 		errs = append(errs, err)
 	}
 	w.Stack = nil

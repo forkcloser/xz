@@ -143,7 +143,7 @@ func normalizeFormat(o *options) error {
 func main() {
 	// setup logger
 	cmdName := filepath.Base(os.Args[0])
-	xlog.SetPrefix(fmt.Sprintf("%s: ", cmdName))
+	xlog.SetPrefix(cmdName + ": ")
 	xlog.SetFlags(0)
 
 	// initialize flags

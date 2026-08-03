@@ -126,7 +126,7 @@ func walkCopyrights(path string, info os.FileInfo, err error) error {
 
 func copyright() {
 	cmdName := os.Args[0]
-	log.SetPrefix(fmt.Sprintf("%s: ", cmdName))
+	log.SetPrefix(cmdName + ": ")
 	log.SetFlags(0)
 
 	flag.CommandLine = flag.NewFlagSet(cmdName, flag.ExitOnError)

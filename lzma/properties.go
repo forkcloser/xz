@@ -18,6 +18,16 @@ const (
 // maxPropertyCode is the possible maximum of a properties code byte.
 const maxPropertyCode = (maxPB+1)*(maxLP+1)*(maxLC+1) - 1
 
+// maxLCLP bounds the sum of the literal context and literal position bits.
+// The reference implementation enforces it when decoding the properties byte
+// of both LZMA and LZMA2 streams, so no real file exceeds it.
+//
+// The literal codec holds 0x300<<(lc+lp) probabilities, which this limit caps
+// at 24 KiB. Without it a single properties byte asks for 6 MiB, reallocated
+// and refilled by every chunk that carries a property reset — 480 KB of input
+// could drive 120 GiB of allocation.
+const maxLCLP = 4
+
 // Properties contains the parameters LC, LP and PB. The parameter LC
 // defines the number of literal context bits; parameter LP the number
 // of literal position bits and PB the number of position bits.
@@ -42,7 +52,10 @@ func PropertiesForCode(code byte) (p Properties, err error) {
 	p.LP = int(code % 5)
 	code /= 5
 	p.PB = int(code % 5)
-	return p, err
+	if err = p.verify(); err != nil {
+		return Properties{}, err
+	}
+	return p, nil
 }
 
 // verify checks the properties for correctness.
@@ -58,6 +71,9 @@ func (p *Properties) verify() error {
 	}
 	if !(minPB <= p.PB && p.PB <= maxPB) {
 		return errors.New("lzma: pb out of range")
+	}
+	if p.LC+p.LP > maxLCLP {
+		return errors.New("lzma: sum of lc and lp exceeds 4")
 	}
 	return nil
 }

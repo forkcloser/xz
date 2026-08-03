@@ -56,7 +56,7 @@ var lzmaDictCapExps = []uint{18, 20, 21, 22, 22, 23, 23, 24, 25, 26}
 
 // formats contains the formats supported by gxz.
 var formats = map[string]*format{
-	"lzma": &format{
+	"lzma": {
 		newCompressor: func(w io.Writer, opts *options,
 		) (c io.WriteCloser, err error) {
 			lc := lzma.WriterConfig{
@@ -81,7 +81,7 @@ var formats = map[string]*format{
 			return lzma.ValidHeader(h)
 		},
 	},
-	"xz": &format{
+	"xz": {
 		newCompressor: func(w io.Writer, opts *options,
 		) (c io.WriteCloser, err error) {
 			cfg := xz.WriterConfig{
@@ -290,7 +290,9 @@ func (w *writer) Close() error {
 // removeTmpFile removes the temporary file for the writer. It is used
 // by the signal handler goroutine.
 func (w *writer) removeTmpFile() {
-	os.Remove(w.f.Name())
+	// Best effort: this runs from the signal handler, where there is
+	// nothing useful to do with a failure.
+	_ = os.Remove(w.f.Name())
 }
 
 // SetSuccess sets the success variable to true.
@@ -465,8 +467,8 @@ func (e *userPathError) Error() string {
 // relevant for users of the gxz program. This function converts a
 // path error into a generic error removing the operation information.
 func userError(err error) error {
-	pe, ok := err.(*os.PathError)
-	if !ok {
+	var pe *os.PathError
+	if !errors.As(err, &pe) {
 		return err
 	}
 	return &userPathError{Path: pe.Path, Err: pe.Err}
@@ -486,13 +488,13 @@ func processFile(path string, opts *options) (err error) {
 		printErr(err)
 		return
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 	w, err := newWriter(path, r.Perm(), opts)
 	if err != nil {
 		printErr(err)
 		return
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 	quitSignalHandler := signalHandler(w)
 	if _, err = io.Copy(w, r); err != nil {
 		close(quitSignalHandler)

@@ -7,7 +7,6 @@ package lzma
 import (
 	"bufio"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 )
@@ -15,7 +14,7 @@ import (
 func TestDecoder(t *testing.T) {
 	filename := "fox.lzma"
 	want := "The quick brown fox jumps over the lazy dog.\n"
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		f, err := os.Open(filename)
 		if err != nil {
 			t.Fatalf("os.Open(%q) error %s", filename, err)
@@ -44,7 +43,7 @@ func TestDecoder(t *testing.T) {
 		if err != nil {
 			t.Fatalf("newDecoder error %s", err)
 		}
-		bytes, err := ioutil.ReadAll(r)
+		bytes, err := io.ReadAll(r)
 		if err != nil {
 			t.Fatalf("[%d] ReadAll error %s", i, err)
 		}

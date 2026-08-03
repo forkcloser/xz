@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"slices"
 
 	"github.com/forkcloser/xz/lzma"
 )
@@ -19,9 +20,13 @@ type WriterConfig struct {
 	DictCap    int
 	BufSize    int
 	BlockSize  int64
-	// checksum method: CRC32, CRC64 or SHA256 (default: CRC64)
+	// CheckSum selects the check method: CRC32, CRC64 or SHA256 (default:
+	// CRC64). It cannot select None: None is zero, which is indistinguishable
+	// from the field being unset, so a zero CheckSum means the default. Use
+	// NoCheckSum to write a stream with no check.
 	CheckSum byte
-	// Forces NoChecksum (default: false)
+	// NoCheckSum writes a stream with no integrity check, overriding
+	// CheckSum (default: false).
 	NoCheckSum bool
 	// match algorithm
 	Matcher lzma.MatchAlgorithm
@@ -109,8 +114,8 @@ func (c *WriterConfig) newFilterWriteCloser(w io.Writer, f []filter) (fw io.Writ
 		return nil, err
 	}
 	fw = nopWriteCloser(w)
-	for i := len(f) - 1; i >= 0; i-- {
-		fw, err = f[i].writeCloser(fw, c)
+	for _, v := range slices.Backward(f) {
+		fw, err = v.writeCloser(fw, c)
 		if err != nil {
 			return nil, err
 		}
@@ -212,7 +217,7 @@ func (w *Writer) Write(p []byte) (n int, err error) {
 	for {
 		k, err := w.bw.Write(p[n:])
 		n += k
-		if err != errNoSpace {
+		if !errors.Is(err, errNoSpace) {
 			return n, err
 		}
 		if err = w.closeBlockWriter(); err != nil {
@@ -354,7 +359,8 @@ func (bw *blockWriter) record() record {
 	return record{bw.unpaddedSize(), bw.uncompressedSize()}
 }
 
-var errClosed = errors.New("xz: writer already closed")
+// errClosed matches ErrClosed so callers can recognise it with errors.Is.
+var errClosed = &kindError{msg: "xz: writer already closed", kind: ErrClosed}
 
 var errNoSpace = errors.New("xz: no space")
 

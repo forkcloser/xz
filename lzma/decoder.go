@@ -50,10 +50,10 @@ func newDecoder(br io.ByteReader, state *state, dict *decoderDict, size int64) (
 }
 
 // Reopen restarts the decoder with a new byte reader and a new size. Reopen
-// resets the Decompressed counter to zero.
+// resets the Decompressed counter to zero. The range decoder is reinitialized
+// in place, so reopening once per chunk allocates nothing.
 func (d *decoder) Reopen(br io.ByteReader, size int64) error {
-	var err error
-	if d.rd, err = newRangeDecoder(br); err != nil {
+	if err := d.rd.init(br); err != nil {
 		return err
 	}
 	d.start = d.Dict.pos()
@@ -243,10 +243,9 @@ func (d *decoder) decompress() error {
 		if d.rd.err != nil {
 			err = d.rd.err
 		}
-		switch err {
-		case nil:
-			// break
-		case errEOS:
+		switch {
+		case err == nil:
+		case errors.Is(err, errEOS):
 			d.eos = true
 			if !d.rd.possiblyAtEnd() {
 				return errDataAfterEOS
@@ -255,7 +254,7 @@ func (d *decoder) decompress() error {
 				return errSize
 			}
 			return io.EOF
-		case io.EOF:
+		case errors.Is(err, io.EOF):
 			d.eos = true
 			return io.ErrUnexpectedEOF
 		default:
@@ -274,12 +273,12 @@ func (d *decoder) decompress() error {
 				if d.rd.err != nil {
 					err = d.rd.err
 				}
-				switch err {
-				case nil:
+				switch {
+				case err == nil:
 					return errSize
-				case io.EOF:
+				case errors.Is(err, io.EOF):
 					return io.ErrUnexpectedEOF
-				case errEOS:
+				case errors.Is(err, errEOS):
 					break
 				default:
 					return err
@@ -305,7 +304,7 @@ func (d *decoder) Read(p []byte) (n int, err error) {
 		// Read of decoder dict never returns an error.
 		k, err = d.Dict.Read(p[n:])
 		if err != nil {
-			panic(fmt.Errorf("dictionary read error %s", err))
+			panic(fmt.Errorf("dictionary read error %w", err))
 		}
 		if k == 0 && d.eos {
 			return n, io.EOF
@@ -314,7 +313,7 @@ func (d *decoder) Read(p []byte) (n int, err error) {
 		if n >= len(p) {
 			return n, nil
 		}
-		if err = d.decompress(); err != nil && err != io.EOF {
+		if err = d.decompress(); err != nil && !errors.Is(err, io.EOF) {
 			return n, err
 		}
 	}

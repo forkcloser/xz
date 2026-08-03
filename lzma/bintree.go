@@ -97,7 +97,8 @@ func (t *binTree) WriteByte(c byte) error {
 // Writes writes a sequence of bytes into the binTree structure.
 func (t *binTree) Write(p []byte) (n int, err error) {
 	for _, c := range p {
-		t.WriteByte(c)
+		// binTree.WriteByte never returns an error.
+		_ = t.WriteByte(c)
 	}
 	return len(p), nil
 }
@@ -335,7 +336,7 @@ func xval(a []byte) uint32 {
 // dumpX converts value x into a four-letter string.
 func dumpX(x uint32) string {
 	a := make([]byte, 4)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		c := byte(x >> uint((3-i)*8))
 		if unicode.IsGraphic(rune(c)) {
 			a[i] = c

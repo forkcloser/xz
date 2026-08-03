@@ -10,11 +10,8 @@ type treeCodec struct {
 	probTree
 }
 
-// makeTreeCodec makes a tree codec. The bits value must be inside the range
-// [1,32].
-func makeTreeCodec(bits int) treeCodec {
-	return treeCodec{makeProbTree(bits)}
-}
+// init (re)initializes the tree codec for values of the given bit size.
+func (tc *treeCodec) init(bits int) { tc.probTree.init(bits) }
 
 // deepcopy initializes tc as a deep copy of the source.
 func (tc *treeCodec) deepcopy(src *treeCodec) {
@@ -74,11 +71,9 @@ func (tc *treeReverseCodec) deepcopy(src *treeReverseCodec) {
 	tc.probTree.deepcopy(&src.probTree)
 }
 
-// makeTreeReverseCodec creates treeReverseCodec value. The bits argument must
-// be in the range [1,32].
-func makeTreeReverseCodec(bits int) treeReverseCodec {
-	return treeReverseCodec{makeProbTree(bits)}
-}
+// init (re)initializes the reverse tree codec for values of the given bit
+// size.
+func (tc *treeReverseCodec) init(bits int) { tc.probTree.init(bits) }
 
 // Encode uses range encoder to encode a fixed-bit-size value. The range
 // encoder may cause errors.
@@ -126,29 +121,39 @@ type probTree struct {
 	bits  byte
 }
 
-// deepcopy initializes the probTree value as a deep copy of the source.
+// deepcopy initializes the probTree value as a deep copy of the source,
+// keeping the existing backing array when it is big enough. The writer
+// snapshots its state once per LZMA2 chunk, and each snapshot copies every
+// tree; allocating them afresh each time made those snapshots the writer's
+// dominant source of allocations.
 func (t *probTree) deepcopy(src *probTree) {
 	if t == src {
 		return
 	}
-	t.probs = make([]prob, len(src.probs))
+	if cap(t.probs) < len(src.probs) {
+		t.probs = make([]prob, len(src.probs))
+	}
+	t.probs = t.probs[:len(src.probs)]
 	copy(t.probs, src.probs)
 	t.bits = src.bits
 }
 
-// makeProbTree initializes a probTree structure.
-func makeProbTree(bits int) probTree {
+// init sets the probability tree to its starting state for values of the
+// given bit size, keeping the existing backing array when it is big enough.
+// An LZMA2 chunk can reset the coder state, and a state reset re-initializes
+// every tree; allocating them afresh each time made a stream of small
+// resetting chunks cost far more in allocator traffic than in decoding.
+func (t *probTree) init(bits int) {
 	if !(1 <= bits && bits <= 32) {
 		panic("bits outside of range [1,32]")
 	}
-	t := probTree{
-		bits:  byte(bits),
-		probs: make([]prob, 1<<uint(bits)),
+	n := 1 << uint(bits)
+	if cap(t.probs) < n {
+		t.probs = make([]prob, n)
 	}
-	for i := range t.probs {
-		t.probs[i] = probInit
-	}
-	return t
+	t.probs = t.probs[:n]
+	t.bits = byte(bits)
+	initProbSlice(t.probs)
 }
 
 // Bits provides the number of bits for the values to de- or encode.

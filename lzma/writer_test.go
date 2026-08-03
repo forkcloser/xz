@@ -7,8 +7,8 @@ package lzma
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"io"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"os"
@@ -43,7 +43,7 @@ func TestWriterCycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewReader error %s", err)
 	}
-	decoded, err := ioutil.ReadAll(lr)
+	decoded, err := io.ReadAll(lr)
 	if err != nil {
 		t.Fatalf("ReadAll(lr) error %s", err)
 	}
@@ -63,7 +63,7 @@ func TestWriterLongData(t *testing.T) {
 		size = 82237
 	)
 	r := io.LimitReader(randtxt.NewReader(rand.NewSource(seed)), size)
-	txt, err := ioutil.ReadAll(r)
+	txt, err := io.ReadAll(r)
 	if err != nil {
 		t.Fatalf("ReadAll error %s", err)
 	}
@@ -90,7 +90,7 @@ func TestWriterLongData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewReader error %s", err)
 	}
-	txtRead, err := ioutil.ReadAll(lr)
+	txtRead, err := io.ReadAll(lr)
 	if err != nil {
 		t.Fatalf("ReadAll(lr) error %s", err)
 	}
@@ -110,7 +110,7 @@ func TestWriter_Size(t *testing.T) {
 		t.Fatalf("WriterConfig.NewWriter error %s", err)
 	}
 	q := []byte{'a'}
-	for i := 0; i < 9; i++ {
+	for range 9 {
 		n, err := w.Write(q)
 		if err != nil {
 			t.Fatalf("w.Write error %s", err)
@@ -120,7 +120,7 @@ func TestWriter_Size(t *testing.T) {
 		}
 		q[0]++
 	}
-	if err := w.Close(); err != errSize {
+	if err := w.Close(); !errors.Is(err, errSize) {
 		t.Fatalf("expected errSize, but got %v", err)
 	}
 	n, err := w.Write(q)
@@ -138,7 +138,7 @@ func TestWriter_Size(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewReader error %s", err)
 	}
-	b, err := ioutil.ReadAll(r)
+	b, err := io.ReadAll(r)
 	if err != nil {
 		t.Fatalf("ReadAll error %s", err)
 	}
@@ -188,7 +188,7 @@ func BenchmarkReader(b *testing.B) {
 		size = 50000
 	)
 	r := io.LimitReader(randtxt.NewReader(rand.NewSource(seed)), size)
-	txt, err := ioutil.ReadAll(r)
+	txt, err := io.ReadAll(r)
 	if err != nil {
 		b.Fatalf("ReadAll error %s", err)
 	}
@@ -203,18 +203,17 @@ func BenchmarkReader(b *testing.B) {
 	if err = w.Close(); err != nil {
 		b.Fatalf("w.Close error %s", err)
 	}
-	data, err := ioutil.ReadAll(buf)
+	data, err := io.ReadAll(buf)
 	if err != nil {
 		b.Fatalf("ReadAll error %s", err)
 	}
 	b.SetBytes(int64(len(txt)))
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		lr, err := NewReader(bytes.NewReader(data))
 		if err != nil {
 			b.Fatalf("NewReader error %s", err)
 		}
-		if _, err = ioutil.ReadAll(lr); err != nil {
+		if _, err = io.ReadAll(lr); err != nil {
 			b.Fatalf("ReadAll(lr) error %s", err)
 		}
 	}
@@ -226,14 +225,13 @@ func BenchmarkWriter(b *testing.B) {
 		size = 50000
 	)
 	r := io.LimitReader(randtxt.NewReader(rand.NewSource(seed)), size)
-	txt, err := ioutil.ReadAll(r)
+	txt, err := io.ReadAll(r)
 	if err != nil {
 		b.Fatalf("ReadAll error %s", err)
 	}
 	buf := &bytes.Buffer{}
 	b.SetBytes(int64(len(txt)))
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		buf.Reset()
 		w, err := WriterConfig{DictCap: 0x4000}.NewWriter(buf)
 		if err != nil {

@@ -11,12 +11,16 @@ type literalCodec struct {
 	probs []prob
 }
 
-// deepcopy initializes literal codec c as a deep copy of the source.
+// deepcopy initializes literal codec c as a deep copy of the source, keeping
+// the existing backing array when it is big enough, as probTree.deepcopy does.
 func (c *literalCodec) deepcopy(src *literalCodec) {
 	if c == src {
 		return
 	}
-	c.probs = make([]prob, len(src.probs))
+	if cap(c.probs) < len(src.probs) {
+		c.probs = make([]prob, len(src.probs))
+	}
+	c.probs = c.probs[:len(src.probs)]
 	copy(c.probs, src.probs)
 }
 
@@ -28,10 +32,12 @@ func (c *literalCodec) init(lc, lp int) {
 	case !(minLP <= lp && lp <= maxLP):
 		panic("lp out of range")
 	}
-	c.probs = make([]prob, 0x300<<uint(lc+lp))
-	for i := range c.probs {
-		c.probs[i] = probInit
+	n := 0x300 << uint(lc+lp)
+	if cap(c.probs) < n {
+		c.probs = make([]prob, n)
 	}
+	c.probs = c.probs[:n]
+	initProbSlice(c.probs)
 }
 
 // Encode encodes the byte s using a range encoder as well as the current LZMA

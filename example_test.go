@@ -10,44 +10,70 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/forkcloser/xz"
 )
+
+// These examples are the package's front page on pkg.go.dev, so they are
+// written the way calling code should be written: nothing is abandoned
+// half-closed, and the errors that matter are all checked. In particular
+// log.Fatal is only reached before anything needs cleaning up, because it
+// exits without running deferred calls.
 
 func ExampleReader() {
 	f, err := os.Open("fox.xz")
 	if err != nil {
 		log.Fatalf("os.Open(%q) error %s", "fox.xz", err)
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Printf("f.Close() error %s", err)
+		}
+	}()
 	r, err := xz.NewReader(bufio.NewReader(f))
 	if err != nil {
-		log.Fatalf("xz.NewReader(f) error %s", err)
+		log.Printf("xz.NewReader(f) error %s", err)
+		return
 	}
 	if _, err = io.Copy(os.Stdout, r); err != nil {
-		log.Fatalf("io.Copy error %s", err)
+		log.Printf("io.Copy error %s", err)
+		return
 	}
 	// Output:
 	// The quick brown fox jumps over the lazy dog.
 }
 
 func ExampleWriter() {
-	f, err := os.Create("example.xz")
+	// A temporary path keeps the example from dropping a file into whatever
+	// directory it is run from — which, when it runs as a test, is the
+	// package source directory.
+	name := filepath.Join(os.TempDir(), "example.xz")
+	f, err := os.Create(name)
 	if err != nil {
-		log.Fatalf("os.Open(%q) error %s", "example.xz", err)
+		log.Fatalf("os.Create(%q) error %s", name, err)
 	}
-	defer f.Close()
+	defer func() { _ = os.Remove(name) }()
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Printf("f.Close() error %s", err)
+		}
+	}()
 	w, err := xz.NewWriter(f)
 	if err != nil {
-		log.Fatalf("xz.NewWriter(f) error %s", err)
+		log.Printf("xz.NewWriter(f) error %s", err)
+		return
 	}
-	defer w.Close()
-	_, err = fmt.Fprintln(w, "The brown fox jumps over the lazy dog.")
-	if err != nil {
-		log.Fatalf("fmt.Fprintln error %s", err)
+	if _, err = fmt.Fprintln(w, "The brown fox jumps over the lazy dog."); err != nil {
+		log.Printf("fmt.Fprintln error %s", err)
+		return
 	}
+	// Close finishes the compressed stream. Skipping it, or ignoring what it
+	// returns, is how a truncated archive gets written without anyone
+	// noticing.
 	if err = w.Close(); err != nil {
-		log.Fatalf("w.Close() error %s", err)
+		log.Printf("w.Close() error %s", err)
+		return
 	}
 	// Output:
 }

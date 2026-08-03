@@ -28,6 +28,24 @@ func (b *buffer) Cap() int {
 	return len(b.data) - 1
 }
 
+// grow enlarges the buffer to newCap bytes.
+//
+// It may only be called while the buffer has not wrapped yet, that is while
+// every byte ever written still sits at the index it was written to and
+// rear <= front <= Cap(). Under that precondition the move is a plain prefix
+// copy: front, rear and every index derived from them stay valid, so the
+// caller's view of the buffered data and of the history behind it does not
+// change. Growing a wrapped buffer would need to relocate two segments and is
+// not supported.
+func (b *buffer) grow(newCap int) {
+	if newCap <= b.Cap() {
+		return
+	}
+	data := make([]byte, newCap+1)
+	copy(data, b.data[:b.front])
+	b.data = data
+}
+
 // Resets the buffer. The front and rear index are set to zero.
 func (b *buffer) Reset() {
 	b.front = 0

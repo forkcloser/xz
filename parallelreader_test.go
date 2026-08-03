@@ -6,9 +6,13 @@ package xz
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"math/rand"
+	"os"
+	"runtime"
 	"testing"
+	"time"
 )
 
 // parallelTestData generates compressible data with literals, matches
@@ -26,22 +30,24 @@ func parallelTestData(n int) []byte {
 
 // compressMultiBlock compresses data into an xz stream with the given
 // block size.
-func compressMultiBlock(t *testing.T, data []byte, blockSize int64) []byte {
+func compressMultiBlock(tb testing.TB, data []byte, blockSize int64) []byte {
+	tb.Helper()
 	var buf bytes.Buffer
 	w, err := WriterConfig{BlockSize: blockSize}.NewWriter(&buf)
 	if err != nil {
-		t.Fatalf("NewWriter error %s", err)
+		tb.Fatalf("NewWriter error %s", err)
 	}
 	if _, err = w.Write(data); err != nil {
-		t.Fatalf("Write error %s", err)
+		tb.Fatalf("Write error %s", err)
 	}
 	if err = w.Close(); err != nil {
-		t.Fatalf("Close error %s", err)
+		tb.Fatalf("Close error %s", err)
 	}
 	return buf.Bytes()
 }
 
 func testParallelRead(t *testing.T, xz []byte, want []byte, workers int) {
+	t.Helper()
 	c := ParallelReaderConfig{Workers: workers}
 	r, err := c.NewParallelReader(bytes.NewReader(xz), int64(len(xz)))
 	if err != nil {
@@ -139,7 +145,92 @@ func TestParallelReaderTruncated(t *testing.T) {
 	if _, err = io.ReadAll(r); err == nil {
 		t.Fatalf("ReadAll on corrupted file: no error")
 	}
-	r.Close()
+	_ = r.Close()
+}
+
+// slowReaderAt delays every read so that a decode is reliably still in flight
+// when the test calls Close.
+type slowReaderAt struct {
+	r     io.ReaderAt
+	delay time.Duration
+}
+
+func (s slowReaderAt) ReadAt(p []byte, off int64) (int, error) {
+	time.Sleep(s.delay)
+	return s.r.ReadAt(p, off)
+}
+
+// TestParallelReaderCloseUnblocksRead covers cancelling a read in progress.
+// Close is documented as the way to abandon a reader, and the natural moment
+// to want that is when the input has gone slow — which is exactly when Read is
+// parked waiting for a block. A cancelled dispatcher used to leave both the
+// block queue and the pending result unattended, so Read waited forever.
+func TestParallelReaderCloseUnblocksRead(t *testing.T) {
+	data := parallelTestData(1 << 20)
+	xz := compressMultiBlock(t, data, 16<<10)
+	src := slowReaderAt{r: bytes.NewReader(xz), delay: 2 * time.Millisecond}
+	before := runtime.NumGoroutine()
+
+	r, err := ParallelReaderConfig{Workers: 2}.NewParallelReader(src, int64(len(xz)))
+	if err != nil {
+		t.Fatalf("NewParallelReader error %s", err)
+	}
+
+	copyDone := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(io.Discard, r)
+		copyDone <- err
+	}()
+
+	// Let the copy get properly under way before pulling the rug.
+	time.Sleep(50 * time.Millisecond)
+	if err := r.Close(); err != nil {
+		t.Fatalf("Close error %s", err)
+	}
+
+	select {
+	case err := <-copyDone:
+		if !errors.Is(err, errReaderClosed) {
+			t.Fatalf("io.Copy returned %v; want %v", err, errReaderClosed)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Read did not return after Close: the reader is deadlocked")
+	}
+
+	// Releasing the reader is only half the job; the workers and the
+	// dispatcher have to wind up too, or Close just moves the leak.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		n := runtime.NumGoroutine()
+		if n <= before+2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d goroutines still running after Close; started from %d",
+				n, before)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestParallelReaderCloseAfterEOFKeepsEOF checks that cancelling a reader that
+// already finished does not rewrite why it finished.
+func TestParallelReaderCloseAfterEOFKeepsEOF(t *testing.T) {
+	data := parallelTestData(1 << 16)
+	xz := compressMultiBlock(t, data, 8<<10)
+	r, err := NewParallelReader(bytes.NewReader(xz), int64(len(xz)))
+	if err != nil {
+		t.Fatalf("NewParallelReader error %s", err)
+	}
+	if _, err = io.Copy(io.Discard, r); err != nil {
+		t.Fatalf("io.Copy error %s", err)
+	}
+	if err = r.Close(); err != nil {
+		t.Fatalf("Close error %s", err)
+	}
+	if _, err = r.Read(make([]byte, 8)); !errors.Is(err, io.EOF) {
+		t.Fatalf("Read after EOF then Close returned %v; want io.EOF", err)
+	}
 }
 
 func TestParallelReaderClose(t *testing.T) {
@@ -156,7 +247,7 @@ func TestParallelReaderClose(t *testing.T) {
 	if err = r.Close(); err != nil {
 		t.Fatalf("Close error %s", err)
 	}
-	if _, err = r.Read(p); err != errReaderClosed {
+	if _, err = r.Read(p); !errors.Is(err, errReaderClosed) {
 		t.Fatalf("Read after Close returned %v; want %v",
 			err, errReaderClosed)
 	}
@@ -168,4 +259,93 @@ func TestParallelReaderClose(t *testing.T) {
 	if err = r2.Close(); err != nil {
 		t.Fatalf("Close error %s", err)
 	}
+}
+
+// TestParallelReaderAbandonedReleasesGoroutines covers a reader that is
+// dropped mid-stream without Close. The dispatcher and the workers must not
+// keep the abandoned reader reachable, or the cleanup that cancels them could
+// never fire and they would run for the life of the process, pinned on a full
+// block queue.
+func TestParallelReaderAbandonedReleasesGoroutines(t *testing.T) {
+	data := parallelTestData(1 << 20)
+	xz := compressMultiBlock(t, data, 16<<10) // 64 blocks, far more than the queue holds
+	before := runtime.NumGoroutine()
+
+	// The reader must go out of scope with blocks still undispatched, so the
+	// dispatcher is parked on a full queue when the reader becomes garbage.
+	func() {
+		r, err := ParallelReaderConfig{Workers: 4}.NewParallelReader(
+			bytes.NewReader(xz), int64(len(xz)))
+		if err != nil {
+			t.Fatalf("NewParallelReader error %s", err)
+		}
+		p := make([]byte, 100)
+		if _, err = io.ReadFull(r, p); err != nil {
+			t.Fatalf("Read error %s", err)
+		}
+	}()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		runtime.GC()
+		n := runtime.NumGoroutine()
+		if n <= before+2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d goroutines still running after the reader was "+
+				"abandoned; started from %d", n, before)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// benchmarkBlocks compresses testdata/enwik7 with the given block size and
+// measures decoding it with the reader the bench function builds.
+func benchmarkBlocks(b *testing.B, blockSize int64,
+	newReader func(xz []byte) (io.Reader, func()),
+) {
+	b.Helper()
+	data, err := os.ReadFile("testdata/enwik7")
+	if err != nil {
+		b.Fatalf("os.ReadFile error %s", err)
+	}
+	xz := compressMultiBlock(b, data, blockSize)
+	b.SetBytes(int64(len(data)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		r, done := newReader(xz)
+		n, err := io.Copy(io.Discard, r)
+		if err != nil {
+			b.Fatalf("io.Copy error %s", err)
+		}
+		if n != int64(len(data)) {
+			b.Fatalf("decoded %d bytes; want %d", n, len(data))
+		}
+		done()
+	}
+}
+
+// BenchmarkReaderMultiBlock decodes a many-block file with the sequential
+// reader; per-block setup cost dominates the difference to BenchmarkReader.
+func BenchmarkReaderMultiBlock(b *testing.B) {
+	benchmarkBlocks(b, 64<<10, func(xz []byte) (io.Reader, func()) {
+		r, err := NewReader(bytes.NewReader(xz))
+		if err != nil {
+			b.Fatalf("NewReader error %s", err)
+		}
+		return r, func() {}
+	})
+}
+
+// BenchmarkParallelReader decodes a multi-block file with all workers.
+func BenchmarkParallelReader(b *testing.B) {
+	benchmarkBlocks(b, 1<<20, func(xz []byte) (io.Reader, func()) {
+		r, err := NewParallelReader(bytes.NewReader(xz), int64(len(xz)))
+		if err != nil {
+			b.Fatalf("NewParallelReader error %s", err)
+		}
+		return r, func() { _ = r.Close() }
+	})
 }

@@ -58,9 +58,6 @@ func (c *Writer2Config) Verify() error {
 	if !(maxMatchLen <= c.BufSize) {
 		return errors.New("lzma: lookahead buffer size too small")
 	}
-	if c.Properties.LC+c.Properties.LP > 4 {
-		return errors.New("lzma: sum of lc and lp exceeds 4")
-	}
 	if err = c.Matcher.verify(); err != nil {
 		return err
 	}
@@ -134,7 +131,8 @@ func (w *Writer2) written() int {
 // errClosed indicates that the writer is closed.
 var errClosed = errors.New("lzma: writer closed")
 
-// Writes data to LZMA2 stream. Note that written data will be buffered.
+// Write writes data to the LZMA2 stream. Note that written data will be
+// buffered.
 // Use Flush or Close to ensure that data is written to the underlying
 // writer.
 func (w *Writer2) Write(p []byte) (n int, err error) {
@@ -154,10 +152,10 @@ func (w *Writer2) Write(p []byte) (n int, err error) {
 		}
 		k, err := w.encoder.Write(q)
 		n += k
-		if err != nil && err != ErrLimit {
+		if err != nil && !errors.Is(err, ErrLimit) {
 			return n, err
 		}
-		if err == ErrLimit || k == m {
+		if errors.Is(err, ErrLimit) || k == m {
 			if err = w.flushChunk(); err != nil {
 				return n, err
 			}
@@ -182,7 +180,10 @@ func (w *Writer2) writeUncompressedChunk() error {
 	default:
 		w.ctype = cU
 	}
-	w.encoder.state = w.start
+	// Roll the encoder state back to the chunk start: the decoder never sees
+	// the operations encoded into the discarded compressed form. Copy rather
+	// than alias, so w.start stays a snapshot of its own.
+	w.encoder.state.deepcopy(w.start)
 
 	header := chunkHeader{
 		ctype:        w.ctype,
@@ -241,7 +242,11 @@ func (w *Writer2) writeCompressedChunk() error {
 func (w *Writer2) writeChunk() error {
 	u := int(uncompressedHeaderLen + w.encoder.Compressed())
 	c := headerLen(w.ctype) + w.buf.Len()
-	if u < c {
+	// The uncompressed form replays the chunk's input from the encoder
+	// dictionary. A dictionary smaller than the chunk has already dropped
+	// part of that input, so the compressed form is the only one that can
+	// be written, even when it is larger.
+	if u < c && int64(w.encoder.dict.Len()) >= w.encoder.Compressed() {
 		return w.writeUncompressedChunk()
 	}
 	return w.writeCompressedChunk()
@@ -269,7 +274,10 @@ func (w *Writer2) flushChunk() error {
 		return err
 	}
 	w.ctype = w.cstate.defaultChunkType()
-	w.start = cloneState(w.encoder.state)
+	// Snapshot into the existing state rather than cloning a new one: the
+	// deepcopy methods reuse the probability arrays, so the per-chunk
+	// snapshot costs no allocation.
+	w.start.deepcopy(w.encoder.state)
 	return nil
 }
 
@@ -293,7 +301,7 @@ func (w *Writer2) Close() error {
 		return errClosed
 	}
 	if err := w.Flush(); err != nil {
-		return nil
+		return err
 	}
 	// write zero byte EOS chunk
 	_, err := w.w.Write([]byte{0})

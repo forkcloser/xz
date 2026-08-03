@@ -34,7 +34,7 @@ func versionFileUsage(w io.Writer) {
 
 func versionFile() {
 	cmdName := filepath.Base(os.Args[0])
-	log.SetPrefix(fmt.Sprintf("%s: ", cmdName))
+	log.SetPrefix(cmdName + ": ")
 	log.SetFlags(0)
 
 	flag.CommandLine = flag.NewFlagSet(cmdName, flag.ExitOnError)

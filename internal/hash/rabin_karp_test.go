@@ -35,8 +35,7 @@ func makeBenchmarkBytes(n int) []byte {
 func BenchmarkRabinKarp(b *testing.B) {
 	p := makeBenchmarkBytes(4096)
 	r := NewRabinKarp(4)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		Hashes(r, p)
 	}
 }

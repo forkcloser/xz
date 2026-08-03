@@ -58,7 +58,8 @@ func (d *encoderDict) Discard(n int) {
 		panic(fmt.Errorf("lzma: can't discard %d bytes", n))
 	}
 	d.head += int64(n)
-	d.m.Write(p)
+	// The matcher's Write never returns an error.
+	_, _ = d.m.Write(p)
 }
 
 // Len returns the data available in the encoder dictionary.

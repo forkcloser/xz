@@ -53,7 +53,7 @@ const (
 )
 
 // errInvalidFlags indicates that flags are invalid.
-var errInvalidFlags = errors.New("xz: invalid flags")
+var errInvalidFlags = corruptf("xz: invalid flags")
 
 // verifyFlags returns the error errInvalidFlags if the value is
 // invalid.
@@ -107,7 +107,7 @@ type header struct {
 }
 
 // Errors returned by readHeader.
-var errHeaderMagic = errors.New("xz: invalid header magic bytes")
+var errHeaderMagic = corruptf("xz: invalid header magic bytes")
 
 // ValidHeader checks whether data is a correct xz file header. The
 // length of data must be HeaderLen.
@@ -126,7 +126,7 @@ func (h header) String() string {
 func (h *header) UnmarshalBinary(data []byte) error {
 	// header length
 	if len(data) != HeaderLen {
-		return errors.New("xz: wrong file header length")
+		return corruptf("xz: wrong file header length")
 	}
 
 	// magic header
@@ -138,7 +138,7 @@ func (h *header) UnmarshalBinary(data []byte) error {
 	crc := crc32.NewIEEE()
 	crc.Write(data[6:8])
 	if uint32LE(data[8:]) != crc.Sum32() {
-		return errors.New("xz: invalid checksum for file header")
+		return corruptf("xz: invalid checksum for file header")
 	}
 
 	// stream flags
@@ -232,19 +232,19 @@ func (f *footer) MarshalBinary() (data []byte, err error) {
 // footer.
 func (f *footer) UnmarshalBinary(data []byte) error {
 	if len(data) != footerLen {
-		return errors.New("xz: wrong footer length")
+		return corruptf("xz: wrong footer length")
 	}
 
 	// magic bytes
 	if !bytes.Equal(data[10:], footerMagic) {
-		return errors.New("xz: footer magic invalid")
+		return corruptf("xz: footer magic invalid")
 	}
 
 	// CRC-32
 	crc := crc32.NewIEEE()
 	crc.Write(data[4:10])
 	if uint32LE(data) != crc.Sum32() {
-		return errors.New("xz: footer checksum error")
+		return corruptf("xz: footer checksum error")
 	}
 
 	var g footer
@@ -356,7 +356,7 @@ func readSizeInBlockHeader(r io.ByteReader, present bool) (n int64, err error) {
 		return 0, err
 	}
 	if x >= 1<<63 {
-		return 0, errors.New("xz: size overflow in block header")
+		return 0, corruptf("xz: size overflow in block header")
 	}
 	return int64(x), nil
 }
@@ -364,13 +364,16 @@ func readSizeInBlockHeader(r io.ByteReader, present bool) (n int64, err error) {
 // UnmarshalBinary unmarshals the block header.
 func (h *blockHeader) UnmarshalBinary(data []byte) error {
 	// Check header length
+	if len(data) == 0 {
+		return corruptf("xz: empty block header")
+	}
 	s := data[0]
-	if data[0] == 0 {
+	if s == 0 {
 		return errIndexIndicator
 	}
 	headerLen := (int(s) + 1) * 4
 	if len(data) != headerLen {
-		return fmt.Errorf("xz: data length %d; want %d", len(data),
+		return corruptf("xz: data length %d; want %d", len(data),
 			headerLen)
 	}
 	n := headerLen - 4
@@ -379,13 +382,13 @@ func (h *blockHeader) UnmarshalBinary(data []byte) error {
 	crc := crc32.NewIEEE()
 	crc.Write(data[:n])
 	if crc.Sum32() != uint32LE(data[n:]) {
-		return errors.New("xz: checksum error for block header")
+		return corruptf("xz: checksum error for block header")
 	}
 
 	// Block header flags
 	flags := data[1]
 	if flags&reservedBlockFlags != 0 {
-		return errors.New("xz: reserved block header flags set")
+		return corruptf("xz: reserved block header flags set")
 	}
 
 	r := bytes.NewReader(data[2:n])
@@ -422,7 +425,7 @@ func (h *blockHeader) UnmarshalBinary(data []byte) error {
 	// The only reasonable approach seems to be to ignore the
 	// padding size. We still check that all padding bytes are zero.
 	if !allZeros(data[n-k : n]) {
-		return errPadding
+		return corruptf("xz: non-zero block header padding")
 	}
 	return nil
 }
@@ -517,7 +520,7 @@ type filter interface {
 	id() uint64
 	UnmarshalBinary(data []byte) error
 	MarshalBinary() (data []byte, err error)
-	reader(r io.Reader, c *ReaderConfig) (fr io.Reader, err error)
+	reader(r io.Reader, c *ReaderConfig, cache *lzma2Cache) (fr io.Reader, err error)
 	writeCloser(w io.WriteCloser, c *WriterConfig) (fw io.WriteCloser, err error)
 	// filter must be last filter
 	last() bool
@@ -545,10 +548,10 @@ func readFilter(r io.Reader) (f filter, err error) {
 		f = new(lzmaFilter)
 	default:
 		if id >= minReservedID {
-			return nil, errors.New(
+			return nil, corruptf(
 				"xz: reserved filter id in block stream header")
 		}
-		return nil, errors.New("xz: invalid filter id")
+		return nil, unsupportedf("xz: invalid filter id")
 	}
 	if err = f.UnmarshalBinary(data); err != nil {
 		return nil, err
@@ -560,7 +563,7 @@ func readFilter(r io.Reader) (f filter, err error) {
 // 1 is supported.
 func readFilters(r io.Reader, count int) (filters []filter, err error) {
 	if count != 1 {
-		return nil, errors.New("xz: unsupported filter count")
+		return nil, unsupportedf("xz: unsupported filter count")
 	}
 	f, err := readFilter(r)
 	if err != nil {
@@ -586,7 +589,7 @@ func readRecord(r io.ByteReader) (rec record, n int, err error) {
 	}
 	rec.unpaddedSize = int64(u)
 	if rec.unpaddedSize < 0 {
-		return rec, n, errors.New("xz: unpadded size negative")
+		return rec, n, corruptf("xz: unpadded size negative")
 	}
 
 	u, k, err = readUvarint(r)
@@ -596,7 +599,7 @@ func readRecord(r io.ByteReader) (rec record, n int, err error) {
 	}
 	rec.uncompressedSize = int64(u)
 	if rec.uncompressedSize < 0 {
-		return rec, n, errors.New("xz: uncompressed size negative")
+		return rec, n, corruptf("xz: uncompressed size negative")
 	}
 
 	return rec, n, nil
@@ -646,7 +649,7 @@ func writeIndex(w io.Writer, index []record) (n int64, err error) {
 	}
 
 	// index padding
-	k, err = mw.Write(make([]byte, padLen(int64(n))))
+	k, err = mw.Write(make([]byte, padLen(n)))
 	n += int64(k)
 	if err != nil {
 		return n, err
@@ -663,7 +666,9 @@ func writeIndex(w io.Writer, index []record) (n int64, err error) {
 // readIndexBody reads the index from the reader. It assumes that the
 // index indicator has already been read. A negative expectedRecordLen
 // disables the record-count check (used when the index is parsed before
-// the blocks, as the parallel reader does).
+// the blocks, as the parallel reader does); the records are read
+// incrementally, so a hostile count is bounded by the index itself rather
+// than by that check.
 func readIndexBody(r io.Reader, expectedRecordLen int) (records []record, n int64, err error) {
 	crc := crc32.NewIEEE()
 	// index indicator
@@ -679,32 +684,39 @@ func readIndexBody(r io.Reader, expectedRecordLen int) (records []record, n int6
 	}
 	recLen := int(u)
 	if recLen < 0 || uint64(recLen) != u {
-		return nil, n, errors.New("xz: record number overflow")
+		return nil, n, corruptf("xz: record number overflow")
 	}
 	if expectedRecordLen >= 0 && recLen != expectedRecordLen {
-		return nil, n, fmt.Errorf(
+		return nil, n, corruptf(
 			"xz: index length is %d; want %d",
 			recLen, expectedRecordLen)
 	}
 
-	// list of records
-	records = make([]record, recLen)
-	for i := range records {
-		records[i], k, err = readRecord(br)
+	// List of records. The count is attacker controlled and the parallel
+	// reader cannot cross-check it against blocks it has not read yet, so the
+	// slice grows with the records that actually arrive instead of being sized
+	// from the declared count. A hostile count simply runs into the end of the
+	// index; it never reaches an allocator.
+	initialCap := min(recLen, 64)
+	records = make([]record, 0, initialCap)
+	for range recLen {
+		var rec record
+		rec, k, err = readRecord(br)
 		n += int64(k)
 		if err != nil {
 			return nil, n, err
 		}
+		records = append(records, rec)
 	}
 
-	p := make([]byte, padLen(int64(n+1)), 4)
+	p := make([]byte, padLen(n+1), 4)
 	k, err = io.ReadFull(br.(io.Reader), p)
 	n += int64(k)
 	if err != nil {
 		return nil, n, err
 	}
 	if !allZeros(p) {
-		return nil, n, errors.New("xz: non-zero byte in index padding")
+		return nil, n, corruptf("xz: non-zero byte in index padding")
 	}
 
 	// crc32
@@ -716,7 +728,7 @@ func readIndexBody(r io.Reader, expectedRecordLen int) (records []record, n int6
 		return records, n, err
 	}
 	if uint32LE(p) != s {
-		return nil, n, errors.New("xz: wrong checksum for index")
+		return nil, n, corruptf("xz: wrong checksum for index")
 	}
 
 	return records, n, nil

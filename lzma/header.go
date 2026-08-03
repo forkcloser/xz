@@ -84,7 +84,7 @@ func (h *Header) marshalBinary() (data []byte, err error) {
 	data[0] = h.Properties.Code()
 
 	// dictionary capacity
-	putUint32LE(data[1:5], uint32(h.DictSize))
+	putUint32LE(data[1:5], h.DictSize)
 
 	// uncompressed size
 	var s uint64

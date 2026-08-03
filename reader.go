@@ -10,9 +10,9 @@ package xz
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"hash"
 	"io"
+	"slices"
 
 	"github.com/forkcloser/xz/internal/xlog"
 	"github.com/forkcloser/xz/lzma"
@@ -21,13 +21,19 @@ import (
 // ReaderConfig defines the parameters for the xz reader. The
 // SingleStream parameter requests the reader to assume that the
 // underlying stream contains only a single stream.
+//
+// DictCap is the smallest dictionary the reader will use. A block whose
+// header asks for more gets what it asks for, so this raises the floor rather
+// than capping memory; the dictionary itself is grown on demand and costs only
+// what the stream actually decodes.
 type ReaderConfig struct {
 	DictCap      int
 	SingleStream bool
 }
 
-// Verify checks the reader parameters for Validity. Zero values will be
-// replaced by default values.
+// Verify checks the reader parameters for validity and replaces zero values
+// with their defaults, so afterwards DictCap holds the value that will
+// actually be used.
 func (c *ReaderConfig) Verify() error {
 	if c == nil {
 		return errors.New("xz: reader parameters are nil")
@@ -36,6 +42,7 @@ func (c *ReaderConfig) Verify() error {
 	if err := lc.Verify(); err != nil {
 		return err
 	}
+	c.DictCap = lc.DictCap
 	return nil
 }
 
@@ -45,6 +52,8 @@ type Reader struct {
 
 	xz io.Reader
 	sr *streamReader
+	// lz carries the LZMA2 reader across the blocks and streams of the file.
+	lz lzma2Cache
 }
 
 // streamReader decodes a single xz stream
@@ -56,6 +65,7 @@ type streamReader struct {
 	newHash func() hash.Hash
 	h       header
 	index   []record
+	lz      *lzma2Cache
 }
 
 // NewReader creates a new xz reader using the default parameters.
@@ -76,8 +86,8 @@ func (c ReaderConfig) NewReader(xz io.Reader) (r *Reader, err error) {
 		ReaderConfig: c,
 		xz:           xz,
 	}
-	if r.sr, err = c.newStreamReader(xz); err != nil {
-		if err == io.EOF {
+	if r.sr, err = c.newStreamReader(xz, &r.lz); err != nil {
+		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
 		}
 		return nil, err
@@ -85,23 +95,29 @@ func (c ReaderConfig) NewReader(xz io.Reader) (r *Reader, err error) {
 	return r, nil
 }
 
-var errUnexpectedData = errors.New("xz: unexpected data after stream")
+var errUnexpectedData = corruptf("xz: unexpected data after stream")
 
 // Read reads uncompressed data from the stream.
+//
+// As the io.Reader contract permits, Read can return decoded data together
+// with an error. When the error reports corrupt or truncated input, the
+// trailing bytes of that data may stem from decoder state that was fed input
+// past the point of corruption; discard data received alongside such an error
+// rather than treating it as a correct prefix of the stream.
 func (r *Reader) Read(p []byte) (n int, err error) {
 	for n < len(p) {
 		if r.sr == nil {
 			if r.SingleStream {
 				data := make([]byte, 1)
 				_, err = io.ReadFull(r.xz, data)
-				if err != io.EOF {
+				if !errors.Is(err, io.EOF) {
 					return n, errUnexpectedData
 				}
 				return n, io.EOF
 			}
 			for {
-				r.sr, err = r.ReaderConfig.newStreamReader(r.xz)
-				if err != errPadding {
+				r.sr, err = r.newStreamReader(r.xz, &r.lz)
+				if !errors.Is(err, errPadding) {
 					break
 				}
 			}
@@ -112,7 +128,7 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 		k, err := r.sr.Read(p[n:])
 		n += k
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				r.sr = nil
 				continue
 			}
@@ -125,8 +141,9 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 var errPadding = errors.New("xz: padding (4 zero bytes) encountered")
 
 // newStreamReader creates a new xz stream reader using the given configuration
-// parameters. NewReader reads and checks the header of the xz stream.
-func (c ReaderConfig) newStreamReader(xz io.Reader) (r *streamReader, err error) {
+// parameters. NewReader reads and checks the header of the xz stream. A
+// non-nil cache lets the stream's blocks reuse one LZMA2 reader.
+func (c ReaderConfig) newStreamReader(xz io.Reader, cache *lzma2Cache) (r *streamReader, err error) {
 	if err = c.Verify(); err != nil {
 		return nil, err
 	}
@@ -138,7 +155,7 @@ func (c ReaderConfig) newStreamReader(xz io.Reader) (r *streamReader, err error)
 		return nil, errPadding
 	}
 	if _, err = io.ReadFull(xz, data[4:]); err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
 		}
 		return nil, err
@@ -147,11 +164,14 @@ func (c ReaderConfig) newStreamReader(xz io.Reader) (r *streamReader, err error)
 		ReaderConfig: c,
 		xz:           xz,
 		index:        make([]record, 0, 4),
+		lz:           cache,
 	}
 	if err = r.h.UnmarshalBinary(data); err != nil {
 		return nil, err
 	}
-	xlog.Debugf("xz header %s", r.h)
+	if xlog.DebugEnabled() {
+		xlog.Debugf("xz header %s", r.h)
+	}
 	if r.newHash, err = newHashFunc(r.h.flags); err != nil {
 		return nil, err
 	}
@@ -162,7 +182,7 @@ func (c ReaderConfig) newStreamReader(xz io.Reader) (r *streamReader, err error)
 func (r *streamReader) readTail() error {
 	index, n, err := readIndexBody(r.xz, len(r.index))
 	if err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
 		}
 		return err
@@ -170,14 +190,14 @@ func (r *streamReader) readTail() error {
 
 	for i, rec := range r.index {
 		if rec != index[i] {
-			return fmt.Errorf("xz: record %d is %v; want %v",
+			return corruptf("xz: record %d is %v; want %v",
 				i, rec, index[i])
 		}
 	}
 
 	p := make([]byte, footerLen)
 	if _, err = io.ReadFull(r.xz, p); err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
 		}
 		return err
@@ -186,12 +206,14 @@ func (r *streamReader) readTail() error {
 	if err = f.UnmarshalBinary(p); err != nil {
 		return err
 	}
-	xlog.Debugf("xz footer %s", f)
-	if f.flags != r.h.flags {
-		return errors.New("xz: footer flags incorrect")
+	if xlog.DebugEnabled() {
+		xlog.Debugf("xz footer %s", f)
 	}
-	if f.indexSize != int64(n)+1 {
-		return errors.New("xz: index size in footer wrong")
+	if f.flags != r.h.flags {
+		return corruptf("xz: footer flags incorrect")
+	}
+	if f.indexSize != n+1 {
+		return corruptf("xz: index size in footer wrong")
 	}
 	return nil
 }
@@ -202,17 +224,28 @@ func (r *streamReader) Read(p []byte) (n int, err error) {
 		if r.br == nil {
 			bh, hlen, err := readBlockHeader(r.xz)
 			if err != nil {
-				if err == errIndexIndicator {
+				if errors.Is(err, errIndexIndicator) {
 					if err = r.readTail(); err != nil {
 						return n, err
 					}
 					return n, io.EOF
 				}
+				if errors.Is(err, io.EOF) {
+					// Every xz stream ends with an index and a footer, even
+					// one with no blocks. Running out of input where the next
+					// block header or the index indicator should be means the
+					// stream was cut short, not that it ended. Reporting EOF
+					// here made the reader hand back a truncated file as a
+					// complete one.
+					err = io.ErrUnexpectedEOF
+				}
 				return n, err
 			}
-			xlog.Debugf("block %v", *bh)
-			r.br, err = r.ReaderConfig.newBlockReader(r.xz, bh,
-				hlen, r.newHash())
+			if xlog.DebugEnabled() {
+				xlog.Debugf("block %v", *bh)
+			}
+			r.br, err = r.newBlockReader(r.xz, bh,
+				hlen, r.newHash(), r.lz)
 			if err != nil {
 				return n, err
 			}
@@ -220,7 +253,7 @@ func (r *streamReader) Read(p []byte) (n int, err error) {
 		k, err := r.br.Read(p[n:])
 		n += k
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				r.index = append(r.index, r.br.record())
 				r.br = nil
 			} else {
@@ -254,9 +287,10 @@ type blockReader struct {
 	r         io.Reader
 }
 
-// newBlockReader creates a new block reader.
+// newBlockReader creates a new block reader. A non-nil cache lets the block
+// reuse the LZMA2 reader of the previous block.
 func (c *ReaderConfig) newBlockReader(xz io.Reader, h *blockHeader,
-	hlen int, hash hash.Hash) (br *blockReader, err error) {
+	hlen int, hash hash.Hash, cache *lzma2Cache) (br *blockReader, err error) {
 
 	br = &blockReader{
 		lxz:       countingReader{r: xz},
@@ -265,7 +299,7 @@ func (c *ReaderConfig) newBlockReader(xz io.Reader, h *blockHeader,
 		hash:      hash,
 	}
 
-	fr, err := c.newFilterReader(&br.lxz, h.filters)
+	fr, err := c.newFilterReader(&br.lxz, h.filters, cache)
 	if err != nil {
 		return nil, err
 	}
@@ -308,13 +342,13 @@ func (br *blockReader) Read(p []byte) (n int, err error) {
 
 	u := br.header.uncompressedSize
 	if u >= 0 && br.uncompressedSize() > u {
-		return n, errors.New("xz: wrong uncompressed size for block")
+		return n, corruptf("xz: wrong uncompressed size for block")
 	}
 	c := br.header.compressedSize
 	if c >= 0 && br.compressedSize() > c {
-		return n, errors.New("xz: wrong compressed size for block")
+		return n, corruptf("xz: wrong compressed size for block")
 	}
-	if err != io.EOF {
+	if !errors.Is(err, io.EOF) {
 		return n, err
 	}
 	if br.uncompressedSize() < u || br.compressedSize() < c {
@@ -325,32 +359,32 @@ func (br *blockReader) Read(p []byte) (n int, err error) {
 	k := padLen(br.lxz.n)
 	q := make([]byte, k+s, k+2*s)
 	if _, err = io.ReadFull(br.lxz.r, q); err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
 		}
 		return n, err
 	}
 	if !allZeros(q[:k]) {
-		return n, errors.New("xz: non-zero block padding")
+		return n, corruptf("xz: non-zero block padding")
 	}
 	checkSum := q[k:]
 	computedSum := br.hash.Sum(checkSum[s:])
 	if !bytes.Equal(checkSum, computedSum) {
-		return n, errors.New("xz: checksum error for block")
+		return n, corruptf("xz: checksum error for block")
 	}
 	return n, io.EOF
 }
 
-func (c *ReaderConfig) newFilterReader(r io.Reader, f []filter) (fr io.Reader,
-	err error) {
+func (c *ReaderConfig) newFilterReader(r io.Reader, f []filter,
+	cache *lzma2Cache) (fr io.Reader, err error) {
 
 	if err = verifyFilters(f); err != nil {
 		return nil, err
 	}
 
 	fr = r
-	for i := len(f) - 1; i >= 0; i-- {
-		fr, err = f[i].reader(fr, c)
+	for _, v := range slices.Backward(f) {
+		fr, err = v.reader(fr, c, cache)
 		if err != nil {
 			return nil, err
 		}

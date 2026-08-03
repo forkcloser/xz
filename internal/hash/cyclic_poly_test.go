@@ -23,8 +23,7 @@ func TestCyclicPolySimple(t *testing.T) {
 func BenchmarkCyclicPoly(b *testing.B) {
 	p := makeBenchmarkBytes(4096)
 	r := NewCyclicPoly(4)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		Hashes(r, p)
 	}
 }
