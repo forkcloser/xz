@@ -11,7 +11,7 @@ You can privately report a vulnerability following this
 Alternatively you can create a Github issue at
 <https://github.com/forkcloser/xz/issues>.
 
-In both cases expect a response in at least 7 days.
+In both cases expect a response within 7 days.
 
 ## Security Advisories
 

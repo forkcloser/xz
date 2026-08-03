@@ -1,7 +1,7 @@
 This here is a friendly fork of https://github.com/ulikunitz/xz with
 several performance improvements, mostly focused on decoding, roughly
-doubling decoding speed for serial encoding, and about 20x with
-parallel block decoding for multiblock archives.
+doubling decoding speed for serial decoding, and about 10x more on top
+of that with parallel block decoding of multiblock archives.
 
 Upstream seems inactive. However, if you have time and interest in doing that,
 feel free to carry these changes over there.
@@ -36,12 +36,10 @@ compressed streams. It includes also a gxz command for compressing and
 decompressing data. The package is completely written in Go and doesn't
 have any dependency on any C code.
 
-The package is currently under development. There might be bugs and APIs
-are not considered stable. At this time the package cannot compete with
-the xz tool regarding compression speed and size. The algorithms there
-have been developed over a long time and are highly optimized. However
-there are a number of improvements planned and I'm very optimistic about
-parallel compression and decompression. Stay tuned!
+APIs are not considered stable. Compression speed and ratio do not match
+the xz tool, whose algorithms have been tuned over a long time.
+Decompression is a different story: see the numbers above, and
+`ParallelReader` for block-parallel decoding of multi-block archives.
 
 ## Using the API
 
@@ -95,7 +93,7 @@ decompression.
 
 Use following command for installation:
 
-    $ go get github.com/forkcloser/xz/cmd/gxz
+    $ go install github.com/forkcloser/xz/cmd/gxz@latest
 
 To test it call the following command.
 

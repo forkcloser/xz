@@ -23,8 +23,9 @@ type ParallelReaderConfig struct {
 	Workers int
 }
 
-// Verify checks the configuration for errors. Zero values will be
-// replaced by default values.
+// Verify checks the configuration for errors and replaces zero values with
+// their defaults, so afterwards DictCap and Workers both hold the values that
+// will actually be used.
 func (c *ParallelReaderConfig) Verify() error {
 	if c == nil {
 		return errors.New("xz: parallel reader parameters are nil")
@@ -33,6 +34,7 @@ func (c *ParallelReaderConfig) Verify() error {
 	if err := rc.Verify(); err != nil {
 		return err
 	}
+	c.DictCap = rc.DictCap
 	if c.Workers < 1 {
 		c.Workers = runtime.GOMAXPROCS(0)
 	}
@@ -70,7 +72,7 @@ const maxLZMA2Expansion = (1 << 21) / 6
 // a worker goroutine, where the caller cannot recover from it.
 func checkUncompressedSize(rec record) error {
 	if rec.uncompressedSize > math.MaxInt {
-		return fmt.Errorf(
+		return corruptf(
 			"xz: uncompressed size %d in index exceeds the address space",
 			rec.uncompressedSize)
 	}
@@ -79,7 +81,7 @@ func checkUncompressedSize(rec record) error {
 		limit = rec.unpaddedSize * maxLZMA2Expansion
 	}
 	if rec.uncompressedSize > limit {
-		return fmt.Errorf(
+		return corruptf(
 			"xz: uncompressed size %d in index exceeds the maximum %d "+
 				"for a block of %d bytes",
 			rec.uncompressedSize, limit, rec.unpaddedSize)
@@ -184,18 +186,58 @@ func (c ParallelReaderConfig) NewParallelReader(xz io.ReaderAt, size int64) (r *
 	if err != nil {
 		return nil, err
 	}
-	return &ParallelReader{
+	r = &ParallelReader{
 		ParallelReaderConfig: c,
 		xz:                   xz,
 		blocks:               blocks,
 		size:                 total,
 		done:                 make(chan struct{}),
-	}, nil
+	}
+	// Workers and the dispatcher are goroutines, and goroutines are not
+	// collected just because nothing references the reader that started them.
+	// Close is still the documented way to release a reader early; this only
+	// keeps forgetting it from leaking for the life of the process.
+	runtime.SetFinalizer(r, func(r *ParallelReader) { r.stop() })
+	return r, nil
 }
 
 // Size returns the total number of uncompressed bytes in the file, as
 // recorded in the stream indexes.
 func (r *ParallelReader) Size() int64 { return r.size }
+
+// paddingScanBufSize is how much trailing padding is examined per read. Stream
+// padding comes in groups of four zero bytes and can be arbitrarily long, so
+// reading it four bytes at a time turns a large zero-padded file into millions
+// of reads — one syscall each when the input is a file.
+const paddingScanBufSize = 32 << 10
+
+// skipStreamPadding walks backwards from pos over whole four-byte groups of
+// zeros and returns the position of the first one, which is where the stream
+// before the padding ends. A return of zero means everything up to pos was
+// padding. pos must be a multiple of four.
+func skipStreamPadding(xz io.ReaderAt, pos int64) (int64, error) {
+	buf := make([]byte, paddingScanBufSize)
+	for pos >= 4 {
+		n := int64(len(buf))
+		if n > pos {
+			n = pos
+		}
+		n -= n % 4 // only whole groups, so the scan stays aligned
+		p := buf[:n]
+		if _, err := xz.ReadAt(p, pos-n); err != nil {
+			return 0, err
+		}
+		i := len(p)
+		for i >= 4 && allZeros(p[i-4:i]) {
+			i -= 4
+		}
+		pos -= int64(len(p) - i)
+		if i != 0 {
+			return pos, nil
+		}
+	}
+	return pos, nil
+}
 
 // parseBlocks locates all blocks of the xz file by walking the streams
 // backwards from the end of the file: footer, index, stream header.
@@ -204,22 +246,19 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 	streams := make([][]blockDesc, 0, 1)
 	pos := size
 	for pos > 0 {
-		// skip stream padding (groups of four zero bytes)
-		var p [4]byte
 		if pos%4 != 0 {
-			return nil, 0, errors.New("xz: file size not a multiple of four bytes")
+			return nil, 0, corruptf("xz: file size not a multiple of four bytes")
 		}
-		if _, err = xz.ReadAt(p[:], pos-4); err != nil {
+		if pos, err = skipStreamPadding(xz, pos); err != nil {
 			return nil, 0, err
 		}
-		if allZeros(p[:]) {
-			pos -= 4
-			continue
+		if pos == 0 {
+			break
 		}
 
 		// footer
 		if pos < HeaderLen+footerLen {
-			return nil, 0, errors.New("xz: stream truncated")
+			return nil, 0, corruptf("xz: stream truncated")
 		}
 		fdata := make([]byte, footerLen)
 		if _, err = xz.ReadAt(fdata, pos-footerLen); err != nil {
@@ -233,7 +272,7 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 		// index
 		indexStart := pos - footerLen - f.indexSize
 		if indexStart < HeaderLen {
-			return nil, 0, errors.New("xz: index size exceeds stream")
+			return nil, 0, corruptf("xz: index size exceeds stream")
 		}
 		ir := bufio.NewReader(io.NewSectionReader(xz, indexStart, f.indexSize))
 		c, err := ir.ReadByte()
@@ -241,14 +280,14 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 			return nil, 0, err
 		}
 		if c != 0 {
-			return nil, 0, errors.New("xz: index indicator missing")
+			return nil, 0, corruptf("xz: index indicator missing")
 		}
 		records, n, err := readIndexBody(ir, -1)
 		if err != nil {
 			return nil, 0, err
 		}
 		if n+1 != f.indexSize {
-			return nil, 0, errors.New("xz: index size does not match footer")
+			return nil, 0, corruptf("xz: index size does not match footer")
 		}
 
 		// stream header
@@ -261,7 +300,7 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 		var blocksLen int64
 		for _, rec := range records {
 			if rec.unpaddedSize <= 0 {
-				return nil, 0, errors.New("xz: invalid unpadded size in index")
+				return nil, 0, corruptf("xz: invalid unpadded size in index")
 			}
 			if err := checkUncompressedSize(rec); err != nil {
 				return nil, 0, err
@@ -270,7 +309,7 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 			// overflow, and the first one keeps the addition in range.
 			remaining := indexStart - blocksLen
 			if rec.unpaddedSize > remaining {
-				return nil, 0, errors.New("xz: blocks exceed stream size")
+				return nil, 0, corruptf("xz: blocks exceed stream size")
 			}
 			padded := rec.unpaddedSize + int64(padLen(rec.unpaddedSize))
 			if padded > remaining {
@@ -291,7 +330,7 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 			return nil, 0, err
 		}
 		if h.flags != f.flags {
-			return nil, 0, errors.New("xz: stream header and footer flags differ")
+			return nil, 0, corruptf("xz: stream header and footer flags differ")
 		}
 		newHash, err := newHashFunc(h.flags)
 		if err != nil {
@@ -314,16 +353,24 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 		// terminate. That follows from the bounds above, but state it here so
 		// termination is checkable locally and survives future edits.
 		if headerPos >= pos {
-			return nil, 0, errors.New("xz: stream does not precede its index")
+			return nil, 0, corruptf("xz: stream does not precede its index")
 		}
 		pos = headerPos
 	}
 	if len(streams) == 0 {
-		return nil, 0, errors.New("xz: no streams found")
+		return nil, 0, corruptf("xz: no streams found")
 	}
 	// streams were found back to front
 	for i := len(streams) - 1; i >= 0; i-- {
 		for _, d := range streams[i] {
+			// Each size is already bounded against its own block, but the
+			// total is what Size reports, and callers size buffers from it.
+			// Wrapping it would hand them a small or negative number for an
+			// enormous stream.
+			if d.uncompressedSize > math.MaxInt64-total {
+				return nil, 0, corruptf(
+					"xz: total uncompressed size overflows int64")
+			}
 			total += d.uncompressedSize
 			blocks = append(blocks, d)
 		}
@@ -331,14 +378,24 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 	return blocks, total, nil
 }
 
-// errReaderClosed is returned by Read after Close has been called.
-var errReaderClosed = errors.New("xz: parallel reader is closed")
+// errReaderClosed is returned by Read after Close has been called. It matches
+// ErrClosed so callers can recognise it without comparing message text.
+var errReaderClosed = &kindError{
+	msg:  "xz: parallel reader is closed",
+	kind: ErrClosed,
+}
 
 // start launches the dispatcher and the decode workers. The queue
 // capacity bounds the number of blocks in flight (decoding or decoded
 // but not yet consumed) and thereby the memory use.
 func (r *ParallelReader) start() {
 	r.started = true
+	// Workers is a promoted field, so it is writable between construction and
+	// the first read. Re-apply the floor here: zero workers would leave every
+	// read waiting for a block that nothing is decoding.
+	if r.Workers < 1 {
+		r.Workers = runtime.GOMAXPROCS(0)
+	}
 	r.queue = make(chan *blockWork, r.Workers+2)
 	r.jobs = make(chan *blockWork)
 	r.bufPool = make(chan []byte, cap(r.queue)+1)
@@ -463,13 +520,13 @@ func (r *ParallelReader) decodeBlock(d *blockDesc, buf []byte) ([]byte, error) {
 	var tmp [1]byte
 	n, err := br.Read(tmp[:])
 	if n != 0 || err == nil {
-		return nil, errors.New("xz: block longer than index record")
+		return nil, corruptf("xz: block longer than index record")
 	}
 	if err != io.EOF {
 		return nil, err
 	}
 	if br.record() != (record{d.unpaddedSize, d.uncompressedSize}) {
-		return nil, errors.New("xz: block sizes do not match index record")
+		return nil, corruptf("xz: block sizes do not match index record")
 	}
 	return buf, nil
 }
@@ -535,7 +592,14 @@ func (r *ParallelReader) Read(p []byte) (n int, err error) {
 // avoids the intermediate copy of the Read interface by handing the
 // decoded block buffers directly to the writer.
 func (r *ParallelReader) WriteTo(w io.Writer) (n int64, err error) {
+	// An exhausted reader has nothing left to write, which is success, not
+	// failure: io.Copy does not report io.EOF for an ordinary reader, and a
+	// caller checking err would otherwise see a fully drained stream as an
+	// error.
 	if err = r.getErr(); err != nil {
+		if err == io.EOF {
+			return 0, nil
+		}
 		return 0, err
 	}
 	if !r.started {
@@ -545,7 +609,10 @@ func (r *ParallelReader) WriteTo(w io.Writer) (n int64, err error) {
 		if r.curPos == len(r.cur) {
 			if err = r.nextBlock(); err != nil {
 				if err == io.EOF {
-					r.setErr(err)
+					// Record EOF so later calls stay consistent, but
+					// report success: WriterTo stops at EOF, it does
+					// not fail at it.
+					_ = r.setErr(err)
 					return n, nil
 				}
 				r.stop()
@@ -559,6 +626,13 @@ func (r *ParallelReader) WriteTo(w io.Writer) (n int64, err error) {
 		if err != nil {
 			r.stop()
 			return n, r.setErr(err)
+		}
+		// A writer that accepts nothing and reports no error is broken.
+		// io.Copy turns that into ErrShortWrite rather than spinning, and so
+		// must this loop.
+		if k == 0 {
+			r.stop()
+			return n, r.setErr(io.ErrShortWrite)
 		}
 	}
 }
@@ -579,6 +653,7 @@ func (r *ParallelReader) stop() {
 // reached io.EOF keeps reporting io.EOF rather than the close.
 func (r *ParallelReader) Close() error {
 	r.stop()
-	r.setErr(errReaderClosed)
+	// Only takes effect if the reader was not already finished or failed.
+	_ = r.setErr(errReaderClosed)
 	return nil
 }

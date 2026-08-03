@@ -42,17 +42,17 @@ func (f lzmaFilter) MarshalBinary() (data []byte, err error) {
 // filter.
 func (f *lzmaFilter) UnmarshalBinary(data []byte) error {
 	if len(data) != lzmaFilterLen {
-		return errors.New("xz: data for LZMA2 filter has wrong length")
+		return corruptf("xz: data for LZMA2 filter has wrong length")
 	}
 	if data[0] != lzmaFilterID {
-		return errors.New("xz: wrong LZMA2 filter id")
+		return corruptf("xz: wrong LZMA2 filter id")
 	}
 	if data[1] != 1 {
-		return errors.New("xz: wrong LZMA2 filter size")
+		return corruptf("xz: wrong LZMA2 filter size")
 	}
 	dc, err := lzma.DecodeDictCap(data[2])
 	if err != nil {
-		return errors.New("xz: wrong LZMA2 dictionary size property")
+		return corruptf("xz: wrong LZMA2 dictionary size property")
 	}
 
 	f.dictCap = dc

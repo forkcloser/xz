@@ -18,6 +18,9 @@ cmd/xb/xb
 # vim swap file
 .*.swp
 
+# IDE state
+.idea/
+
 # executables on windows
 *.exe
 

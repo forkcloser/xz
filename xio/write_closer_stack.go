@@ -18,7 +18,7 @@ type WriteCloserStack struct {
 	Stack []io.WriteCloser
 }
 
-// NewWriteCloserStack creates a new WriteCloserStack. It will have an an empty
+// NewWriteCloserStack creates a new WriteCloserStack. It will have an empty
 // stack.
 func NewWriteCloserStack() *WriteCloserStack {
 	return &WriteCloserStack{}

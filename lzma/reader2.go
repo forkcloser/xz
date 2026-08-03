@@ -12,7 +12,6 @@ import (
 )
 
 // Reader2Config stores the parameters for the LZMA2 reader.
-// format.
 type Reader2Config struct {
 	DictCap int
 }

@@ -10,7 +10,6 @@ package xz
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"hash"
 	"io"
 
@@ -21,13 +20,19 @@ import (
 // ReaderConfig defines the parameters for the xz reader. The
 // SingleStream parameter requests the reader to assume that the
 // underlying stream contains only a single stream.
+//
+// DictCap is the smallest dictionary the reader will use. A block whose
+// header asks for more gets what it asks for, so this raises the floor rather
+// than capping memory; the dictionary itself is grown on demand and costs only
+// what the stream actually decodes.
 type ReaderConfig struct {
 	DictCap      int
 	SingleStream bool
 }
 
-// Verify checks the reader parameters for Validity. Zero values will be
-// replaced by default values.
+// Verify checks the reader parameters for validity and replaces zero values
+// with their defaults, so afterwards DictCap holds the value that will
+// actually be used.
 func (c *ReaderConfig) Verify() error {
 	if c == nil {
 		return errors.New("xz: reader parameters are nil")
@@ -36,6 +41,7 @@ func (c *ReaderConfig) Verify() error {
 	if err := lc.Verify(); err != nil {
 		return err
 	}
+	c.DictCap = lc.DictCap
 	return nil
 }
 
@@ -85,7 +91,7 @@ func (c ReaderConfig) NewReader(xz io.Reader) (r *Reader, err error) {
 	return r, nil
 }
 
-var errUnexpectedData = errors.New("xz: unexpected data after stream")
+var errUnexpectedData = corruptf("xz: unexpected data after stream")
 
 // Read reads uncompressed data from the stream.
 func (r *Reader) Read(p []byte) (n int, err error) {
@@ -170,7 +176,7 @@ func (r *streamReader) readTail() error {
 
 	for i, rec := range r.index {
 		if rec != index[i] {
-			return fmt.Errorf("xz: record %d is %v; want %v",
+			return corruptf("xz: record %d is %v; want %v",
 				i, rec, index[i])
 		}
 	}
@@ -188,10 +194,10 @@ func (r *streamReader) readTail() error {
 	}
 	xlog.Debugf("xz footer %s", f)
 	if f.flags != r.h.flags {
-		return errors.New("xz: footer flags incorrect")
+		return corruptf("xz: footer flags incorrect")
 	}
 	if f.indexSize != int64(n)+1 {
-		return errors.New("xz: index size in footer wrong")
+		return corruptf("xz: index size in footer wrong")
 	}
 	return nil
 }
@@ -308,11 +314,11 @@ func (br *blockReader) Read(p []byte) (n int, err error) {
 
 	u := br.header.uncompressedSize
 	if u >= 0 && br.uncompressedSize() > u {
-		return n, errors.New("xz: wrong uncompressed size for block")
+		return n, corruptf("xz: wrong uncompressed size for block")
 	}
 	c := br.header.compressedSize
 	if c >= 0 && br.compressedSize() > c {
-		return n, errors.New("xz: wrong compressed size for block")
+		return n, corruptf("xz: wrong compressed size for block")
 	}
 	if err != io.EOF {
 		return n, err
@@ -331,12 +337,12 @@ func (br *blockReader) Read(p []byte) (n int, err error) {
 		return n, err
 	}
 	if !allZeros(q[:k]) {
-		return n, errors.New("xz: non-zero block padding")
+		return n, corruptf("xz: non-zero block padding")
 	}
 	checkSum := q[k:]
 	computedSum := br.hash.Sum(checkSum[s:])
 	if !bytes.Equal(checkSum, computedSum) {
-		return n, errors.New("xz: checksum error for block")
+		return n, corruptf("xz: checksum error for block")
 	}
 	return n, io.EOF
 }
