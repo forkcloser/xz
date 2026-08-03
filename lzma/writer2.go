@@ -58,9 +58,6 @@ func (c *Writer2Config) Verify() error {
 	if !(maxMatchLen <= c.BufSize) {
 		return errors.New("lzma: lookahead buffer size too small")
 	}
-	if c.Properties.LC+c.Properties.LP > 4 {
-		return errors.New("lzma: sum of lc and lp exceeds 4")
-	}
 	if err = c.Matcher.verify(); err != nil {
 		return err
 	}
