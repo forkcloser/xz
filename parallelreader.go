@@ -66,11 +66,11 @@ func (d *blockDesc) paddedSize() int64 {
 const maxLZMA2Expansion = (1 << 21) / 6
 
 // checkUncompressedSize rejects index records whose uncompressed size cannot
-// possibly be produced by a block of the recorded unpadded size. The parallel
-// reader allocates a whole block up front from this number, so a record
-// claiming a huge size would otherwise turn a few bytes of input into an
-// allocation large enough to abort the process — and the allocation happens on
-// a worker goroutine, where the caller cannot recover from it.
+// possibly be produced by a block of the recorded unpadded size. The decode
+// buffer grows with the data actually produced rather than being sized from
+// this number, so the check is not what keeps allocations bounded; it rejects
+// the absurd records early, before any worker spends time on them, and keeps
+// Size (which sums these values) meaningful.
 func checkUncompressedSize(rec record) error {
 	if rec.uncompressedSize > math.MaxInt {
 		return corruptf(
@@ -421,7 +421,7 @@ func (d *parallelDecoder) start(workers, dictCap int) {
 	d.queue = make(chan *blockWork, workers+2)
 	d.jobs = make(chan *blockWork)
 	d.bufPool = make(chan []byte, cap(d.queue)+1)
-	for i := 0; i < workers; i++ {
+	for range workers {
 		go d.worker()
 	}
 	go d.dispatch()
@@ -476,8 +476,7 @@ func (d *parallelDecoder) decodeOne(bd *blockDesc) (res blockResult) {
 				bd.offset, v)}
 		}
 	}()
-	buf = d.getBuf(int(bd.uncompressedSize))
-	data, err := d.decodeBlock(bd, buf)
+	data, err := d.decodeBlock(bd, &buf)
 	if err != nil {
 		d.putBuf(buf)
 		return blockResult{err: err}
@@ -514,11 +513,21 @@ func (d *parallelDecoder) putBuf(b []byte) {
 // block and chunk headers.
 const blockReadBufSize = 256 << 10
 
-// decodeBlock decodes a single block into buf, which must have the
-// uncompressed size of the block recorded in the index. It verifies the
-// block check and that header, compressed size and uncompressed size
-// agree with the index record.
-func (d *parallelDecoder) decodeBlock(bd *blockDesc, buf []byte) ([]byte, error) {
+// initialBlockBufSize caps the decode buffer a block gets before it has
+// produced anything. The uncompressed size in the index is attacker
+// controlled, and checkUncompressedSize still admits sizes about 350,000
+// times the input, so sizing a buffer from it up front would let a few
+// kilobytes of index demand gigabytes. Growing with the bytes actually
+// decoded keeps the allocation proportional to real output.
+const initialBlockBufSize = 1 << 20
+
+// decodeBlock decodes a single block and returns its data. The buffer
+// grows with the decoded data, up to the uncompressed size the index
+// declares for the block; *bufp always holds the current buffer so the
+// caller can recycle it whether decoding succeeds, fails or panics.
+// decodeBlock verifies the block check and that header, compressed size
+// and uncompressed size agree with the index record.
+func (d *parallelDecoder) decodeBlock(bd *blockDesc, bufp *[]byte) ([]byte, error) {
 	sr := io.NewSectionReader(d.xz, bd.offset, bd.paddedSize())
 	xr := bufio.NewReaderSize(sr, blockReadBufSize)
 
@@ -531,11 +540,29 @@ func (d *parallelDecoder) decodeBlock(bd *blockDesc, buf []byte) ([]byte, error)
 	if err != nil {
 		return nil, err
 	}
-	if _, err = io.ReadFull(br, buf); err != nil {
-		if errors.Is(err, io.EOF) {
-			err = io.ErrUnexpectedEOF
+	total := int(bd.uncompressedSize)
+	buf := d.getBuf(min(total, initialBlockBufSize))
+	*bufp = buf
+	for n := 0; ; {
+		k, err := io.ReadFull(br, buf[n:])
+		n += k
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				err = io.ErrUnexpectedEOF
+			}
+			return nil, err
 		}
-		return nil, err
+		if n == total {
+			break
+		}
+		if next := min(total, 2*len(buf)); cap(buf) >= next {
+			buf = buf[:next]
+		} else {
+			b := make([]byte, next)
+			copy(b, buf)
+			buf = b
+		}
+		*bufp = buf
 	}
 	// The block must end exactly here; the final Read triggers the
 	// padding and check verification in the block reader.

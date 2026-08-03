@@ -224,3 +224,60 @@ func TestParallelReaderPlausibleSizeStillDecodes(t *testing.T) {
 	xz := compressMultiBlock(t, data, 32<<10)
 	testParallelRead(t, xz, data, 4)
 }
+
+// TestParallelReaderHostileSizeWithinBound covers an index record whose
+// uncompressed size passes the plausibility bound but is still enormously
+// larger than anything the block delivers. checkUncompressedSize admits about
+// 350,000 times the unpadded size, so an 8 KiB block may declare gigabytes;
+// the decode buffer used to be sized from that declaration before anything
+// validated it, ~38,000-fold amplification from one small file.
+func TestParallelReaderHostileSizeWithinBound(t *testing.T) {
+	blockArea := make([]byte, 8192)
+	file := hostileStream(blockArea,
+		[]hostileRecord{{unpaddedSize: 8192, uncompressedSize: 300 << 20}}, -1)
+	err := readAllParallel(t, file, 4)
+	if err == nil {
+		t.Fatal("index claiming 300 MiB for an 8 KiB block: no error")
+	}
+	t.Logf("%d byte file: %s", len(file), err)
+}
+
+// TestParallelReaderHostileSizeRealBlock is the same attack mounted on a real
+// block, so the decode actually runs: the block decodes fine but delivers far
+// less than the index declares. The buffer must grow with the decoded data
+// rather than with the declaration, and the mismatch must surface as an error.
+func TestParallelReaderHostileSizeRealBlock(t *testing.T) {
+	data := parallelTestData(32 << 10)
+	var out bytes.Buffer
+	// CRC32, matching the stream flags hostileStream writes.
+	w, err := WriterConfig{CheckSum: CRC32}.NewWriter(&out)
+	if err != nil {
+		t.Fatalf("NewWriter error %s", err)
+	}
+	if _, err = w.Write(data); err != nil {
+		t.Fatalf("Write error %s", err)
+	}
+	if err = w.Close(); err != nil {
+		t.Fatalf("Close error %s", err)
+	}
+	real := out.Bytes() // single block
+	blocks, _, err := parseBlocks(bytes.NewReader(real), int64(len(real)))
+	if err != nil {
+		t.Fatalf("parseBlocks error %s", err)
+	}
+	if len(blocks) != 1 {
+		t.Fatalf("got %d blocks; want 1", len(blocks))
+	}
+	bd := blocks[0]
+	blockArea := real[bd.offset : bd.offset+bd.paddedSize()]
+	file := hostileStream(blockArea,
+		[]hostileRecord{{
+			unpaddedSize:     uint64(bd.unpaddedSize),
+			uncompressedSize: 300 << 20,
+		}}, -1)
+	err = readAllParallel(t, file, 4)
+	if err == nil {
+		t.Fatal("index claiming 300 MiB for a 32 KiB block: no error")
+	}
+	t.Logf("%d byte file: %s", len(file), err)
+}
