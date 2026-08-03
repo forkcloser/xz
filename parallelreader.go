@@ -219,6 +219,12 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 		}
 
 		// stream header
+		//
+		// The blocks have to fit between the stream header and the index, so
+		// every partial sum is bounded by indexStart. Accumulating without
+		// that bound lets a hostile index wrap blocksLen negative, which puts
+		// headerPos at or above pos and makes the enclosing loop re-parse the
+		// same footer forever.
 		var blocksLen int64
 		for _, rec := range records {
 			if rec.unpaddedSize <= 0 {
@@ -227,7 +233,17 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 			if err := checkUncompressedSize(rec); err != nil {
 				return nil, 0, err
 			}
-			blocksLen += rec.unpaddedSize + int64(padLen(rec.unpaddedSize))
+			// remaining is in [0, indexStart], so neither comparison can
+			// overflow, and the first one keeps the addition in range.
+			remaining := indexStart - blocksLen
+			if rec.unpaddedSize > remaining {
+				return nil, 0, errors.New("xz: blocks exceed stream size")
+			}
+			padded := rec.unpaddedSize + int64(padLen(rec.unpaddedSize))
+			if padded > remaining {
+				return nil, 0, errors.New("xz: blocks exceed stream size")
+			}
+			blocksLen += padded
 		}
 		headerPos := indexStart - blocksLen - HeaderLen
 		if headerPos < 0 {
@@ -261,6 +277,12 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 			off += descs[i].paddedSize()
 		}
 		streams = append(streams, descs)
+		// The walk is backwards, so pos must strictly decrease for the loop to
+		// terminate. That follows from the bounds above, but state it here so
+		// termination is checkable locally and survives future edits.
+		if headerPos >= pos {
+			return nil, 0, errors.New("xz: stream does not precede its index")
+		}
 		pos = headerPos
 	}
 	if len(streams) == 0 {

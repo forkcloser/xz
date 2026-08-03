@@ -10,6 +10,7 @@ import (
 	"io"
 	"runtime"
 	"testing"
+	"time"
 )
 
 // The parallel reader parses the stream index before it decodes anything, so
@@ -158,6 +159,60 @@ func TestParallelReaderHostileRecordCount(t *testing.T) {
 			continue
 		}
 		t.Logf("record count %d (%d byte file): %s", count, len(file), err)
+	}
+}
+
+// TestParallelReaderIndexSizeOverflow covers index records whose padded sizes
+// sum past MaxInt64. The sum feeds the position of the stream header, so
+// wrapping it negative places the header at or after the footer the walk
+// started from and the backwards walk stops making progress.
+func TestParallelReaderIndexSizeOverflow(t *testing.T) {
+	file := hostileStream([]byte{0, 0, 0, 0}, []hostileRecord{
+		{unpaddedSize: 1<<63 - 1, uncompressedSize: 0},
+		{unpaddedSize: 1<<63 - 52, uncompressedSize: 0},
+	}, -1)
+	err := readAllParallel(t, file, 4)
+	if err == nil {
+		t.Fatal("overflowing index sizes accepted")
+	}
+	t.Logf("%d byte file: %s", len(file), err)
+}
+
+// loopFile is the 104-byte file that used to spin parseBlocks at 100% CPU
+// forever. Two streams, all CRCs valid; the second index sums two unpadded
+// sizes of 2^63-1 so the total wraps to 0 and the stream header lands exactly
+// on the position the walk came from.
+var loopFile = []byte{
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x02, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f, 0x01,
+	0xcc, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f, 0x01, 0x00, 0x00,
+	0x5d, 0x9e, 0xd6, 0xaf, 0x28, 0x72, 0x9c, 0x10, 0x06, 0x00, 0x00, 0x00,
+	0x00, 0x01, 0x59, 0x5a, 0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00, 0x00, 0x01,
+	0x69, 0x22, 0xde, 0x36, 0x00, 0x02, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0x7f, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0x7f, 0x01, 0x00, 0x00, 0xa9, 0x7a, 0x61, 0xcc, 0x28, 0x72, 0x9c, 0x10,
+	0x06, 0x00, 0x00, 0x00, 0x00, 0x01, 0x59, 0x5a,
+}
+
+// TestParallelReaderNoHangOnLoopFile pins the non-termination bug directly.
+// The construction is fiddly enough that it is worth keeping the exact bytes
+// rather than re-deriving them.
+func TestParallelReaderNoHangOnLoopFile(t *testing.T) {
+	done := make(chan error, 1)
+	go func() {
+		_, err := NewParallelReader(bytes.NewReader(loopFile), int64(len(loopFile)))
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("hostile two-stream file accepted")
+		}
+		t.Logf("%d byte file: %s", len(loopFile), err)
+	case <-time.After(10 * time.Second):
+		// The goroutine is stuck in an uninterruptible loop; it will keep
+		// burning a core until the test binary exits.
+		t.Fatal("parseBlocks did not return: the backwards walk is not terminating")
 	}
 }
 
