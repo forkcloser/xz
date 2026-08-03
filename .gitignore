@@ -1,5 +1,7 @@
 # .gitignore
 
+build
+
 TODO.html
 README.html
 
