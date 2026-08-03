@@ -2,21 +2,13 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// Package term provides the IsTerminal function.
 package term
 
-import (
-	"syscall"
-	"unsafe"
-)
-
-var kernel32 = syscall.NewLazyDLL("kernel32.dll")
-
-var getConsoleMode = kernel32.NewProc("GetConsoleMode")
+import "golang.org/x/sys/windows"
 
 // IsTerminal returns true if the given file descriptor is a terminal.
 func IsTerminal(fd uintptr) bool {
 	var st uint32
-	r, _, e := syscall.Syscall(getConsoleMode.Addr(),
-		2, fd, uintptr(unsafe.Pointer(&st)), 0)
-	return r != 0 && e == 0
+	return windows.GetConsoleMode(windows.Handle(fd), &st) == nil
 }
