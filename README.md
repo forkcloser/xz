@@ -7,39 +7,84 @@ have any dependency on any C code.
 
 APIs are not considered stable. Compression speed and ratio do not match
 the xz tool, whose algorithms have been tuned over a long time.
-Decompression is a different story: see the numbers above, and
+Decompression is a different story: see the numbers below, and
 `ParallelReader` for block-parallel decoding of multi-block archives.
 
 ## About this fork
 
-This here is a friendly fork of https://github.com/ulikunitz/xz with
-several performance improvements, mostly focused on decoding, roughly
-doubling decoding speed for serial decoding, and about 10x more on top
-of that with parallel block decoding of multiblock archives.
+This here is a friendly fork of https://github.com/ulikunitz/xz.
+Upstream seems inactive. However, if you have time and interest in doing
+that, feel free to carry these changes over there.
 
-Upstream seems inactive. However, if you have time and interest in doing that,
-feel free to carry these changes over there.
+The fork diverges from upstream in three areas:
 
-### Upstream as of 2026-07-16
+**Performance.** Serial decoding is a bit over twice as fast as
+upstream, mostly by buffering each LZMA2 chunk in memory so the range
+decoder reads bytes by index instead of through a per-byte interface
+call, and by keeping the hot bit-decoding loops free of calls and error
+branches. Decoder state, probability models, dictionary and read
+buffers are reused across chunks and across the blocks of a file, which
+takes allocations down from about 1.2 million to 132 per 10 MB decode
+and from 1.2 million to 306 per encode. `ParallelReader` decodes the
+blocks of multi-block archives concurrently on top of that. The decoder
+dictionary grows on demand instead of being allocated at its declared
+size — a stream that produces little never pays for the 4 GiB its
+header may declare, at the cost of roughly twice the final size in
+allocations for streams that fill it.
 
-| Benchmark          | Throughput   | Time/op   | Bytes/op  | Allocs/op   |
-| ------------------ | ------------ | --------- | --------- | ----------- |
-| Reader (decompress) | 48.63 MiB/s | 196.1 ms  | 31.94 MiB | 1,213,036   |
-| Writer (compress)   | 14.09 MiB/s | 678.3 ms  | 69.35 MiB | 1,217,288   |
+**Robustness.** Every number in an xz index is attacker controlled, so
+the parallel reader binds its memory use to what a block actually
+decodes to rather than what the index declares, and rejects record
+counts, sizes and overflows that upstream fed into allocations or loop
+bounds. A `ParallelReader` that is dropped without `Close` winds down
+its goroutines instead of leaking them. Decoding errors are classified:
+everything that means "this input is not valid xz" matches
+`ErrCorrupt`, unsupported-but-valid features match `ErrUnsupported`,
+and I/O errors from the underlying reader pass through untouched, so
+callers can tell a corrupt file from a failed transport. A truncated
+file is reported as such instead of decoding as a shorter one, and a
+writer flush failure surfaces instead of silently producing a short
+stream, as upstream v0.5.16 does for small-dictionary configurations —
+configurations this fork briefly rejected and now encodes correctly.
 
-### This fork
+**Verification.** The decoder is differentially tested against
+upstream and against the `xz` tool across encoder configurations,
+payload shapes, multi-stream files and dictionary-growth boundaries,
+and fuzzed both in-repo (serial and parallel readers must agree) and
+against upstream. Malformed-input tests cover truncation and bit flips
+at every offset and a corpus of hostile index constructions with an
+allocation budget. `AUDIT.md` records a full audit of the tree,
+including the findings that led to the fixes above and the negative
+results that were measured and rejected.
 
-| Benchmark           | Throughput             | Time/op            | Bytes/op            | Allocs/op                |
-| ------------------- | ---------------------- | ------------------ | ------------------- | ------------------------ |
-| Reader (decompress) | 106.32 MiB/s (+118.6%) | 89.7 ms (-54.3%)   | 13.56 MiB (-57.6%)  | 284 (-99.98%)            |
-| Writer (compress)   | 18.27 MiB/s (+29.7%)   | 522.1 ms (-23.0%)  | 50.85 MiB (-26.7%)  | 4,622 (-99.6%)           |
+### Benchmarks
 
-### LLVM xz release tarball decoding (1.6G, multiblock)
+Measured on `testdata/enwik7` (10 MB of Wikipedia text), Apple M5 Pro,
+Go 1.26, 2026-08-02. Upstream is `github.com/ulikunitz/xz` v0.5.16 on
+the same benchmark bodies. Reproduce with:
 
-| Decoder                    | Time     | Throughput   |
-| -------------------------- | -------- | ------------ |
-| Reader (serial, Patch 9)   | 79.7 s   | 141 MiB/s    |
-| ParallelReader (18 workers)| 7.4 s    | 1,514 MiB/s  |
+    go test -run '^$' -bench 'Reader|Writer' -benchmem -benchtime=5x -count=6 .
+
+| Benchmark           | Upstream v0.5.16 | This fork | Change |
+| ------------------- | ---------------- | --------- | ------ |
+| Reader (decompress) | 48 MB/s          | 100 MB/s  | +110%  |
+| Reader allocs/op    | 1,213,039        | 132       | −99.99% |
+| Writer (compress)   | 14.8 MB/s        | 16 MB/s   | +8%    |
+| Writer allocs/op    | 1,217,296        | 306       | −99.97% |
+
+Multi-block files (the shape `xz -T` produces, and the one
+`ParallelReader` exists for), same corpus:
+
+| Benchmark                                | Throughput | Allocs/op |
+| ---------------------------------------- | ---------- | --------- |
+| Reader, 153 × 64 KiB blocks              | 73 MB/s    | 2,576     |
+| ParallelReader, 10 × 1 MiB blocks, 18 workers | 700 MB/s | ~1,265 |
+| ParallelReader, 153 × 64 KiB blocks, 18 workers | ~980 MB/s | — |
+
+Compression ratio is identical to upstream in the default
+configuration. Multi-block serial decoding is slower than single-block
+per byte because each block restarts the dictionary; that cost is
+intrinsic to the format, not to this implementation.
 
 
 ## Using the API
