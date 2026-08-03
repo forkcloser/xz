@@ -7,8 +7,10 @@ package xz
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"hash"
 	"io"
+	"math"
 	"runtime"
 	"sync"
 )
@@ -53,6 +55,36 @@ type blockDesc struct {
 // paddedSize returns the total size of the block in the file.
 func (d *blockDesc) paddedSize() int64 {
 	return d.unpaddedSize + int64(padLen(d.unpaddedSize))
+}
+
+// maxLZMA2Expansion bounds how far one byte of a block can expand. The
+// smallest LZMA2 chunk that carries compressed data is six header bytes plus
+// at least one data byte, and a chunk decodes to at most 2 MiB.
+const maxLZMA2Expansion = (1 << 21) / 6
+
+// checkUncompressedSize rejects index records whose uncompressed size cannot
+// possibly be produced by a block of the recorded unpadded size. The parallel
+// reader allocates a whole block up front from this number, so a record
+// claiming a huge size would otherwise turn a few bytes of input into an
+// allocation large enough to abort the process — and the allocation happens on
+// a worker goroutine, where the caller cannot recover from it.
+func checkUncompressedSize(rec record) error {
+	if rec.uncompressedSize > math.MaxInt {
+		return fmt.Errorf(
+			"xz: uncompressed size %d in index exceeds the address space",
+			rec.uncompressedSize)
+	}
+	limit := int64(math.MaxInt64)
+	if rec.unpaddedSize <= math.MaxInt64/maxLZMA2Expansion {
+		limit = rec.unpaddedSize * maxLZMA2Expansion
+	}
+	if rec.uncompressedSize > limit {
+		return fmt.Errorf(
+			"xz: uncompressed size %d in index exceeds the maximum %d "+
+				"for a block of %d bytes",
+			rec.uncompressedSize, limit, rec.unpaddedSize)
+	}
+	return nil
 }
 
 // ParallelReader decodes the blocks of an xz file concurrently. It
@@ -192,6 +224,9 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 			if rec.unpaddedSize <= 0 {
 				return nil, 0, errors.New("xz: invalid unpadded size in index")
 			}
+			if err := checkUncompressedSize(rec); err != nil {
+				return nil, 0, err
+			}
 			blocksLen += rec.unpaddedSize + int64(padLen(rec.unpaddedSize))
 		}
 		headerPos := indexStart - blocksLen - HeaderLen
@@ -286,14 +321,31 @@ func (r *ParallelReader) dispatch() {
 // worker decodes blocks until the job channel is closed.
 func (r *ParallelReader) worker() {
 	for w := range r.jobs {
-		buf := r.getBuf(int(w.d.uncompressedSize))
-		data, err := r.decodeBlock(&w.d, buf)
-		if err != nil {
-			r.putBuf(buf)
-			data = nil
-		}
-		w.result <- blockResult{data: data, err: err}
+		w.result <- r.decodeOne(&w.d)
 	}
+}
+
+// decodeOne decodes a single block and reports the outcome. A panic raised
+// while decoding attacker-controlled data is converted into an error: the
+// worker runs on a goroutine the caller does not own, so an escaping panic
+// would abort the process with no way for the caller to recover.
+func (r *ParallelReader) decodeOne(d *blockDesc) (res blockResult) {
+	var buf []byte
+	defer func() {
+		if v := recover(); v != nil {
+			r.putBuf(buf)
+			res = blockResult{err: fmt.Errorf(
+				"xz: panic while decoding block at offset %d: %v",
+				d.offset, v)}
+		}
+	}()
+	buf = r.getBuf(int(d.uncompressedSize))
+	data, err := r.decodeBlock(d, buf)
+	if err != nil {
+		r.putBuf(buf)
+		return blockResult{err: err}
+	}
+	return blockResult{data: data}
 }
 
 // getBuf returns a decode buffer of length n, reusing a pooled buffer
