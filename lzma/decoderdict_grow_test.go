@@ -34,7 +34,7 @@ func eagerDecoderDict(dictCap int) *decoderDict {
 func dictState(d *decoderDict, maxDist int) []byte {
 	var b bytes.Buffer
 	fmtInt := func(x int64) {
-		for i := 0; i < 8; i++ {
+		for i := range 8 {
 			b.WriteByte(byte(x >> (8 * i)))
 		}
 	}
@@ -76,7 +76,7 @@ func TestDecoderDictGrowMatchesEager(t *testing.T) {
 
 func testGrowMatchesEager(t *testing.T, dictCap, initial int) {
 	t.Helper()
-	for seed := int64(0); seed < 16; seed++ {
+	for seed := range int64(16) {
 		grow, err := newDecoderDictSize(dictCap, initial)
 		if err != nil {
 			t.Fatalf("dictCap %d: newDecoderDict error %s", dictCap, err)
@@ -87,7 +87,7 @@ func testGrowMatchesEager(t *testing.T, dictCap, initial int) {
 		var gotOut, wantOut bytes.Buffer
 		drain := make([]byte, 4096)
 
-		for step := 0; step < 400; step++ {
+		for step := range 400 {
 			switch rng.Intn(10) {
 			case 0, 1, 2, 3, 4: // literal
 				c := byte(rng.Intn(256))
@@ -165,7 +165,7 @@ func TestDecoderDictGrowWithReset(t *testing.T) {
 		rng := rand.New(rand.NewSource(99))
 		drain := make([]byte, 1024)
 
-		for step := 0; step < 3000; step++ {
+		for step := range 3000 {
 			if step%700 == 699 {
 				grow.Reset()
 				eager.Reset()
@@ -206,7 +206,7 @@ func TestDecoderDictGrowsOnlyAsFarAsNeeded(t *testing.T) {
 		t.Fatalf("fresh dictionary for a %d byte capacity allocated %d bytes",
 			huge, got)
 	}
-	for i := 0; i < 45; i++ {
+	for range 45 {
 		if err := d.WriteByte('x'); err != nil {
 			t.Fatal(err)
 		}

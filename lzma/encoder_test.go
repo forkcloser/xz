@@ -6,8 +6,8 @@ package lzma
 
 import (
 	"bytes"
+	"errors"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"testing"
 
@@ -29,6 +29,7 @@ var testString = `LZMA decoder test example
 `
 
 func cycle(t *testing.T, n int) {
+	t.Helper()
 	t.Logf("cycle(t,%d)", n)
 	if n > len(testString) {
 		t.Fatalf("cycle: n=%d larger than len(testString)=%d", n,
@@ -75,7 +76,7 @@ func cycle(t *testing.T, n int) {
 	if err != nil {
 		t.Fatalf("newDecoder error %s", err)
 	}
-	decoded, err := ioutil.ReadAll(r)
+	decoded, err := io.ReadAll(r)
 	if err != nil {
 		t.Fatalf("ReadAll(lr) error %s", err)
 	}
@@ -96,7 +97,7 @@ func TestEncoderCycle1(t *testing.T) {
 func TestEncoderCycle2(t *testing.T) {
 	buf := new(bytes.Buffer)
 	const txtlen = 50000
-	io.CopyN(buf, randtxt.NewReader(rand.NewSource(42)), txtlen)
+	_, _ = io.CopyN(buf, randtxt.NewReader(rand.NewSource(42)), txtlen)
 	txt := buf.String()
 	buf.Reset()
 	const dictCap = MinDictCap
@@ -119,7 +120,7 @@ func TestEncoderCycle2(t *testing.T) {
 		t.Fatalf("NewEncoder error %s", err)
 	}
 	_, err = io.WriteString(w, txt)
-	if err != nil && err != ErrLimit {
+	if err != nil && !errors.Is(err, ErrLimit) {
 		t.Fatalf("WriteString error %s", err)
 	}
 	if err = w.Close(); err != nil {

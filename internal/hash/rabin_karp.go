@@ -35,7 +35,7 @@ func NewRabinKarpConst(n int, a uint64) *RabinKarp {
 	aOldest := uint64(1)
 	// There are faster methods. For the small n required by the LZMA
 	// compressor O(n) is sufficient.
-	for i := 0; i < n; i++ {
+	for range n {
 		aOldest *= a
 	}
 	return &RabinKarp{

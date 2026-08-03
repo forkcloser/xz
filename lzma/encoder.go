@@ -5,6 +5,7 @@
 package lzma
 
 import (
+	"errors"
 	"fmt"
 	"io"
 )
@@ -78,7 +79,7 @@ func (e *encoder) Write(p []byte) (n int, err error) {
 	for {
 		k, err := e.dict.Write(p[n:])
 		n += k
-		if err == ErrNoSpace {
+		if errors.Is(err, ErrNoSpace) {
 			if err = e.compress(0); err != nil {
 				return n, err
 			}
@@ -245,7 +246,7 @@ var eosMatch = matchOp(maxDistance, minMatchLen)
 // LZMA stream will be closed and data will remain in the buffer.
 func (e *encoder) Close() error {
 	err := e.compress(all)
-	if err != nil && err != ErrLimit {
+	if err != nil && !errors.Is(err, ErrLimit) {
 		return err
 	}
 	if e.marker {

@@ -6,6 +6,7 @@ package xz
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"math/rand"
 	"runtime"
@@ -28,23 +29,24 @@ func parallelTestData(n int) []byte {
 
 // compressMultiBlock compresses data into an xz stream with the given
 // block size.
-func compressMultiBlock(t testing.TB, data []byte, blockSize int64) []byte {
-	t.Helper()
+func compressMultiBlock(tb testing.TB, data []byte, blockSize int64) []byte {
+	tb.Helper()
 	var buf bytes.Buffer
 	w, err := WriterConfig{BlockSize: blockSize}.NewWriter(&buf)
 	if err != nil {
-		t.Fatalf("NewWriter error %s", err)
+		tb.Fatalf("NewWriter error %s", err)
 	}
 	if _, err = w.Write(data); err != nil {
-		t.Fatalf("Write error %s", err)
+		tb.Fatalf("Write error %s", err)
 	}
 	if err = w.Close(); err != nil {
-		t.Fatalf("Close error %s", err)
+		tb.Fatalf("Close error %s", err)
 	}
 	return buf.Bytes()
 }
 
 func testParallelRead(t *testing.T, xz []byte, want []byte, workers int) {
+	t.Helper()
 	c := ParallelReaderConfig{Workers: workers}
 	r, err := c.NewParallelReader(bytes.NewReader(xz), int64(len(xz)))
 	if err != nil {
@@ -187,7 +189,7 @@ func TestParallelReaderCloseUnblocksRead(t *testing.T) {
 
 	select {
 	case err := <-copyDone:
-		if err != errReaderClosed {
+		if !errors.Is(err, errReaderClosed) {
 			t.Fatalf("io.Copy returned %v; want %v", err, errReaderClosed)
 		}
 	case <-time.After(10 * time.Second):
@@ -225,7 +227,7 @@ func TestParallelReaderCloseAfterEOFKeepsEOF(t *testing.T) {
 	if err = r.Close(); err != nil {
 		t.Fatalf("Close error %s", err)
 	}
-	if _, err = r.Read(make([]byte, 8)); err != io.EOF {
+	if _, err = r.Read(make([]byte, 8)); !errors.Is(err, io.EOF) {
 		t.Fatalf("Read after EOF then Close returned %v; want io.EOF", err)
 	}
 }
@@ -244,7 +246,7 @@ func TestParallelReaderClose(t *testing.T) {
 	if err = r.Close(); err != nil {
 		t.Fatalf("Close error %s", err)
 	}
-	if _, err = r.Read(p); err != errReaderClosed {
+	if _, err = r.Read(p); !errors.Is(err, errReaderClosed) {
 		t.Fatalf("Read after Close returned %v; want %v",
 			err, errReaderClosed)
 	}

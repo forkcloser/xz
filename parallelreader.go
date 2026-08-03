@@ -12,6 +12,7 @@ import (
 	"io"
 	"math"
 	"runtime"
+	"slices"
 	"sync"
 )
 
@@ -218,10 +219,7 @@ const paddingScanBufSize = 32 << 10
 func skipStreamPadding(xz io.ReaderAt, pos int64) (int64, error) {
 	buf := make([]byte, paddingScanBufSize)
 	for pos >= 4 {
-		n := int64(len(buf))
-		if n > pos {
-			n = pos
-		}
+		n := min(int64(len(buf)), pos)
 		n -= n % 4 // only whole groups, so the scan stays aligned
 		p := buf[:n]
 		if _, err := xz.ReadAt(p, pos-n); err != nil {
@@ -361,8 +359,8 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 		return nil, 0, corruptf("xz: no streams found")
 	}
 	// streams were found back to front
-	for i := len(streams) - 1; i >= 0; i-- {
-		for _, d := range streams[i] {
+	for _, stream := range slices.Backward(streams) {
+		for _, d := range stream {
 			// Each size is already bounded against its own block, but the
 			// total is what Size reports, and callers size buffers from it.
 			// Wrapping it would hand them a small or negative number for an
@@ -510,7 +508,7 @@ func (r *ParallelReader) decodeBlock(d *blockDesc, buf []byte) ([]byte, error) {
 		return nil, err
 	}
 	if _, err = io.ReadFull(br, buf); err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
 		}
 		return nil, err
@@ -522,7 +520,7 @@ func (r *ParallelReader) decodeBlock(d *blockDesc, buf []byte) ([]byte, error) {
 	if n != 0 || err == nil {
 		return nil, corruptf("xz: block longer than index record")
 	}
-	if err != io.EOF {
+	if !errors.Is(err, io.EOF) {
 		return nil, err
 	}
 	if br.record() != (record{d.unpaddedSize, d.uncompressedSize}) {
@@ -574,7 +572,7 @@ func (r *ParallelReader) Read(p []byte) (n int, err error) {
 	for n < len(p) {
 		if r.curPos == len(r.cur) {
 			if err = r.nextBlock(); err != nil {
-				if err != io.EOF {
+				if !errors.Is(err, io.EOF) {
 					r.stop()
 				}
 				return n, r.setErr(err)
@@ -597,7 +595,7 @@ func (r *ParallelReader) WriteTo(w io.Writer) (n int64, err error) {
 	// caller checking err would otherwise see a fully drained stream as an
 	// error.
 	if err = r.getErr(); err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return 0, nil
 		}
 		return 0, err
@@ -608,7 +606,7 @@ func (r *ParallelReader) WriteTo(w io.Writer) (n int64, err error) {
 	for {
 		if r.curPos == len(r.cur) {
 			if err = r.nextBlock(); err != nil {
-				if err == io.EOF {
+				if errors.Is(err, io.EOF) {
 					// Record EOF so later calls stay consistent, but
 					// report success: WriterTo stops at EOF, it does
 					// not fail at it.

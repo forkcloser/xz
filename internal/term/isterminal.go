@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build darwin || dragonfly || freebsd || (linux && !appengine) || netbsd || openbsd || illumos
-// +build darwin dragonfly freebsd linux,!appengine netbsd openbsd illumos
 
 // Package term provides the IsTerminal function.
 package term

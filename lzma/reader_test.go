@@ -7,8 +7,8 @@ package lzma
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -21,7 +21,7 @@ func TestNewReader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open examples/a.lzma: %s", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	_, err = NewReader(bufio.NewReader(f))
 	if err != nil {
 		t.Fatalf("NewReader: %s", err)
@@ -34,6 +34,7 @@ const (
 )
 
 func readOrigFile(t *testing.T) []byte {
+	t.Helper()
 	orig, err := os.ReadFile(filepath.Join(dirname, origname))
 	if err != nil {
 		t.Fatalf("ReadFile: %s", err)
@@ -42,6 +43,7 @@ func readOrigFile(t *testing.T) []byte {
 }
 
 func testDecodeFile(t *testing.T, filename string, orig []byte) {
+	t.Helper()
 	pathname := filepath.Join(dirname, filename)
 	f, err := os.Open(pathname)
 	if err != nil {
@@ -57,7 +59,7 @@ func testDecodeFile(t *testing.T, filename string, orig []byte) {
 	if err != nil {
 		t.Fatalf("NewReader: %s", err)
 	}
-	decoded, err := ioutil.ReadAll(l)
+	decoded, err := io.ReadAll(l)
 	if err != nil {
 		t.Fatalf("ReadAll: %s", err)
 	}
@@ -139,6 +141,7 @@ type wrapTest struct {
 }
 
 func (w *wrapTest) testFile(t *testing.T, filename string, orig []byte) {
+	t.Helper()
 	pathname := filepath.Join(dirname, filename)
 	f, err := os.Open(pathname)
 	if err != nil {
@@ -154,7 +157,7 @@ func (w *wrapTest) testFile(t *testing.T, filename string, orig []byte) {
 	if err != nil {
 		t.Fatalf("%s NewReader: %s", w.name, err)
 	}
-	decoded, err := ioutil.ReadAll(l)
+	decoded, err := io.ReadAll(l)
 	if err != nil {
 		t.Fatalf("%s ReadAll: %s", w.name, err)
 	}
@@ -224,7 +227,7 @@ func TestReaderBadFiles(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewReader: %s", err)
 		}
-		decoded, err := ioutil.ReadAll(l)
+		decoded, err := io.ReadAll(l)
 		if err == nil {
 			t.Errorf("ReadAll for %s: no error", filename)
 			t.Logf("%s", decoded)
@@ -286,7 +289,7 @@ func TestReaderErrAgain(t *testing.T) {
 		for {
 			m, err := r.Read(buf)
 			k += int64(m)
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			if err != nil {
@@ -324,7 +327,7 @@ func TestMinDictSize(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WriterConfig(%+v).NewWriter(buf) error %s", cfg, err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 	if _, err = io.Copy(w, f); err != nil {
 		t.Fatalf("io.Copy(w, f) error %s", err)
 	}
@@ -367,7 +370,7 @@ func TestZeroPrefixIssue(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Open(%q) error %s", tc, err)
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 			zp := bytes.NewReader(zeroPrefix)
 			z := io.MultiReader(zp, f)
 			l, err := rcfg.NewReader(z)

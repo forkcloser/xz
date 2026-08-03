@@ -12,6 +12,7 @@ import (
 	"errors"
 	"hash"
 	"io"
+	"slices"
 
 	"github.com/forkcloser/xz/internal/xlog"
 	"github.com/forkcloser/xz/lzma"
@@ -83,7 +84,7 @@ func (c ReaderConfig) NewReader(xz io.Reader) (r *Reader, err error) {
 		xz:           xz,
 	}
 	if r.sr, err = c.newStreamReader(xz); err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
 		}
 		return nil, err
@@ -100,14 +101,14 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 			if r.SingleStream {
 				data := make([]byte, 1)
 				_, err = io.ReadFull(r.xz, data)
-				if err != io.EOF {
+				if !errors.Is(err, io.EOF) {
 					return n, errUnexpectedData
 				}
 				return n, io.EOF
 			}
 			for {
-				r.sr, err = r.ReaderConfig.newStreamReader(r.xz)
-				if err != errPadding {
+				r.sr, err = r.newStreamReader(r.xz)
+				if !errors.Is(err, errPadding) {
 					break
 				}
 			}
@@ -118,7 +119,7 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 		k, err := r.sr.Read(p[n:])
 		n += k
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				r.sr = nil
 				continue
 			}
@@ -144,7 +145,7 @@ func (c ReaderConfig) newStreamReader(xz io.Reader) (r *streamReader, err error)
 		return nil, errPadding
 	}
 	if _, err = io.ReadFull(xz, data[4:]); err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
 		}
 		return nil, err
@@ -168,7 +169,7 @@ func (c ReaderConfig) newStreamReader(xz io.Reader) (r *streamReader, err error)
 func (r *streamReader) readTail() error {
 	index, n, err := readIndexBody(r.xz, len(r.index))
 	if err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
 		}
 		return err
@@ -183,7 +184,7 @@ func (r *streamReader) readTail() error {
 
 	p := make([]byte, footerLen)
 	if _, err = io.ReadFull(r.xz, p); err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
 		}
 		return err
@@ -196,7 +197,7 @@ func (r *streamReader) readTail() error {
 	if f.flags != r.h.flags {
 		return corruptf("xz: footer flags incorrect")
 	}
-	if f.indexSize != int64(n)+1 {
+	if f.indexSize != n+1 {
 		return corruptf("xz: index size in footer wrong")
 	}
 	return nil
@@ -208,13 +209,13 @@ func (r *streamReader) Read(p []byte) (n int, err error) {
 		if r.br == nil {
 			bh, hlen, err := readBlockHeader(r.xz)
 			if err != nil {
-				if err == errIndexIndicator {
+				if errors.Is(err, errIndexIndicator) {
 					if err = r.readTail(); err != nil {
 						return n, err
 					}
 					return n, io.EOF
 				}
-				if err == io.EOF {
+				if errors.Is(err, io.EOF) {
 					// Every xz stream ends with an index and a footer, even
 					// one with no blocks. Running out of input where the next
 					// block header or the index indicator should be means the
@@ -226,7 +227,7 @@ func (r *streamReader) Read(p []byte) (n int, err error) {
 				return n, err
 			}
 			xlog.Debugf("block %v", *bh)
-			r.br, err = r.ReaderConfig.newBlockReader(r.xz, bh,
+			r.br, err = r.newBlockReader(r.xz, bh,
 				hlen, r.newHash())
 			if err != nil {
 				return n, err
@@ -235,7 +236,7 @@ func (r *streamReader) Read(p []byte) (n int, err error) {
 		k, err := r.br.Read(p[n:])
 		n += k
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				r.index = append(r.index, r.br.record())
 				r.br = nil
 			} else {
@@ -364,8 +365,8 @@ func (c *ReaderConfig) newFilterReader(r io.Reader, f []filter) (fr io.Reader,
 	}
 
 	fr = r
-	for i := len(f) - 1; i >= 0; i-- {
-		fr, err = f[i].reader(fr, c)
+	for _, v := range slices.Backward(f) {
+		fr, err = v.reader(fr, c)
 		if err != nil {
 			return nil, err
 		}

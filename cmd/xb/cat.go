@@ -5,10 +5,10 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -58,7 +58,7 @@ func (p cpair) Read() (s string, err error) {
 	defer func() {
 		err = r.Close()
 	}()
-	b, err := ioutil.ReadAll(r)
+	b, err := io.ReadAll(r)
 	if err != nil {
 		return
 	}
@@ -81,7 +81,7 @@ func (gp *gopath) find(arg string) (p cpair, err error) {
 	t := strings.SplitN(arg, ":", 2)
 	switch len(t) {
 	case 0:
-		err = fmt.Errorf("empty argument not supported")
+		err = errors.New("empty argument not supported")
 		return
 	case 1:
 		gp.i++
@@ -132,7 +132,7 @@ var gofileTmpl = `package {{.Pkg}}
 func cat() {
 	var err error
 	cmdName := filepath.Base(os.Args[0])
-	log.SetPrefix(fmt.Sprintf("%s: ", cmdName))
+	log.SetPrefix(cmdName + ": ")
 	log.SetFlags(0)
 
 	flag.CommandLine = flag.NewFlagSet(cmdName, flag.ExitOnError)

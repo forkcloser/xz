@@ -28,7 +28,7 @@ func ByteReader(r io.Reader) io.ByteReader {
 
 // ReadByte read byte function.
 func (r *breader) ReadByte() (c byte, err error) {
-	n, err := r.Reader.Read(r.p)
+	n, err := r.Read(r.p)
 	if n < 1 {
 		if err == nil {
 			err = errors.New("breader.ReadByte: no data")

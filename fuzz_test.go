@@ -30,8 +30,8 @@ const fuzzOutputLimit = 8 << 20
 
 // fuzzSeeds returns the corpus files committed with the package plus a few
 // streams built here, so the fuzzer starts from inputs that already parse.
-func fuzzSeeds(t testing.TB) [][]byte {
-	t.Helper()
+func fuzzSeeds(tb testing.TB) [][]byte {
+	tb.Helper()
 	var seeds [][]byte
 	for _, name := range []string{"fox.xz", "fox-check-none.xz", "example.xz"} {
 		if data, err := os.ReadFile(name); err == nil {
@@ -41,7 +41,7 @@ func fuzzSeeds(t testing.TB) [][]byte {
 	// A multi-block, multi-stream file, so the index walk and the parallel
 	// reader's block splitting are reachable from the seed corpus.
 	body := parallelTestData(1 << 14)
-	multi := compressMultiBlock(t, body, 2<<10)
+	multi := compressMultiBlock(tb, body, 2<<10)
 	seeds = append(seeds, multi)
 	seeds = append(seeds, append(append(append([]byte{}, multi...),
 		0, 0, 0, 0), multi...))

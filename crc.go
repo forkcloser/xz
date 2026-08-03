@@ -19,7 +19,7 @@ type crc32Hash struct {
 // Sum returns the crc32 value as little endian.
 func (h crc32Hash) Sum(b []byte) []byte {
 	p := make([]byte, 4)
-	putUint32LE(p, h.Hash32.Sum32())
+	putUint32LE(p, h.Sum32())
 	b = append(b, p...)
 	return b
 }
@@ -39,7 +39,7 @@ type crc64Hash struct {
 // Sum returns the CRC-64 value in little-endian encoding.
 func (h crc64Hash) Sum(b []byte) []byte {
 	p := make([]byte, 8)
-	putUint64LE(p, h.Hash64.Sum64())
+	putUint64LE(p, h.Sum64())
 	b = append(b, p...)
 	return b
 }

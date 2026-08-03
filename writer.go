@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"slices"
 
 	"github.com/forkcloser/xz/lzma"
 )
@@ -113,8 +114,8 @@ func (c *WriterConfig) newFilterWriteCloser(w io.Writer, f []filter) (fw io.Writ
 		return nil, err
 	}
 	fw = nopWriteCloser(w)
-	for i := len(f) - 1; i >= 0; i-- {
-		fw, err = f[i].writeCloser(fw, c)
+	for _, v := range slices.Backward(f) {
+		fw, err = v.writeCloser(fw, c)
 		if err != nil {
 			return nil, err
 		}
@@ -216,7 +217,7 @@ func (w *Writer) Write(p []byte) (n int, err error) {
 	for {
 		k, err := w.bw.Write(p[n:])
 		n += k
-		if err != errNoSpace {
+		if !errors.Is(err, errNoSpace) {
 			return n, err
 		}
 		if err = w.closeBlockWriter(); err != nil {

@@ -6,8 +6,8 @@ package xz
 
 import (
 	"bytes"
+	"errors"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 )
@@ -29,7 +29,7 @@ func TestReaderSimple(t *testing.T) {
 }
 
 func TestReaderSingleStream(t *testing.T) {
-	data, err := ioutil.ReadFile("fox.xz")
+	data, err := os.ReadFile("fox.xz")
 	if err != nil {
 		t.Fatalf("ReadFile error %s", err)
 	}
@@ -50,13 +50,13 @@ func TestReaderSingleStream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewReader error %s", err)
 	}
-	if _, err = io.Copy(&buf, r); err != errUnexpectedData {
+	if _, err = io.Copy(&buf, r); !errors.Is(err, errUnexpectedData) {
 		t.Fatalf("io.Copy returned %v; want %v", err, errUnexpectedData)
 	}
 }
 
 func TestReaderMultipleStreams(t *testing.T) {
-	data, err := ioutil.ReadFile("fox.xz")
+	data, err := os.ReadFile("fox.xz")
 	if err != nil {
 		t.Fatalf("ReadFile error %s", err)
 	}
@@ -104,7 +104,7 @@ func BenchmarkReader(b *testing.B) {
 	}
 	buf := new(bytes.Buffer)
 	uncompressedLen := int64(len(data))
-	b.SetBytes(int64(uncompressedLen))
+	b.SetBytes(uncompressedLen)
 	b.ReportAllocs()
 	buf.Reset()
 	w, err := NewWriter(buf)
@@ -119,8 +119,7 @@ func BenchmarkReader(b *testing.B) {
 	}
 	data = make([]byte, buf.Len())
 	copy(data, buf.Bytes())
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		buf.Reset()
 		r, err := NewReader(bytes.NewReader(data))
 		if err != nil {

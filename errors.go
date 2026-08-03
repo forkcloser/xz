@@ -46,12 +46,12 @@ func (e *kindError) Unwrap() error { return e.kind }
 
 // corruptf builds an error that describes how the input is malformed and
 // matches ErrCorrupt.
-func corruptf(format string, args ...interface{}) error {
+func corruptf(format string, args ...any) error {
 	return &kindError{msg: fmt.Sprintf(format, args...), kind: ErrCorrupt}
 }
 
 // unsupportedf builds an error that matches ErrUnsupported.
-func unsupportedf(format string, args ...interface{}) error {
+func unsupportedf(format string, args ...any) error {
 	return &kindError{msg: fmt.Sprintf(format, args...), kind: ErrUnsupported}
 }
 

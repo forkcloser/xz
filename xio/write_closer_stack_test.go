@@ -14,7 +14,7 @@ import (
 
 func ExampleWriteCloserStack() {
 	wcStack := xio.NewWriteCloserStack()
-	defer wcStack.Close()
+	defer func() { _ = wcStack.Close() }()
 
 	f, err := os.CreateTemp("", "example_write_closer_stack-*.xz")
 	if err != nil {

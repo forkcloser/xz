@@ -89,7 +89,7 @@ func (r *Reader2) startChunk() error {
 	r.chunkReader = nil
 	header, err := readChunkHeader(r.r)
 	if err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
 		}
 		return err
@@ -126,7 +126,7 @@ func (r *Reader2) startChunk() error {
 	}
 	r.compBuf = r.compBuf[:n]
 	if _, err = io.ReadFull(r.r, r.compBuf); err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
 		}
 		return err
@@ -170,7 +170,7 @@ func (r *Reader2) Read(p []byte) (n int, err error) {
 		k, err = r.chunkReader.Read(p[n:])
 		n += k
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				err = r.startChunk()
 				if err == nil {
 					continue
@@ -221,7 +221,7 @@ func (ur *uncompressedReader) Reopen(r io.Reader, size int64) {
 func (ur *uncompressedReader) fill() error {
 	if !ur.eof {
 		n, err := io.CopyN(ur.Dict, &ur.lr, int64(ur.Dict.Available()))
-		if err != io.EOF {
+		if !errors.Is(err, io.EOF) {
 			return err
 		}
 		ur.eof = true

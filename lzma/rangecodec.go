@@ -90,7 +90,7 @@ func (e *rangeEncoder) EncodeBit(b uint32, p *prob) error {
 
 // Close writes a complete copy of the low value.
 func (e *rangeEncoder) Close() error {
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		if err := e.shiftLow(); err != nil {
 			return err
 		}
@@ -178,7 +178,7 @@ func newRangeDecoder(br io.ByteReader) (d *rangeDecoder, err error) {
 		return nil, errors.New("newRangeDecoder: first byte not zero")
 	}
 
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		d.code = (d.code << 8) | uint32(d.readByte())
 	}
 	if d.err != nil {

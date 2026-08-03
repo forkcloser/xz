@@ -131,7 +131,8 @@ func (w *Writer2) written() int {
 // errClosed indicates that the writer is closed.
 var errClosed = errors.New("lzma: writer closed")
 
-// Writes data to LZMA2 stream. Note that written data will be buffered.
+// Write writes data to the LZMA2 stream. Note that written data will be
+// buffered.
 // Use Flush or Close to ensure that data is written to the underlying
 // writer.
 func (w *Writer2) Write(p []byte) (n int, err error) {
@@ -151,10 +152,10 @@ func (w *Writer2) Write(p []byte) (n int, err error) {
 		}
 		k, err := w.encoder.Write(q)
 		n += k
-		if err != nil && err != ErrLimit {
+		if err != nil && !errors.Is(err, ErrLimit) {
 			return n, err
 		}
-		if err == ErrLimit || k == m {
+		if errors.Is(err, ErrLimit) || k == m {
 			if err = w.flushChunk(); err != nil {
 				return n, err
 			}
@@ -290,7 +291,7 @@ func (w *Writer2) Close() error {
 		return errClosed
 	}
 	if err := w.Flush(); err != nil {
-		return nil
+		return err
 	}
 	// write zero byte EOS chunk
 	_, err := w.w.Write([]byte{0})

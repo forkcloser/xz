@@ -167,8 +167,8 @@ func (t *hashTable) WriteByte(b byte) error {
 // error.
 func (t *hashTable) Write(p []byte) (n int, err error) {
 	for _, b := range p {
-		// WriteByte doesn't generate an error.
-		t.WriteByte(b)
+		// hashTable.WriteByte never returns an error.
+		_ = t.WriteByte(b)
 	}
 	return len(p), nil
 }

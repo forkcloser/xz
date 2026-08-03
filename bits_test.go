@@ -6,6 +6,7 @@ package xz
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 )
 
@@ -40,7 +41,7 @@ func TestUvarIntCVE_2020_16845(t *testing.T) {
 
 	r := bytes.NewReader(a)
 	_, _, err := readUvarint(r)
-	if err != errOverflowU64 {
+	if !errors.Is(err, errOverflowU64) {
 		t.Fatalf("readUvarint overflow not detected")
 	}
 }

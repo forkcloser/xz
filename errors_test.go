@@ -129,7 +129,7 @@ func TestWriteToGivesUpOnStuckWriter(t *testing.T) {
 	defer func() { _ = r.Close() }()
 
 	w := &stuckWriter{}
-	if _, err = r.WriteTo(w); err != io.ErrShortWrite {
+	if _, err = r.WriteTo(w); !errors.Is(err, io.ErrShortWrite) {
 		t.Fatalf("WriteTo to a stuck writer returned %v; want io.ErrShortWrite", err)
 	}
 	if w.calls > 2 {

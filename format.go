@@ -649,7 +649,7 @@ func writeIndex(w io.Writer, index []record) (n int64, err error) {
 	}
 
 	// index padding
-	k, err = mw.Write(make([]byte, padLen(int64(n))))
+	k, err = mw.Write(make([]byte, padLen(n)))
 	n += int64(k)
 	if err != nil {
 		return n, err
@@ -697,12 +697,9 @@ func readIndexBody(r io.Reader, expectedRecordLen int) (records []record, n int6
 	// slice grows with the records that actually arrive instead of being sized
 	// from the declared count. A hostile count simply runs into the end of the
 	// index; it never reaches an allocator.
-	initialCap := recLen
-	if initialCap > 64 {
-		initialCap = 64
-	}
+	initialCap := min(recLen, 64)
 	records = make([]record, 0, initialCap)
-	for i := 0; i < recLen; i++ {
+	for range recLen {
 		var rec record
 		rec, k, err = readRecord(br)
 		n += int64(k)
@@ -712,7 +709,7 @@ func readIndexBody(r io.Reader, expectedRecordLen int) (records []record, n int6
 		records = append(records, rec)
 	}
 
-	p := make([]byte, padLen(int64(n+1)), 4)
+	p := make([]byte, padLen(n+1), 4)
 	k, err = io.ReadFull(br.(io.Reader), p)
 	n += int64(k)
 	if err != nil {

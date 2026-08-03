@@ -6,14 +6,14 @@ package xz_test
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"testing"
 
 	"github.com/forkcloser/xz"
 )
 
 func TestPanic(t *testing.T) {
-	data := []byte([]uint8{253, 55, 122, 88, 90, 0, 0, 0, 255, 18, 217, 65, 0, 189, 191, 239, 189, 191, 239, 48})
+	data := []byte{253, 55, 122, 88, 90, 0, 0, 0, 255, 18, 217, 65, 0, 189, 191, 239, 189, 191, 239, 48}
 	t.Logf("%q", string(data))
 	t.Logf("0x%02x", data)
 	r, err := xz.NewReader(bytes.NewReader(data))
@@ -21,9 +21,9 @@ func TestPanic(t *testing.T) {
 		t.Logf("xz.NewReader error %s", err)
 		return
 	}
-	_, err = ioutil.ReadAll(r)
+	_, err = io.ReadAll(r)
 	if err != nil {
-		t.Logf("ioutil.ReadAll(r) error %s", err)
+		t.Logf("io.ReadAll(r) error %s", err)
 		return
 	}
 }

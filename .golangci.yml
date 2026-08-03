@@ -1,0 +1,124 @@
+version: "2"
+
+# Linters for a compression library that decodes untrusted input. The bias is
+# towards correctness and away from style: checks that would fight the shape of
+# a codec (long decode loops, deliberate width conversions) are off, and checks
+# that catch real decoding and error-handling mistakes are on.
+
+linters:
+  enable:
+    # Error handling is where this package's bugs have historically lived.
+    - errorlint # == and type switches on errors break once anything wraps
+    - nilerr # returning nil after checking an error is never intended
+
+    # Correctness traps that are easy to introduce and hard to see.
+    - bodyclose
+    - copyloopvar
+    - durationcheck
+    - makezero
+    - predeclared # shadowing min/max/clear is a live hazard since Go 1.21
+    - reassign
+    - wastedassign
+
+    # General analysis.
+    - gocritic
+    - gosec
+    - revive
+
+    # This package tracks its own performance closely; see PERF.md.
+    - perfsprint
+
+    # Hygiene.
+    - misspell
+    - nolintlint
+    - unconvert
+    - usestdlibvars
+
+    # Tests.
+    - testifylint
+    - thelper
+    - tparallel
+
+  settings:
+    errcheck:
+      exclude-functions:
+        # Diagnostics. A failed write to a usage or log stream cannot be
+        # acted on, and checking every one would bury the code that matters.
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (*github.com/forkcloser/xz/internal/xlog.Logger).Output
+        - (*github.com/forkcloser/xz/internal/xlog.Logger).Outputf
+        - (*github.com/forkcloser/xz/internal/xlog.Logger).Outputln
+
+    gosec:
+      excludes:
+        # The codec converts between int, int64, uint32 and byte constantly
+        # and deliberately — that is what a bit-oriented format decoder does.
+        # The conversions that actually needed bounds checks are guarded
+        # explicitly and covered by tests; flagging the rest buries them.
+        - G115
+        # Duplicates errcheck, which reports the same thing more precisely.
+        - G104
+
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+
+    staticcheck:
+      checks:
+        - all
+        # QF1001 rewrites !(lo <= x && x <= hi) with De Morgan's law. This
+        # codebase validates ranges constantly, and "not within these bounds"
+        # is the thing being said; the rewritten form buries it, and the
+        # autofix emits Yoda conditions like "1 > dictCap".
+        - -QF1001
+
+    revive:
+      rules:
+        - name: redefines-builtin-id
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: empty-block
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: range
+        - name: receiver-naming
+        - name: superfluous-else
+        - name: time-naming
+        - name: unexported-return
+        - name: unreachable-code
+        - name: var-declaration
+        - name: waitgroup-by-value
+
+  exclusions:
+    rules:
+      # Test code reads fixture paths it constructs, shells out to the
+      # reference xz binary to cross-check output, and needs a seeded,
+      # reproducible PRNG rather than a cryptographic one.
+      - path: _test\.go
+        linters: [gosec]
+        text: G(204|304|306|404)
+
+      # gxz is a command line tool: opening the file it was asked to open and
+      # reporting what happened to it is the job, not a taint problem.
+      - path: ^cmd/
+        linters: [gosec]
+        text: G(204|304|306|307|706)
+
+      # randtxt generates reproducible English-looking text for benchmarks
+      # from a trigram table. The table is data, not prose — "TEH" and "YUO"
+      # are trigrams the corpus contains, not typos — and the generator wants
+      # a seeded PRNG precisely so runs are comparable.
+      - path: ^internal/randtxt/
+        linters: [misspell, gosec]
+
+formatters:
+  enable:
+    - gofmt

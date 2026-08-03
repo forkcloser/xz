@@ -75,7 +75,7 @@ func TestBinTree_Cycle(t *testing.T) {
 	}
 	// const txtlen = 1024
 	const txtlen = 10000
-	io.CopyN(buf, randtxt.NewReader(rand.NewSource(42)), txtlen)
+	_, _ = io.CopyN(buf, randtxt.NewReader(rand.NewSource(42)), txtlen)
 	txt := buf.String()
 	buf.Reset()
 	n, err := io.Copy(w, strings.NewReader(txt))

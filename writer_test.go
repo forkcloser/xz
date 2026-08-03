@@ -101,7 +101,7 @@ func Example() {
 func TestWriter2(t *testing.T) {
 	const txtlen = 1023
 	var buf bytes.Buffer
-	io.CopyN(&buf, randtxt.NewReader(rand.NewSource(41)), txtlen)
+	_, _ = io.CopyN(&buf, randtxt.NewReader(rand.NewSource(41)), txtlen)
 	txt := buf.String()
 
 	buf.Reset()
@@ -140,7 +140,7 @@ func TestWriter2(t *testing.T) {
 func TestWriterNoneCheck(t *testing.T) {
 	const txtlen = 1023
 	var buf bytes.Buffer
-	io.CopyN(&buf, randtxt.NewReader(rand.NewSource(41)), txtlen)
+	_, _ = io.CopyN(&buf, randtxt.NewReader(rand.NewSource(41)), txtlen)
 	txt := buf.String()
 
 	buf.Reset()
@@ -185,8 +185,7 @@ func BenchmarkWriter(b *testing.B) {
 	buf := new(bytes.Buffer)
 	b.SetBytes(int64(len(data)))
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		buf.Reset()
 		w, err := NewWriter(buf)
 		if err != nil {

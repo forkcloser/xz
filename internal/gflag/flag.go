@@ -25,6 +25,7 @@ package gflag
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -64,7 +65,7 @@ const (
 type Value interface {
 	Set(string) error
 	Update()
-	Get() interface{}
+	Get() any
 	String() string
 }
 
@@ -143,7 +144,6 @@ type FlagSet struct {
 
 	name          string
 	parsed        bool
-	actual        map[string]*Flag
 	formal        map[string]*Flag
 	lines         lines
 	args          []string
@@ -205,8 +205,9 @@ func (f *FlagSet) Parsed() bool {
 
 // Parse parses the command line.
 func Parse() {
-	// errors are ignored because CommandLine is set on ExitOnError
-	CommandLine.Parse(os.Args[1:])
+	// CommandLine is set to ExitOnError, so Parse never returns here with
+	// an error to report.
+	_ = CommandLine.Parse(os.Args[1:])
 }
 
 // lookupLongOption looks up a long option flag.
@@ -256,7 +257,11 @@ func (f *FlagSet) processExtraFlagArg(flag *Flag, i int) error {
 				return err
 			case OptionalArg:
 				if err != nil {
+					// The argument did not parse, so it is not this
+					// flag's: leave it for the next flag and treat this
+					// one as having been given without a value.
 					flag.Value.Update()
+					//nolint:nilerr // not an error: the argument is simply not ours
 					return nil
 				}
 				f.removeArg(i)
@@ -266,7 +271,7 @@ func (f *FlagSet) processExtraFlagArg(flag *Flag, i int) error {
 	}
 	// no argument
 	if flag.HasArg == RequiredArg {
-		return fmt.Errorf("no argument present")
+		return errors.New("no argument present")
 	}
 	// flag.HasArg == OptionalArg
 	flag.Value.Update()
@@ -411,12 +416,12 @@ func (f *FlagSet) SetOutput(w io.Writer) {
 }
 
 // panicf prints a formatted error message and panics.
-func (f *FlagSet) panicf(format string, values ...interface{}) {
+func (f *FlagSet) panicf(format string, values ...any) {
 	var msg string
 	if f.name == "" {
 		msg = fmt.Sprintf(format, values...)
 	} else {
-		v := make([]interface{}, 1+len(values))
+		v := make([]any, 1+len(values))
 		v[0] = f.name
 		copy(v[1:], values)
 		msg = fmt.Sprintf("%s "+format, v...)
@@ -504,7 +509,7 @@ func newBoolValue(val bool, p *bool) *boolValue {
 }
 
 // Get returns the bool value as boolean.
-func (b *boolValue) Get() interface{} {
+func (b *boolValue) Get() any {
 	return bool(*b)
 }
 
@@ -606,7 +611,7 @@ func newIntValue(val int, p *int) *intValue {
 }
 
 // Get returns the integer.
-func (n *intValue) Get() interface{} {
+func (n *intValue) Get() any {
 	return int(*n)
 }
 
@@ -701,7 +706,7 @@ func Counter(name string, value int, usage string) *int {
 func intLine(name, shorthands string, value int, usage string) line {
 	defaultValue := ""
 	if value != 0 {
-		defaultValue = fmt.Sprintf("%d", value)
+		defaultValue = strconv.Itoa(value)
 	}
 	return line{lineFlags(name, shorthands, defaultValue), usage}
 }
@@ -781,7 +786,7 @@ func newStringValue(val string, p *string) *stringValue {
 }
 
 // Get returns the string stored in the stringValue.
-func (s *stringValue) Get() interface{} {
+func (s *stringValue) Get() any {
 	return *s.p
 }
 
@@ -881,7 +886,7 @@ func newPresetValue(p *int, preset int) *presetValue {
 }
 
 // Get returns the actual preset value as integer.
-func (p *presetValue) Get() interface{} {
+func (p *presetValue) Get() any {
 	return *p.p
 }
 
@@ -899,7 +904,7 @@ func (p *presetValue) Update() {
 
 // String returns the integer representation of the preset value.
 func (p *presetValue) String() string {
-	return fmt.Sprintf("%d", *p.p)
+	return strconv.Itoa(*p.p)
 }
 
 // presetLine creates the usage line for a preset value.
@@ -919,7 +924,7 @@ func (f *FlagSet) PresetVar(p *int, start, end, value int, usage string) {
 	f.addLine(presetLine(start, end, usage))
 	*p = value
 	for i := start; i <= end; i++ {
-		f.Var(newPresetValue(p, i), fmt.Sprintf("%d", i), NoArg)
+		f.Var(newPresetValue(p, i), strconv.Itoa(i), NoArg)
 	}
 }
 

@@ -18,9 +18,9 @@ import (
 // input reaches a panic or a hang.
 
 // wellFormed returns a small multi-block, CRC-64 checked stream.
-func wellFormed(t testing.TB) []byte {
-	t.Helper()
-	return compressMultiBlock(t, parallelTestData(4096), 1024)
+func wellFormed(tb testing.TB) []byte {
+	tb.Helper()
+	return compressMultiBlock(tb, parallelTestData(4096), 1024)
 }
 
 // TestTruncatedAtEveryOffset feeds every prefix of a valid file to both
@@ -30,7 +30,7 @@ func TestTruncatedAtEveryOffset(t *testing.T) {
 	full := wellFormed(t)
 	want := parallelTestData(4096)
 
-	for n := 0; n < len(full); n++ {
+	for n := range full {
 		prefix := full[:n]
 
 		if r, err := NewReader(bytes.NewReader(prefix)); err == nil {
@@ -102,7 +102,7 @@ func TestSingleByteCorruptionAtEveryOffset(t *testing.T) {
 	full := wellFormed(t)
 	want := parallelTestData(4096)
 
-	for i := 0; i < len(full); i++ {
+	for i := range full {
 		bad := append([]byte{}, full...)
 		bad[i] ^= 0x40
 
@@ -140,7 +140,7 @@ func TestGarbageInputIsRejected(t *testing.T) {
 		"magic then zeros": append(append([]byte{}, headerMagic...), make([]byte, 512)...),
 	}
 	rng := rand.New(rand.NewSource(11))
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		p := make([]byte, 64*(i+1))
 		rng.Read(p)
 		cases[string(rune('a'+i))+" random"] = p
