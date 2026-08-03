@@ -359,6 +359,22 @@ func Println(v ...any) {
 	std.Outputln(2, Lnoprint, v...)
 }
 
+// DebugEnabled reports whether the logger emits debug output, so hot paths
+// can skip a Debug call entirely. The suppression check inside the output
+// methods comes too late for them: the ...any arguments are packed — and
+// escape to the heap — at the call site, before suppression is consulted.
+func (l *Logger) DebugEnabled() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.flag&Lnodebug == 0
+}
+
+// DebugEnabled reports whether the standard logger emits debug output. See
+// Logger.DebugEnabled.
+func DebugEnabled() bool {
+	return std.DebugEnabled()
+}
+
 // Debug prints the message like Print. The printing might be suppressed
 // by the flag Lnodebug.
 func (l *Logger) Debug(v ...any) {

@@ -180,7 +180,10 @@ func (w *Writer2) writeUncompressedChunk() error {
 	default:
 		w.ctype = cU
 	}
-	w.encoder.state = w.start
+	// Roll the encoder state back to the chunk start: the decoder never sees
+	// the operations encoded into the discarded compressed form. Copy rather
+	// than alias, so w.start stays a snapshot of its own.
+	w.encoder.state.deepcopy(w.start)
 
 	header := chunkHeader{
 		ctype:        w.ctype,
@@ -271,7 +274,10 @@ func (w *Writer2) flushChunk() error {
 		return err
 	}
 	w.ctype = w.cstate.defaultChunkType()
-	w.start = cloneState(w.encoder.state)
+	// Snapshot into the existing state rather than cloning a new one: the
+	// deepcopy methods reuse the probability arrays, so the per-chunk
+	// snapshot costs no allocation.
+	w.start.deepcopy(w.encoder.state)
 	return nil
 }
 

@@ -77,6 +77,11 @@ const maxInt = int(^uint(0) >> 1)
 //
 // Because growth happens before the buffer would first wrap, buf.grow's
 // precondition holds and no index has to be rewritten.
+//
+// The doubling is a deliberate trade: a stream that fills the whole declared
+// capacity allocates about twice the final size in total and copies about
+// half of it along the way, in exchange for a stream that produces little
+// never paying for the 4 GiB the header may declare.
 func (d *decoderDict) grow(n int) {
 	newCap := 2 * d.buf.Cap()
 	if need := d.buf.front + n; newCap < need {

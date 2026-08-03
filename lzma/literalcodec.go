@@ -11,12 +11,16 @@ type literalCodec struct {
 	probs []prob
 }
 
-// deepcopy initializes literal codec c as a deep copy of the source.
+// deepcopy initializes literal codec c as a deep copy of the source, keeping
+// the existing backing array when it is big enough, as probTree.deepcopy does.
 func (c *literalCodec) deepcopy(src *literalCodec) {
 	if c == src {
 		return
 	}
-	c.probs = make([]prob, len(src.probs))
+	if cap(c.probs) < len(src.probs) {
+		c.probs = make([]prob, len(src.probs))
+	}
+	c.probs = c.probs[:len(src.probs)]
 	copy(c.probs, src.probs)
 }
 

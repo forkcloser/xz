@@ -260,8 +260,8 @@ func TestParallelReaderHostileSizeRealBlock(t *testing.T) {
 	if err = w.Close(); err != nil {
 		t.Fatalf("Close error %s", err)
 	}
-	real := out.Bytes() // single block
-	blocks, _, err := parseBlocks(bytes.NewReader(real), int64(len(real)))
+	genuine := out.Bytes() // single block
+	blocks, _, err := parseBlocks(bytes.NewReader(genuine), int64(len(genuine)))
 	if err != nil {
 		t.Fatalf("parseBlocks error %s", err)
 	}
@@ -269,7 +269,7 @@ func TestParallelReaderHostileSizeRealBlock(t *testing.T) {
 		t.Fatalf("got %d blocks; want 1", len(blocks))
 	}
 	bd := blocks[0]
-	blockArea := real[bd.offset : bd.offset+bd.paddedSize()]
+	blockArea := genuine[bd.offset : bd.offset+bd.paddedSize()]
 	file := hostileStream(blockArea,
 		[]hostileRecord{{
 			unpaddedSize:     uint64(bd.unpaddedSize),

@@ -52,6 +52,8 @@ type Reader struct {
 
 	xz io.Reader
 	sr *streamReader
+	// lz carries the LZMA2 reader across the blocks and streams of the file.
+	lz lzma2Cache
 }
 
 // streamReader decodes a single xz stream
@@ -63,6 +65,7 @@ type streamReader struct {
 	newHash func() hash.Hash
 	h       header
 	index   []record
+	lz      *lzma2Cache
 }
 
 // NewReader creates a new xz reader using the default parameters.
@@ -83,7 +86,7 @@ func (c ReaderConfig) NewReader(xz io.Reader) (r *Reader, err error) {
 		ReaderConfig: c,
 		xz:           xz,
 	}
-	if r.sr, err = c.newStreamReader(xz); err != nil {
+	if r.sr, err = c.newStreamReader(xz, &r.lz); err != nil {
 		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
 		}
@@ -113,7 +116,7 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 				return n, io.EOF
 			}
 			for {
-				r.sr, err = r.newStreamReader(r.xz)
+				r.sr, err = r.newStreamReader(r.xz, &r.lz)
 				if !errors.Is(err, errPadding) {
 					break
 				}
@@ -138,8 +141,9 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 var errPadding = errors.New("xz: padding (4 zero bytes) encountered")
 
 // newStreamReader creates a new xz stream reader using the given configuration
-// parameters. NewReader reads and checks the header of the xz stream.
-func (c ReaderConfig) newStreamReader(xz io.Reader) (r *streamReader, err error) {
+// parameters. NewReader reads and checks the header of the xz stream. A
+// non-nil cache lets the stream's blocks reuse one LZMA2 reader.
+func (c ReaderConfig) newStreamReader(xz io.Reader, cache *lzma2Cache) (r *streamReader, err error) {
 	if err = c.Verify(); err != nil {
 		return nil, err
 	}
@@ -160,11 +164,14 @@ func (c ReaderConfig) newStreamReader(xz io.Reader) (r *streamReader, err error)
 		ReaderConfig: c,
 		xz:           xz,
 		index:        make([]record, 0, 4),
+		lz:           cache,
 	}
 	if err = r.h.UnmarshalBinary(data); err != nil {
 		return nil, err
 	}
-	xlog.Debugf("xz header %s", r.h)
+	if xlog.DebugEnabled() {
+		xlog.Debugf("xz header %s", r.h)
+	}
 	if r.newHash, err = newHashFunc(r.h.flags); err != nil {
 		return nil, err
 	}
@@ -199,7 +206,9 @@ func (r *streamReader) readTail() error {
 	if err = f.UnmarshalBinary(p); err != nil {
 		return err
 	}
-	xlog.Debugf("xz footer %s", f)
+	if xlog.DebugEnabled() {
+		xlog.Debugf("xz footer %s", f)
+	}
 	if f.flags != r.h.flags {
 		return corruptf("xz: footer flags incorrect")
 	}
@@ -232,9 +241,11 @@ func (r *streamReader) Read(p []byte) (n int, err error) {
 				}
 				return n, err
 			}
-			xlog.Debugf("block %v", *bh)
+			if xlog.DebugEnabled() {
+				xlog.Debugf("block %v", *bh)
+			}
 			r.br, err = r.newBlockReader(r.xz, bh,
-				hlen, r.newHash())
+				hlen, r.newHash(), r.lz)
 			if err != nil {
 				return n, err
 			}
@@ -276,9 +287,10 @@ type blockReader struct {
 	r         io.Reader
 }
 
-// newBlockReader creates a new block reader.
+// newBlockReader creates a new block reader. A non-nil cache lets the block
+// reuse the LZMA2 reader of the previous block.
 func (c *ReaderConfig) newBlockReader(xz io.Reader, h *blockHeader,
-	hlen int, hash hash.Hash) (br *blockReader, err error) {
+	hlen int, hash hash.Hash, cache *lzma2Cache) (br *blockReader, err error) {
 
 	br = &blockReader{
 		lxz:       countingReader{r: xz},
@@ -287,7 +299,7 @@ func (c *ReaderConfig) newBlockReader(xz io.Reader, h *blockHeader,
 		hash:      hash,
 	}
 
-	fr, err := c.newFilterReader(&br.lxz, h.filters)
+	fr, err := c.newFilterReader(&br.lxz, h.filters, cache)
 	if err != nil {
 		return nil, err
 	}
@@ -363,8 +375,8 @@ func (br *blockReader) Read(p []byte) (n int, err error) {
 	return n, io.EOF
 }
 
-func (c *ReaderConfig) newFilterReader(r io.Reader, f []filter) (fr io.Reader,
-	err error) {
+func (c *ReaderConfig) newFilterReader(r io.Reader, f []filter,
+	cache *lzma2Cache) (fr io.Reader, err error) {
 
 	if err = verifyFilters(f); err != nil {
 		return nil, err
@@ -372,7 +384,7 @@ func (c *ReaderConfig) newFilterReader(r io.Reader, f []filter) (fr io.Reader,
 
 	fr = r
 	for _, v := range slices.Backward(f) {
-		fr, err = v.reader(fr, c)
+		fr, err = v.reader(fr, c, cache)
 		if err != nil {
 			return nil, err
 		}

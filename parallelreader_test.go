@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"math/rand"
+	"os"
 	"runtime"
 	"testing"
 	"time"
@@ -297,4 +298,54 @@ func TestParallelReaderAbandonedReleasesGoroutines(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+// benchmarkBlocks compresses testdata/enwik7 with the given block size and
+// measures decoding it with the reader the bench function builds.
+func benchmarkBlocks(b *testing.B, blockSize int64,
+	newReader func(xz []byte) (io.Reader, func()),
+) {
+	b.Helper()
+	data, err := os.ReadFile("testdata/enwik7")
+	if err != nil {
+		b.Fatalf("os.ReadFile error %s", err)
+	}
+	xz := compressMultiBlock(b, data, blockSize)
+	b.SetBytes(int64(len(data)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		r, done := newReader(xz)
+		n, err := io.Copy(io.Discard, r)
+		if err != nil {
+			b.Fatalf("io.Copy error %s", err)
+		}
+		if n != int64(len(data)) {
+			b.Fatalf("decoded %d bytes; want %d", n, len(data))
+		}
+		done()
+	}
+}
+
+// BenchmarkReaderMultiBlock decodes a many-block file with the sequential
+// reader; per-block setup cost dominates the difference to BenchmarkReader.
+func BenchmarkReaderMultiBlock(b *testing.B) {
+	benchmarkBlocks(b, 64<<10, func(xz []byte) (io.Reader, func()) {
+		r, err := NewReader(bytes.NewReader(xz))
+		if err != nil {
+			b.Fatalf("NewReader error %s", err)
+		}
+		return r, func() {}
+	})
+}
+
+// BenchmarkParallelReader decodes a multi-block file with all workers.
+func BenchmarkParallelReader(b *testing.B) {
+	benchmarkBlocks(b, 1<<20, func(xz []byte) (io.Reader, func()) {
+		r, err := NewParallelReader(bytes.NewReader(xz), int64(len(xz)))
+		if err != nil {
+			b.Fatalf("NewParallelReader error %s", err)
+		}
+		return r, func() { _ = r.Close() }
+	})
 }

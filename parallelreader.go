@@ -149,6 +149,9 @@ type parallelDecoder struct {
 	queue   chan *blockWork
 	jobs    chan *blockWork
 	bufPool chan []byte
+
+	// readBufSize is the per-worker read buffer size, set by start.
+	readBufSize int
 }
 
 // setErr records the first error the reader saw and returns the error it will
@@ -418,6 +421,19 @@ func (r *ParallelReader) start() {
 // but not yet consumed) and thereby the memory use.
 func (d *parallelDecoder) start(workers, dictCap int) {
 	d.dictCap = dictCap
+	// Each worker reads its block through one reusable buffered reader.
+	// Size it for the largest block of the file rather than always taking
+	// the maximum: for a file of small blocks the fixed size would make the
+	// read buffer several times the block it reads.
+	d.readBufSize = 1 << 10
+	for i := range d.blocks {
+		if p := d.blocks[i].paddedSize(); p > int64(d.readBufSize) {
+			d.readBufSize = int(min(p, blockReadBufSize))
+			if d.readBufSize == blockReadBufSize {
+				break
+			}
+		}
+	}
 	d.queue = make(chan *blockWork, workers+2)
 	d.jobs = make(chan *blockWork)
 	d.bufPool = make(chan []byte, cap(d.queue)+1)
@@ -455,10 +471,26 @@ func (d *parallelDecoder) dispatch() {
 	}
 }
 
-// worker decodes blocks until the job channel is closed.
+// workerScratch is the per-worker reusable decode machinery: the buffered
+// reader over the block's section of the file and the LZMA2 reader with its
+// decoder state and dictionary. Both used to be rebuilt for every block —
+// about 110 allocations plus a 256 KiB read buffer per block, on exactly the
+// multi-block files the parallel reader exists for.
+type workerScratch struct {
+	xr *bufio.Reader
+	lz lzma2Cache
+}
+
+// worker decodes blocks until the job channel is closed. The scratch is
+// created on the first job, so a worker that never receives one — more
+// workers than blocks — allocates nothing.
 func (d *parallelDecoder) worker() {
+	var s *workerScratch
 	for w := range d.jobs {
-		w.result <- d.decodeOne(&w.d)
+		if s == nil {
+			s = &workerScratch{xr: bufio.NewReaderSize(nil, d.readBufSize)}
+		}
+		w.result <- d.decodeOne(&w.d, s)
 	}
 }
 
@@ -466,19 +498,24 @@ func (d *parallelDecoder) worker() {
 // while decoding attacker-controlled data is converted into an error: the
 // worker runs on a goroutine the caller does not own, so an escaping panic
 // would abort the process with no way for the caller to recover.
-func (d *parallelDecoder) decodeOne(bd *blockDesc) (res blockResult) {
+func (d *parallelDecoder) decodeOne(bd *blockDesc, s *workerScratch) (res blockResult) {
 	var buf []byte
 	defer func() {
 		if v := recover(); v != nil {
 			d.putBuf(buf)
+			s.lz.r = nil
 			res = blockResult{err: fmt.Errorf(
 				"xz: panic while decoding block at offset %d: %v",
 				bd.offset, v)}
 		}
 	}()
-	data, err := d.decodeBlock(bd, &buf)
+	data, err := d.decodeBlock(bd, &buf, s)
 	if err != nil {
 		d.putBuf(buf)
+		// A decode that went wrong ends the whole read, and the reader it
+		// went wrong in is not worth reasoning about; drop it rather than
+		// reuse it.
+		s.lz.r = nil
 		return blockResult{err: err}
 	}
 	return blockResult{data: data}
@@ -527,16 +564,16 @@ const initialBlockBufSize = 1 << 20
 // caller can recycle it whether decoding succeeds, fails or panics.
 // decodeBlock verifies the block check and that header, compressed size
 // and uncompressed size agree with the index record.
-func (d *parallelDecoder) decodeBlock(bd *blockDesc, bufp *[]byte) ([]byte, error) {
+func (d *parallelDecoder) decodeBlock(bd *blockDesc, bufp *[]byte, s *workerScratch) ([]byte, error) {
 	sr := io.NewSectionReader(d.xz, bd.offset, bd.paddedSize())
-	xr := bufio.NewReaderSize(sr, blockReadBufSize)
+	s.xr.Reset(sr)
 
-	h, hlen, err := readBlockHeader(xr)
+	h, hlen, err := readBlockHeader(s.xr)
 	if err != nil {
 		return nil, err
 	}
 	c := ReaderConfig{DictCap: d.dictCap}
-	br, err := c.newBlockReader(xr, h, hlen, bd.newHash())
+	br, err := c.newBlockReader(s.xr, h, hlen, bd.newHash(), &s.lz)
 	if err != nil {
 		return nil, err
 	}

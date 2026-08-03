@@ -161,34 +161,45 @@ func (b *byteSliceReader) ReadByte() (c byte, err error) {
 	return c, nil
 }
 
-// newRangeDecoder initializes a range decoder. It reads five bytes from the
-// reader and therefore may return an error.
-func newRangeDecoder(br io.ByteReader) (d *rangeDecoder, err error) {
+// init (re)initializes the range decoder in place, so a decoder that is
+// reopened once per LZMA2 chunk reuses its allocation. It reads five bytes
+// from the reader and therefore may return an error.
+func (d *rangeDecoder) init(br io.ByteReader) error {
 	if bsr, ok := br.(*byteSliceReader); ok {
-		d = &rangeDecoder{buf: bsr.buf, pos: bsr.pos, nrange: 0xffffffff}
+		*d = rangeDecoder{buf: bsr.buf, pos: bsr.pos, nrange: 0xffffffff}
 	} else {
-		d = &rangeDecoder{br: br, nrange: 0xffffffff}
+		*d = rangeDecoder{br: br, nrange: 0xffffffff}
 	}
 
 	b := d.readByte()
 	if d.err != nil {
-		return nil, d.err
+		return d.err
 	}
 	if b != 0 {
-		return nil, errors.New("newRangeDecoder: first byte not zero")
+		return errors.New("newRangeDecoder: first byte not zero")
 	}
 
 	for range 4 {
 		d.code = (d.code << 8) | uint32(d.readByte())
 	}
 	if d.err != nil {
-		return nil, d.err
+		return d.err
 	}
 
 	if d.code >= d.nrange {
-		return nil, errors.New("newRangeDecoder: d.code >= d.nrange")
+		return errors.New("newRangeDecoder: d.code >= d.nrange")
 	}
 
+	return nil
+}
+
+// newRangeDecoder initializes a range decoder. It reads five bytes from the
+// reader and therefore may return an error.
+func newRangeDecoder(br io.ByteReader) (d *rangeDecoder, err error) {
+	d = new(rangeDecoder)
+	if err = d.init(br); err != nil {
+		return nil, err
+	}
 	return d, nil
 }
 

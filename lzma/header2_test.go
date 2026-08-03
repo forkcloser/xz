@@ -121,11 +121,12 @@ func TestReadChunkHeader(t *testing.T) {
 			t.Fatalf("MarshalBinary for %v error %s", h, err)
 		}
 		r := bytes.NewReader(data)
-		g, err := readChunkHeader(r)
-		if err != nil {
+		var g chunkHeader
+		var buf [6]byte
+		if err := readChunkHeader(r, buf[:], &g); err != nil {
 			t.Fatalf("readChunkHeader for %v error %s", h, err)
 		}
-		if *g != h {
+		if g != h {
 			t.Fatalf("got %v; want %v", g, h)
 		}
 	}
@@ -134,8 +135,9 @@ func TestReadChunkHeader(t *testing.T) {
 func TestReadEOS(t *testing.T) {
 	var b [1]byte
 	r := bytes.NewReader(b[:])
-	h, err := readChunkHeader(r)
-	if err != nil {
+	var h chunkHeader
+	var buf [6]byte
+	if err := readChunkHeader(r, buf[:], &h); err != nil {
 		t.Fatalf("readChunkHeader error %s", err)
 	}
 	if h.ctype != cEOS {

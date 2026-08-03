@@ -50,10 +50,10 @@ func newDecoder(br io.ByteReader, state *state, dict *decoderDict, size int64) (
 }
 
 // Reopen restarts the decoder with a new byte reader and a new size. Reopen
-// resets the Decompressed counter to zero.
+// resets the Decompressed counter to zero. The range decoder is reinitialized
+// in place, so reopening once per chunk allocates nothing.
 func (d *decoder) Reopen(br io.ByteReader, size int64) error {
-	var err error
-	if d.rd, err = newRangeDecoder(br); err != nil {
+	if err := d.rd.init(br); err != nil {
 		return err
 	}
 	d.start = d.Dict.pos()

@@ -59,9 +59,20 @@ func (f *lzmaFilter) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-// reader creates a new reader for the LZMA2 filter.
-func (f lzmaFilter) reader(r io.Reader, c *ReaderConfig) (fr io.Reader,
-	err error) {
+// lzma2Cache carries an LZMA2 reader across the blocks of an xz file. Every
+// block is decoded by a fresh chunk sequence, so without reuse each block
+// rebuilt the decoder, its probability models and the dictionary — about 110
+// allocations per block, on exactly the multi-block files the parallel
+// reader exists for. The zero value is ready for use.
+type lzma2Cache struct {
+	r *lzma.Reader2
+}
+
+// reader creates a new reader for the LZMA2 filter. When a cache holds a
+// reader with the required dictionary capacity, that reader is reset and
+// reused instead.
+func (f lzmaFilter) reader(r io.Reader, c *ReaderConfig, cache *lzma2Cache) (
+	fr io.Reader, err error) {
 
 	config := new(lzma.Reader2Config)
 	if c != nil {
@@ -76,11 +87,18 @@ func (f lzmaFilter) reader(r io.Reader, c *ReaderConfig) (fr io.Reader,
 		config.DictCap = dc
 	}
 
-	fr, err = config.NewReader2(r)
+	if cache != nil && cache.r != nil && cache.r.DictCap() == config.DictCap {
+		cache.r.Reset(r)
+		return cache.r, nil
+	}
+	lr, err := config.NewReader2(r)
 	if err != nil {
 		return nil, err
 	}
-	return fr, nil
+	if cache != nil {
+		cache.r = lr
+	}
+	return lr, nil
 }
 
 // writeCloser creates a io.WriteCloser for the LZMA2 filter.

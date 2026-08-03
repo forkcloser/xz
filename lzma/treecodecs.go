@@ -121,12 +121,19 @@ type probTree struct {
 	bits  byte
 }
 
-// deepcopy initializes the probTree value as a deep copy of the source.
+// deepcopy initializes the probTree value as a deep copy of the source,
+// keeping the existing backing array when it is big enough. The writer
+// snapshots its state once per LZMA2 chunk, and each snapshot copies every
+// tree; allocating them afresh each time made those snapshots the writer's
+// dominant source of allocations.
 func (t *probTree) deepcopy(src *probTree) {
 	if t == src {
 		return
 	}
-	t.probs = make([]prob, len(src.probs))
+	if cap(t.probs) < len(src.probs) {
+		t.probs = make([]prob, len(src.probs))
+	}
+	t.probs = t.probs[:len(src.probs)]
 	copy(t.probs, src.probs)
 	t.bits = src.bits
 }
