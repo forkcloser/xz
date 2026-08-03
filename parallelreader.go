@@ -113,9 +113,31 @@ func checkUncompressedSize(rec record) error {
 type ParallelReader struct {
 	ParallelReaderConfig
 
+	// dec holds everything the dispatcher and the workers touch. Those
+	// goroutines must not reference the ParallelReader itself: the cleanup
+	// that stops them when a reader is abandoned without Close can only run
+	// once the reader is unreachable, which it never becomes while a
+	// goroutine stack still roots it.
+	dec  *parallelDecoder
+	size int64
+
+	// Owned by the reading goroutine.
+	started bool
+	cur     []byte
+	curPos  int
+
+	// err is reachable from Close, so it is the one field that needs a lock.
+	mu  sync.Mutex
+	err error
+}
+
+// parallelDecoder is the part of the parallel reader that the dispatcher
+// and the decode workers operate on.
+type parallelDecoder struct {
+	dictCap int
+
 	xz     io.ReaderAt
 	blocks []blockDesc
-	size   int64
 
 	// done is closed by Close, and by the first read error, to tell the
 	// dispatcher and any waiting read to give up. It is created with the
@@ -124,17 +146,9 @@ type ParallelReader struct {
 	done      chan struct{}
 	closeOnce sync.Once
 
-	// Owned by the reading goroutine.
-	started bool
 	queue   chan *blockWork
 	jobs    chan *blockWork
 	bufPool chan []byte
-	cur     []byte
-	curPos  int
-
-	// err is reachable from Close, so it is the one field that needs a lock.
-	mu  sync.Mutex
-	err error
 }
 
 // setErr records the first error the reader saw and returns the error it will
@@ -189,16 +203,20 @@ func (c ParallelReaderConfig) NewParallelReader(xz io.ReaderAt, size int64) (r *
 	}
 	r = &ParallelReader{
 		ParallelReaderConfig: c,
-		xz:                   xz,
-		blocks:               blocks,
-		size:                 total,
-		done:                 make(chan struct{}),
+		dec: &parallelDecoder{
+			xz:     xz,
+			blocks: blocks,
+			done:   make(chan struct{}),
+		},
+		size: total,
 	}
 	// Workers and the dispatcher are goroutines, and goroutines are not
 	// collected just because nothing references the reader that started them.
-	// Close is still the documented way to release a reader early; this only
-	// keeps forgetting it from leaking for the life of the process.
-	runtime.SetFinalizer(r, func(r *ParallelReader) { r.stop() })
+	// They reference only the decoder, so an abandoned reader does become
+	// unreachable, and this cleanup then cancels them. Close is still the
+	// documented way to release a reader early; this only keeps forgetting it
+	// from leaking for the life of the process.
+	runtime.AddCleanup(r, func(d *parallelDecoder) { d.stop() }, r.dec)
 	return r, nil
 }
 
@@ -383,58 +401,64 @@ var errReaderClosed = &kindError{
 	kind: ErrClosed,
 }
 
-// start launches the dispatcher and the decode workers. The queue
-// capacity bounds the number of blocks in flight (decoding or decoded
-// but not yet consumed) and thereby the memory use.
+// start launches the dispatcher and the decode workers.
 func (r *ParallelReader) start() {
 	r.started = true
-	// Workers is a promoted field, so it is writable between construction and
-	// the first read. Re-apply the floor here: zero workers would leave every
-	// read waiting for a block that nothing is decoding.
+	// Workers and DictCap are promoted fields, so they are writable between
+	// construction and the first read. Re-apply the floor here: zero workers
+	// would leave every read waiting for a block that nothing is decoding.
 	if r.Workers < 1 {
 		r.Workers = runtime.GOMAXPROCS(0)
 	}
-	r.queue = make(chan *blockWork, r.Workers+2)
-	r.jobs = make(chan *blockWork)
-	r.bufPool = make(chan []byte, cap(r.queue)+1)
-	for i := 0; i < r.Workers; i++ {
-		go r.worker()
+	r.dec.start(r.Workers, r.DictCap)
+}
+
+// start launches the dispatcher and the decode workers. The queue
+// capacity bounds the number of blocks in flight (decoding or decoded
+// but not yet consumed) and thereby the memory use.
+func (d *parallelDecoder) start(workers, dictCap int) {
+	d.dictCap = dictCap
+	d.queue = make(chan *blockWork, workers+2)
+	d.jobs = make(chan *blockWork)
+	d.bufPool = make(chan []byte, cap(d.queue)+1)
+	for i := 0; i < workers; i++ {
+		go d.worker()
 	}
-	go r.dispatch()
+	go d.dispatch()
 }
 
 // dispatch feeds the blocks to the workers in file order. Admission to
 // the ordered queue (bounded capacity) throttles how many blocks are in
 // flight.
-func (r *ParallelReader) dispatch() {
+func (d *parallelDecoder) dispatch() {
 	// Both channels close on every exit path, including the cancelled one:
 	// jobs so the workers finish, and queue so a consumer waiting for the
 	// next block is released rather than left waiting on work that will
 	// never be dispatched.
-	defer close(r.queue)
-	defer close(r.jobs)
-	for i := range r.blocks {
+	defer close(d.queue)
+	defer close(d.jobs)
+	for i := range d.blocks {
 		w := &blockWork{
-			d:      r.blocks[i],
+			d:      d.blocks[i],
 			result: make(chan blockResult, 1),
 		}
 		select {
-		case r.queue <- w:
-		case <-r.done:
+		case d.queue <- w:
+		case <-d.done:
 			return
 		}
 		select {
-		case r.jobs <- w:
-		case <-r.done:
+		case d.jobs <- w:
+		case <-d.done:
 			return
 		}
 	}
 }
 
 // worker decodes blocks until the job channel is closed.
-func (r *ParallelReader) worker() {
-	for w := range r.jobs {
-		w.result <- r.decodeOne(&w.d)
+func (d *parallelDecoder) worker() {
+	for w := range d.jobs {
+		w.result <- d.decodeOne(&w.d)
 	}
 }
 
@@ -442,20 +466,20 @@ func (r *ParallelReader) worker() {
 // while decoding attacker-controlled data is converted into an error: the
 // worker runs on a goroutine the caller does not own, so an escaping panic
 // would abort the process with no way for the caller to recover.
-func (r *ParallelReader) decodeOne(d *blockDesc) (res blockResult) {
+func (d *parallelDecoder) decodeOne(bd *blockDesc) (res blockResult) {
 	var buf []byte
 	defer func() {
 		if v := recover(); v != nil {
-			r.putBuf(buf)
+			d.putBuf(buf)
 			res = blockResult{err: fmt.Errorf(
 				"xz: panic while decoding block at offset %d: %v",
-				d.offset, v)}
+				bd.offset, v)}
 		}
 	}()
-	buf = r.getBuf(int(d.uncompressedSize))
-	data, err := r.decodeBlock(d, buf)
+	buf = d.getBuf(int(bd.uncompressedSize))
+	data, err := d.decodeBlock(bd, buf)
 	if err != nil {
-		r.putBuf(buf)
+		d.putBuf(buf)
 		return blockResult{err: err}
 	}
 	return blockResult{data: data}
@@ -463,9 +487,9 @@ func (r *ParallelReader) decodeOne(d *blockDesc) (res blockResult) {
 
 // getBuf returns a decode buffer of length n, reusing a pooled buffer
 // if one of sufficient capacity is available.
-func (r *ParallelReader) getBuf(n int) []byte {
+func (d *parallelDecoder) getBuf(n int) []byte {
 	select {
-	case b := <-r.bufPool:
+	case b := <-d.bufPool:
 		if cap(b) >= n {
 			return b[:n]
 		}
@@ -475,12 +499,12 @@ func (r *ParallelReader) getBuf(n int) []byte {
 }
 
 // putBuf returns a buffer to the pool, dropping it if the pool is full.
-func (r *ParallelReader) putBuf(b []byte) {
+func (d *parallelDecoder) putBuf(b []byte) {
 	if b == nil {
 		return
 	}
 	select {
-	case r.bufPool <- b:
+	case d.bufPool <- b:
 	default:
 	}
 }
@@ -494,16 +518,16 @@ const blockReadBufSize = 256 << 10
 // uncompressed size of the block recorded in the index. It verifies the
 // block check and that header, compressed size and uncompressed size
 // agree with the index record.
-func (r *ParallelReader) decodeBlock(d *blockDesc, buf []byte) ([]byte, error) {
-	sr := io.NewSectionReader(r.xz, d.offset, d.paddedSize())
+func (d *parallelDecoder) decodeBlock(bd *blockDesc, buf []byte) ([]byte, error) {
+	sr := io.NewSectionReader(d.xz, bd.offset, bd.paddedSize())
 	xr := bufio.NewReaderSize(sr, blockReadBufSize)
 
 	h, hlen, err := readBlockHeader(xr)
 	if err != nil {
 		return nil, err
 	}
-	c := ReaderConfig{DictCap: r.DictCap}
-	br, err := c.newBlockReader(xr, h, hlen, d.newHash())
+	c := ReaderConfig{DictCap: d.dictCap}
+	br, err := c.newBlockReader(xr, h, hlen, bd.newHash())
 	if err != nil {
 		return nil, err
 	}
@@ -523,7 +547,7 @@ func (r *ParallelReader) decodeBlock(d *blockDesc, buf []byte) ([]byte, error) {
 	if !errors.Is(err, io.EOF) {
 		return nil, err
 	}
-	if br.record() != (record{d.unpaddedSize, d.uncompressedSize}) {
+	if br.record() != (record{bd.unpaddedSize, bd.uncompressedSize}) {
 		return nil, corruptf("xz: block sizes do not match index record")
 	}
 	return buf, nil
@@ -535,17 +559,17 @@ func (r *ParallelReader) decodeBlock(d *blockDesc, buf []byte) ([]byte, error) {
 // block queued that no worker will ever report on, so both receives have to
 // watch done rather than only the queue.
 func (r *ParallelReader) nextBlock() error {
-	r.putBuf(r.cur)
+	r.dec.putBuf(r.cur)
 	r.cur = nil
 	r.curPos = 0
 	var w *blockWork
 	select {
-	case queued, ok := <-r.queue:
+	case queued, ok := <-r.dec.queue:
 		if !ok {
 			return io.EOF
 		}
 		w = queued
-	case <-r.done:
+	case <-r.dec.done:
 		return errReaderClosed
 	}
 	select {
@@ -555,7 +579,7 @@ func (r *ParallelReader) nextBlock() error {
 		}
 		r.cur = res.data
 		return nil
-	case <-r.done:
+	case <-r.dec.done:
 		return errReaderClosed
 	}
 }
@@ -573,7 +597,7 @@ func (r *ParallelReader) Read(p []byte) (n int, err error) {
 		if r.curPos == len(r.cur) {
 			if err = r.nextBlock(); err != nil {
 				if !errors.Is(err, io.EOF) {
-					r.stop()
+					r.dec.stop()
 				}
 				return n, r.setErr(err)
 			}
@@ -613,7 +637,7 @@ func (r *ParallelReader) WriteTo(w io.Writer) (n int64, err error) {
 					_ = r.setErr(err)
 					return n, nil
 				}
-				r.stop()
+				r.dec.stop()
 				return n, r.setErr(err)
 			}
 			continue
@@ -622,14 +646,14 @@ func (r *ParallelReader) WriteTo(w io.Writer) (n int64, err error) {
 		n += int64(k)
 		r.curPos += k
 		if err != nil {
-			r.stop()
+			r.dec.stop()
 			return n, r.setErr(err)
 		}
 		// A writer that accepts nothing and reports no error is broken.
 		// io.Copy turns that into ErrShortWrite rather than spinning, and so
 		// must this loop.
 		if k == 0 {
-			r.stop()
+			r.dec.stop()
 			return n, r.setErr(io.ErrShortWrite)
 		}
 	}
@@ -638,8 +662,8 @@ func (r *ParallelReader) WriteTo(w io.Writer) (n int64, err error) {
 // stop cancels the dispatcher and releases any waiting read. The workers
 // finish the block in hand and exit once the dispatcher closes the job
 // channel.
-func (r *ParallelReader) stop() {
-	r.closeOnce.Do(func() { close(r.done) })
+func (d *parallelDecoder) stop() {
+	d.closeOnce.Do(func() { close(d.done) })
 }
 
 // Close stops the background workers. It must be called when the reader is
@@ -650,7 +674,7 @@ func (r *ParallelReader) stop() {
 // doing so cancels a read that is waiting on a block. A reader that already
 // reached io.EOF keeps reporting io.EOF rather than the close.
 func (r *ParallelReader) Close() error {
-	r.stop()
+	r.dec.stop()
 	// Only takes effect if the reader was not already finished or failed.
 	_ = r.setErr(errReaderClosed)
 	return nil

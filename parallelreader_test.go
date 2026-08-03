@@ -259,3 +259,42 @@ func TestParallelReaderClose(t *testing.T) {
 		t.Fatalf("Close error %s", err)
 	}
 }
+
+// TestParallelReaderAbandonedReleasesGoroutines covers a reader that is
+// dropped mid-stream without Close. The dispatcher and the workers must not
+// keep the abandoned reader reachable, or the cleanup that cancels them could
+// never fire and they would run for the life of the process, pinned on a full
+// block queue.
+func TestParallelReaderAbandonedReleasesGoroutines(t *testing.T) {
+	data := parallelTestData(1 << 20)
+	xz := compressMultiBlock(t, data, 16<<10) // 64 blocks, far more than the queue holds
+	before := runtime.NumGoroutine()
+
+	// The reader must go out of scope with blocks still undispatched, so the
+	// dispatcher is parked on a full queue when the reader becomes garbage.
+	func() {
+		r, err := ParallelReaderConfig{Workers: 4}.NewParallelReader(
+			bytes.NewReader(xz), int64(len(xz)))
+		if err != nil {
+			t.Fatalf("NewParallelReader error %s", err)
+		}
+		p := make([]byte, 100)
+		if _, err = io.ReadFull(r, p); err != nil {
+			t.Fatalf("Read error %s", err)
+		}
+	}()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		runtime.GC()
+		n := runtime.NumGoroutine()
+		if n <= before+2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d goroutines still running after the reader was "+
+				"abandoned; started from %d", n, before)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
