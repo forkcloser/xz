@@ -105,7 +105,7 @@ func readAllParallel(t *testing.T, file []byte, workers int) error {
 		if err != nil {
 			return err
 		}
-		defer r.Close()
+		defer func() { _ = r.Close() }()
 		_, err = io.Copy(io.Discard, r)
 		return err
 	}()

@@ -28,7 +28,8 @@ func parallelTestData(n int) []byte {
 
 // compressMultiBlock compresses data into an xz stream with the given
 // block size.
-func compressMultiBlock(t *testing.T, data []byte, blockSize int64) []byte {
+func compressMultiBlock(t testing.TB, data []byte, blockSize int64) []byte {
+	t.Helper()
 	var buf bytes.Buffer
 	w, err := WriterConfig{BlockSize: blockSize}.NewWriter(&buf)
 	if err != nil {
@@ -141,7 +142,7 @@ func TestParallelReaderTruncated(t *testing.T) {
 	if _, err = io.ReadAll(r); err == nil {
 		t.Fatalf("ReadAll on corrupted file: no error")
 	}
-	r.Close()
+	_ = r.Close()
 }
 
 // slowReaderAt delays every read so that a decode is reliably still in flight

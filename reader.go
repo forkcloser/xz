@@ -214,6 +214,15 @@ func (r *streamReader) Read(p []byte) (n int, err error) {
 					}
 					return n, io.EOF
 				}
+				if err == io.EOF {
+					// Every xz stream ends with an index and a footer, even
+					// one with no blocks. Running out of input where the next
+					// block header or the index indicator should be means the
+					// stream was cut short, not that it ended. Reporting EOF
+					// here made the reader hand back a truncated file as a
+					// complete one.
+					err = io.ErrUnexpectedEOF
+				}
 				return n, err
 			}
 			xlog.Debugf("block %v", *bh)

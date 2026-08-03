@@ -85,7 +85,7 @@ func TestWriteToOnExhaustedReader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 
 	var first bytes.Buffer
 	n, err := r.WriteTo(&first)
@@ -126,7 +126,7 @@ func TestWriteToGivesUpOnStuckWriter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 
 	w := &stuckWriter{}
 	if _, err = r.WriteTo(w); err != io.ErrShortWrite {
@@ -181,7 +181,7 @@ func TestZeroWorkersStillDecodes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 	r.Workers = 0
 
 	done := make(chan error, 1)

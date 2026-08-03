@@ -19,9 +19,13 @@ type WriterConfig struct {
 	DictCap    int
 	BufSize    int
 	BlockSize  int64
-	// checksum method: CRC32, CRC64 or SHA256 (default: CRC64)
+	// CheckSum selects the check method: CRC32, CRC64 or SHA256 (default:
+	// CRC64). It cannot select None: None is zero, which is indistinguishable
+	// from the field being unset, so a zero CheckSum means the default. Use
+	// NoCheckSum to write a stream with no check.
 	CheckSum byte
-	// Forces NoChecksum (default: false)
+	// NoCheckSum writes a stream with no integrity check, overriding
+	// CheckSum (default: false).
 	NoCheckSum bool
 	// match algorithm
 	Matcher lzma.MatchAlgorithm

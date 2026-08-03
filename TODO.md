@@ -76,7 +76,7 @@
 * `VERSION=<version> go generate github.com/forkcloser/xz/...` to update version files
 * Execute [test for Linux/amd64, Linux/x86 and Windows/amd64](.github/workflows/go-test-platforms.yml).
 * Update TODO.md - write short log entry
-* `git checkout master && git merge dev`
+* `git checkout main && git merge dev`
 * `git tag -a <version>`
 * `git push`
 
