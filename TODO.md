@@ -74,7 +74,8 @@
 * Update README.md
 * xb copyright . in xz directory to ensure all new files have Copyright header
 * `VERSION=<version> go generate github.com/forkcloser/xz/...` to update version files
-* Execute [test for Linux/amd64, Linux/x86 and Windows/amd64](.github/workflows/go-test-platforms.yml).
+* Run `just lint` and `just test` (the CI matrix runs the same recipes on
+  linux, macos and windows, amd64 and arm64, plus the 386 leg).
 * Update TODO.md - write short log entry
 * `git checkout main && git merge dev`
 * `git tag -a <version>`
