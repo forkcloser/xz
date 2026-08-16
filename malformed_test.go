@@ -9,8 +9,11 @@ import (
 	"errors"
 	"hash/crc32"
 	"io"
+	"math"
 	"math/rand"
 	"testing"
+
+	"github.com/forkcloser/xz/lzma"
 )
 
 // The parser's error branches are most of its code and were among its least
@@ -282,12 +285,22 @@ func TestHeaderAndFooterValidation(t *testing.T) {
 // difference between a clear failure at construction and a confusing one
 // later.
 func TestWriterConfigValidation(t *testing.T) {
-	for name, c := range map[string]WriterConfig{
+	cases := map[string]WriterConfig{
 		"negative block size": {BlockSize: -1},
 		"bad checksum":        {CheckSum: 0x7},
 		"tiny dict":           {DictCap: 1},
-		"huge dict":           {DictCap: 1 << 40},
-	} {
+	}
+	// A dictionary capacity above lzma.MaxDictCap (1<<32 - 1) is representable
+	// only where int is 64 bits wide. On a 32-bit platform every positive int
+	// is a legal capacity, so there is no over-range value to reject — and
+	// spelling one as a constant would not compile there. Both branches are
+	// type-checked on every platform, so math.MaxInt is what keeps this
+	// portable: it is in range for the int of whatever platform builds it.
+	if math.MaxInt > lzma.MaxDictCap {
+		cases["huge dict"] = WriterConfig{DictCap: math.MaxInt}
+	}
+
+	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
 			cfg := c
 			if err := cfg.Verify(); err == nil {
