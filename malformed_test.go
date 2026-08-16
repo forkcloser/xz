@@ -401,3 +401,41 @@ func TestBlockHeaderPaddingIsCorrupt(t *testing.T) {
 			err)
 	}
 }
+
+// TestIndexIndicatorAtBlockIsCorrupt covers a block area that begins with the
+// index indicator (0x00) at an offset the stream index says holds a block.
+// The parallel reader positions itself by the index, so the two disagreeing
+// is corruption; the bare errIndexIndicator sentinel used to escape from
+// decodeBlock unwrapped, matching neither ErrCorrupt nor anything else, so a
+// caller sorting "reject the input" from "retry the transport" could not
+// tell what it was looking at.
+func TestIndexIndicatorAtBlockIsCorrupt(t *testing.T) {
+	full := wellFormed(t)
+
+	// The first block header starts right after the 12-byte stream header;
+	// its first byte is the header size, and 0x00 there is the index
+	// indicator. Nothing else is touched, so the index still points here.
+	const hdrOff = 12
+	bad := append([]byte{}, full...)
+	bad[hdrOff] = 0x00
+
+	r, err := NewReader(bytes.NewReader(bad))
+	if err == nil {
+		_, err = io.ReadAll(r)
+	}
+	if err == nil {
+		t.Fatal("sequential reader accepted an index indicator in place of the block")
+	}
+
+	pr, err := NewParallelReader(bytes.NewReader(bad), int64(len(bad)))
+	if err == nil {
+		_, err = io.ReadAll(pr)
+		_ = pr.Close()
+	}
+	if err == nil {
+		t.Fatal("parallel reader accepted an index indicator in place of the block")
+	}
+	if !errors.Is(err, ErrCorrupt) {
+		t.Errorf("parallel reader returned %v; want a match for ErrCorrupt", err)
+	}
+}

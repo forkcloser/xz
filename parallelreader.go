@@ -570,6 +570,16 @@ func (d *parallelDecoder) decodeBlock(bd *blockDesc, bufp *[]byte, s *workerScra
 
 	h, hlen, err := readBlockHeader(s.xr)
 	if err != nil {
+		// The sequential reader treats an index indicator as "the blocks
+		// are over" — there it is a legitimate outcome. Here the offset
+		// came from the index itself, which promised a block at this
+		// position; finding the index indicator instead means the index
+		// and the block area disagree, and that is corruption. Left as
+		// the bare sentinel it matched neither ErrCorrupt nor anything
+		// else a caller could classify.
+		if errors.Is(err, errIndexIndicator) {
+			return nil, corruptf("xz: index indicator where the index places block at offset %d", bd.offset)
+		}
 		return nil, err
 	}
 	c := ReaderConfig{DictCap: d.dictCap}
