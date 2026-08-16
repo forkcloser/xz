@@ -11,6 +11,7 @@
 package lzma
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -67,6 +68,18 @@ func (c *ReaderConfig) Verify() error {
 //     the minimum dictionary size. This is another measure to prevent huge
 //     memory allocations for the dictionary.
 //   - The code supports stream sizes only up to a pebibyte (1024^5).
+//
+// # Input buffering
+//
+// The decoder pulls compressed bytes one at a time. If the input is an
+// [io.ByteReader] — a [bufio.Reader], [bytes.Reader] or [strings.Reader],
+// say — it is used as is and the reader consumes exactly the bytes of the
+// stream, leaving anything after it unread. Any other [io.Reader] is wrapped
+// in a [bufio.Reader] first: without that, a plain [os.File] costs one system
+// call per compressed byte and decodes an order of magnitude slower. The
+// wrapper may read past the end of the stream, so a caller who needs the
+// input positioned exactly at the stream's end should pass an io.ByteReader
+// of its own.
 type Reader struct {
 	lzma   io.Reader
 	header Header
@@ -116,6 +129,14 @@ const maxStreamSize = 1 << 50
 func (c ReaderConfig) NewReader(lzma io.Reader) (r *Reader, err error) {
 	if err = c.Verify(); err != nil {
 		return nil, err
+	}
+	// The decoder reads compressed bytes one at a time through an
+	// io.ByteReader. Give a plain reader one buffered front-end for the
+	// header and the stream alike; an input that already is a ByteReader
+	// is left alone so its exact position stays under the caller's control
+	// (see the Reader documentation).
+	if _, ok := lzma.(io.ByteReader); !ok {
+		lzma = bufio.NewReader(lzma)
 	}
 	data := make([]byte, HeaderLen)
 	if _, err := io.ReadFull(lzma, data); err != nil {
