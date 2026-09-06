@@ -60,17 +60,20 @@ results that were measured and rejected.
 ### Benchmarks
 
 Measured on `testdata/enwik7` (10 MB of Wikipedia text), Apple M5 Pro,
-Go 1.26, 2026-08-02. Upstream is `github.com/ulikunitz/xz` v0.5.16 on
+Go 1.26, 2026-09-06. Upstream is `github.com/ulikunitz/xz` v0.5.16 on
 the same benchmark bodies. Reproduce with:
 
     go test -run '^$' -bench 'Reader|Writer' -benchmem -benchtime=5x -count=6 .
 
 | Benchmark           | Upstream v0.5.16 | This fork | Change |
 | ------------------- | ---------------- | --------- | ------ |
-| Reader (decompress) | 48 MB/s          | 100 MB/s  | +110%  |
-| Reader allocs/op    | 1,213,039        | 132       | −99.99% |
-| Writer (compress)   | 14.8 MB/s        | 16 MB/s   | +8%    |
-| Writer allocs/op    | 1,217,296        | 306       | −99.97% |
+| Reader (decompress) | 48.6 MB/s        | ~102 MB/s | 2.1×   |
+| Reader allocs/op    | 1,213,036        | 132       | −99.99% |
+| Writer (compress)   | 14.1 MB/s        | ~15 MB/s  | +9%    |
+| Writer allocs/op    | 1,217,288        | 306       | −99.97% |
+
+[`PERF.md`](./PERF.md) has the methodology, what each change bought, the
+negative results, and what is left.
 
 Multi-block files (the shape `xz -T` produces, and the one
 `ParallelReader` exists for), same corpus:
