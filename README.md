@@ -12,7 +12,7 @@ multi-block archives.
 
 ## Stability
 
-From v1.0.0 the exported API of `xz`, `lzma` and `xio` follows the Go 1
+From v1.0.0 the exported API of `xz` and `lzma` follows the Go 1
 compatibility promise within the v1 line: no exported name changes
 meaning or disappears, and code that compiles against v1.0.0 keeps
 compiling. Additive changes (new functions, new fields with zero-value

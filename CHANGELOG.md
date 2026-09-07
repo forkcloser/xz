@@ -74,6 +74,10 @@ path.
 
 ### Removed
 
+- The `xio` package (`WriteCloserStack`, added upstream in v0.5.13 for one
+  user): unrelated to xz, unused in this module, and with no importer
+  anywhere a code search can find. A v1 would have had to keep it forever;
+  a copy of the 40 lines is the migration for anyone who did use it.
 - `lzma.BinaryTree`, the alternative match finder. It never worked: it
   emitted match distances the decoder does not have (its own reader
   rejected its output for zeros and for ordinary text), compressed text to

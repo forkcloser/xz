@@ -24,6 +24,8 @@ history and not extended. Read against this fork's tree:
 - **Still open:** everything else, including the other v0.6 encoder items
   and the match-finder ideas. What stands between this fork and 1.0.0 is tracked in
   `1.0-READY.md`, not here.
+- v0.5.13's `xio` package (below, 2025-08-20) is removed in this fork: no
+  importer exists and it is unrelated to xz; the v1 API is `xz` and `lzma`.
 
 ## Release v0.6
 
