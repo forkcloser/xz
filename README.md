@@ -26,12 +26,23 @@ neither is the exact text of error messages — match errors with
 ## About this fork
 
 This here is a friendly fork of https://github.com/ulikunitz/xz, taken at
-upstream v0.5.15 and tracking what has landed there since (the only change
-so far, v0.5.16's `IsTerminal` fallback for platforms without terminal
-detection, is ported). Upstream seems inactive. However, if you have time
-and interest in doing that, feel free to carry these changes over there.
-[`CHANGELOG.md`](./CHANGELOG.md) lists what a user migrating from upstream
-will notice.
+upstream v0.5.15; v0.5.16's `IsTerminal` fallback for platforms without
+terminal detection is ported. [`CHANGELOG.md`](./CHANGELOG.md) lists what a
+user migrating from upstream will notice.
+
+Upstream is not dormant — but its `master` is. Development moved to the `v2`
+branch, which is a *different module*: `github.com/ulikunitz/xz/v2`, in a
+`v2/` subdirectory, built on the separate `github.com/ulikunitz/lz` match
+finder, replacing the v0.5 API with configuration structs, presets, and
+JSON-marshallable reader and writer configs. It carries tags `v2.0.0-dev.1`
+through `v2.0.0-dev.4` (October–December 2025) and has run 48 commits past
+the last of them; `v0.6.0-last-dev` marks where the v0.x line stopped.
+Because v2 takes the `/v2` import path, it does not supersede
+`github.com/ulikunitz/xz` for anyone importing that today — and that is the
+line this fork continues. `master` still takes occasional maintenance: its
+last commit is 2026-07-20 and the `v2` branch was last pushed 2026-08-02,
+both checked 2026-09-07. If you would rather carry these changes upstream
+than depend on a fork, they apply to `master`; please do.
 
 The fork diverges from upstream in three areas:
 
