@@ -20,9 +20,9 @@ import (
 // ReaderConfig stores the parameters for the reader of the classic LZMA
 // format.
 type ReaderConfig struct {
-	// Since v0.5.14 this parameter sets an upper limit for a .lzma file's
-	// dictionary size. This helps to mitigate problems with mangled
-	// headers.
+	// DictCap is an upper limit for a .lzma file's dictionary size (upstream
+	// introduced the limit in v0.5.14). It helps to mitigate problems with
+	// mangled headers; a header declaring more is rejected with ErrDictSize.
 	DictCap int
 }
 
@@ -57,7 +57,7 @@ func (c *ReaderConfig) Verify() error {
 // are problems with the stream, but the dictionary has already been allocated
 // and this might consume a lot of memory.
 //
-// Version 0.5.14 introduces built-in mitigations:
+// Built-in mitigations (introduced upstream in v0.5.14):
 //
 //   - The [ReaderConfig] DictCap field is now interpreted as a limit for the
 //     dictionary size.
@@ -140,8 +140,8 @@ func (c ReaderConfig) NewReader(lzma io.Reader) (r *Reader, err error) {
 	}
 	data := make([]byte, HeaderLen)
 	if _, err := io.ReadFull(lzma, data); err != nil {
-		if err == io.EOF {
-			return nil, errors.New("lzma: unexpected EOF")
+		if errors.Is(err, io.EOF) {
+			return nil, io.ErrUnexpectedEOF
 		}
 		return nil, err
 	}
@@ -173,7 +173,7 @@ func (c ReaderConfig) NewReader(lzma io.Reader) (r *Reader, err error) {
 	}
 	// Protect against modified or malicious headers.
 	if size > maxStreamSize {
-		return nil, fmt.Errorf(
+		return nil, unsupportedf(
 			"lzma: stream size %d exceeds a pebibyte (1024^5)",
 			size)
 	}

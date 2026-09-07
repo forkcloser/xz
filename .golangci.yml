@@ -49,7 +49,6 @@ linters:
         - fmt.Fprintln
         - (*github.com/forkcloser/xz/internal/xlog.Logger).Output
         - (*github.com/forkcloser/xz/internal/xlog.Logger).Outputf
-        - (*github.com/forkcloser/xz/internal/xlog.Logger).Outputln
 
     gosec:
       excludes:

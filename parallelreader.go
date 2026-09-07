@@ -1,4 +1,4 @@
-// Copyright 2014-2022 Ulrich Kunitz. All rights reserved.
+// Copyright 2026 Forkcloser. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -258,6 +258,23 @@ func skipStreamPadding(xz io.ReaderAt, pos int64) (int64, error) {
 	return pos, nil
 }
 
+// readFullAt reads len(p) bytes at off. The caller has vouched that the file
+// holds at least size bytes, so a short read is the file being shorter than
+// claimed — truncation — rather than a legitimate end. An io.EOF alongside a
+// full read, which io.ReaderAt permits, is not an error at all.
+func readFullAt(xz io.ReaderAt, p []byte, off int64) error {
+	n, err := xz.ReadAt(p, off)
+	switch {
+	case n == len(p):
+		return nil
+	case errors.Is(err, io.EOF):
+		return io.ErrUnexpectedEOF
+	case err == nil:
+		return io.ErrShortBuffer
+	}
+	return err
+}
+
 // parseBlocks locates all blocks of the xz file by walking the streams
 // backwards from the end of the file: footer, index, stream header.
 // The header, footer and index checksums of every stream are verified.
@@ -280,7 +297,7 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 			return nil, 0, corruptf("xz: stream truncated")
 		}
 		fdata := make([]byte, footerLen)
-		if _, err = xz.ReadAt(fdata, pos-footerLen); err != nil {
+		if err = readFullAt(xz, fdata, pos-footerLen); err != nil {
 			return nil, 0, err
 		}
 		var f footer
@@ -296,14 +313,20 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 		ir := bufio.NewReader(io.NewSectionReader(xz, indexStart, f.indexSize))
 		c, err := ir.ReadByte()
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, indexEOF(err)
 		}
 		if c != 0 {
 			return nil, 0, corruptf("xz: index indicator missing")
 		}
-		records, n, err := readIndexBody(ir, -1)
+		// The records are only read incrementally, so a hostile count is
+		// bounded by the index bytes present — but every two bytes of index
+		// become a record, and later a block descriptor, before the per-record
+		// bounds below reject them. A block occupies at least minBlockSize
+		// bytes of the stream, so the stream itself bounds how many records
+		// can be genuine; reject a count past that before reading any.
+		records, n, err := readIndexBody(ir, -1, int((indexStart-HeaderLen)/minBlockSize))
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, indexEOF(err)
 		}
 		if n+1 != f.indexSize {
 			return nil, 0, corruptf("xz: index size does not match footer")
@@ -332,16 +355,16 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 			}
 			padded := rec.unpaddedSize + int64(padLen(rec.unpaddedSize))
 			if padded > remaining {
-				return nil, 0, errors.New("xz: blocks exceed stream size")
+				return nil, 0, corruptf("xz: blocks exceed stream size")
 			}
 			blocksLen += padded
 		}
 		headerPos := indexStart - blocksLen - HeaderLen
 		if headerPos < 0 {
-			return nil, 0, errors.New("xz: blocks exceed stream size")
+			return nil, 0, corruptf("xz: blocks exceed stream size")
 		}
 		hdata := make([]byte, HeaderLen)
-		if _, err = xz.ReadAt(hdata, headerPos); err != nil {
+		if err = readFullAt(xz, hdata, headerPos); err != nil {
 			return nil, 0, err
 		}
 		var h header
@@ -395,6 +418,17 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 		}
 	}
 	return blocks, total, nil
+}
+
+// indexEOF converts an EOF met while parsing the index into corruption: the
+// index is read through a section reader sized from the footer, so running
+// out of bytes means the index's own record count disagrees with its size.
+// Left bare, the EOF matched neither sentinel.
+func indexEOF(err error) error {
+	if errors.Is(err, io.EOF) {
+		return corruptf("xz: index ends before its records do")
+	}
+	return err
 }
 
 // errReaderClosed is returned by Read after Close has been called. It matches
@@ -580,6 +614,14 @@ func (d *parallelDecoder) decodeBlock(bd *blockDesc, bufp *[]byte, s *workerScra
 		if errors.Is(err, errIndexIndicator) {
 			return nil, corruptf("xz: index indicator where the index places block at offset %d", bd.offset)
 		}
+		// The section reader ends where the index says the block ends.
+		// Running out of bytes inside the header means the header claims
+		// more than the block holds: that is corruption of the file, and
+		// left as a bare io.EOF it read as the end of the stream (see
+		// nextBlock), so the reader returned a truncated file as complete.
+		if errors.Is(err, io.EOF) {
+			return nil, corruptf("xz: block header at offset %d runs past the end of the block", bd.offset)
+		}
 		return nil, err
 	}
 	c := ReaderConfig{DictCap: d.dictCap}
@@ -649,6 +691,12 @@ func (r *ParallelReader) nextBlock() error {
 	select {
 	case res := <-w.result:
 		if res.err != nil {
+			// The end of the stream is the closed queue above, never a
+			// block result: a worker reporting io.EOF found its block cut
+			// short. Say so rather than let Read take it for a clean end.
+			if errors.Is(res.err, io.EOF) && !errors.Is(res.err, io.ErrUnexpectedEOF) {
+				return io.ErrUnexpectedEOF
+			}
 			return res.err
 		}
 		r.cur = res.data

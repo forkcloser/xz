@@ -1,4 +1,4 @@
-// Copyright 2014-2022 Ulrich Kunitz. All rights reserved.
+// Copyright 2026 Forkcloser. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -6,6 +6,7 @@ package xz
 
 import (
 	"bytes"
+	"errors"
 	"hash/crc32"
 	"io"
 	"runtime"
@@ -278,6 +279,42 @@ func TestParallelReaderHostileSizeRealBlock(t *testing.T) {
 	err = readAllParallel(t, file, 4)
 	if err == nil {
 		t.Fatal("index claiming 300 MiB for a 32 KiB block: no error")
+	}
+	t.Logf("%d byte file: %s", len(file), err)
+}
+
+// TestParallelReaderHostileRecordCountIsBoundedEarly covers an index that
+// is well formed, CRC and all, but declares far more records than the stream
+// before it has room for blocks. The records were read incrementally, so the
+// count could not reach an allocator directly — but every two bytes of index
+// became a 16-byte record and then a 40-byte block descriptor before the
+// per-record bounds rejected them, about 28× amplification of an index the
+// attacker sizes freely. A block cannot occupy fewer than minBlockSize bytes,
+// so the stream itself bounds the count, and that bound is applied before any
+// record is read.
+func TestParallelReaderHostileRecordCountIsBoundedEarly(t *testing.T) {
+	recs := make([]hostileRecord, 100000)
+	for i := range recs {
+		recs[i] = hostileRecord{unpaddedSize: 1, uncompressedSize: 1}
+	}
+	file := hostileStream([]byte{0, 0, 0, 0}, recs, -1)
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	_, err := NewParallelReader(bytes.NewReader(file), int64(len(file)))
+	runtime.ReadMemStats(&after)
+
+	if err == nil {
+		t.Fatal("an index of 100000 records for a 4-byte block area was accepted")
+	}
+	if !errors.Is(err, ErrCorrupt) {
+		t.Errorf("got %v; want a match for ErrCorrupt", err)
+	}
+	// The index alone is 200 KB; rejecting it must not cost a multiple of
+	// that. Before the bound this allocated about 9 MB.
+	if used := after.TotalAlloc - before.TotalAlloc; used > uint64(len(file)) {
+		t.Errorf("rejecting a %d byte file allocated %d bytes", len(file), used)
 	}
 	t.Logf("%d byte file: %s", len(file), err)
 }

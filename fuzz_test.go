@@ -1,4 +1,4 @@
-// Copyright 2014-2022 Ulrich Kunitz. All rights reserved.
+// Copyright 2026 Forkcloser. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -33,7 +33,7 @@ const fuzzOutputLimit = 8 << 20
 func fuzzSeeds(tb testing.TB) [][]byte {
 	tb.Helper()
 	var seeds [][]byte
-	for _, name := range []string{"fox.xz", "fox-check-none.xz", "example.xz"} {
+	for _, name := range []string{"testdata/fox.xz", "testdata/fox-check-none.xz"} {
 		if data, err := os.ReadFile(name); err == nil {
 			seeds = append(seeds, data)
 		}

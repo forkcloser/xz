@@ -2,14 +2,10 @@
 
 build
 
-TODO.html
-README.html
-
 lzma/writer.txt
 lzma/reader.txt
 
 cmd/gxz/gxz
-cmd/xb/xb
 
 # test executables
 *.test

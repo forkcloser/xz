@@ -14,12 +14,27 @@ import (
 	"github.com/forkcloser/xz/lzma"
 )
 
-// WriterConfig describe the parameters for an xz writer.
+// WriterConfig describes the parameters for an xz writer. The zero value
+// selects the defaults given for each field.
 type WriterConfig struct {
+	// Properties are the LZMA literal-context, literal-position and
+	// position bits of the encoder (default: LC 3, LP 0, PB 2, which is what
+	// xz uses).
 	Properties *lzma.Properties
-	DictCap    int
-	BufSize    int
-	BlockSize  int64
+	// DictCap is the encoder dictionary size in bytes, between
+	// lzma.MinDictCap and lzma.MaxDictCap (default: 8 MiB). A larger
+	// dictionary finds longer matches at the cost of memory on both sides;
+	// the size is recorded in every block header and a reader must provide
+	// at least as much.
+	DictCap int
+	// BufSize is the size of the encoder's lookahead buffer in bytes
+	// (default: 4096). It bounds the longest match the encoder will look
+	// for.
+	BufSize int
+	// BlockSize is the number of uncompressed bytes after which the writer
+	// closes the block and starts a new one (default: no limit, one block).
+	// Multi-block files are what ParallelReader decodes concurrently.
+	BlockSize int64
 	// CheckSum selects the check method: CRC32, CRC64 or SHA256 (default:
 	// CRC64). It cannot select None: None is zero, which is indistinguishable
 	// from the field being unset, so a zero CheckSum means the default. Use
@@ -28,7 +43,8 @@ type WriterConfig struct {
 	// NoCheckSum writes a stream with no integrity check, overriding
 	// CheckSum (default: false).
 	NoCheckSum bool
-	// match algorithm
+	// Matcher selects the match finder the encoder uses (default:
+	// lzma.HashTable4).
 	Matcher lzma.MatchAlgorithm
 }
 
@@ -141,6 +157,11 @@ func nopWriteCloser(w io.Writer) io.WriteCloser {
 }
 
 // Writer compresses data written to it. It is an io.WriteCloser.
+//
+// The first error from the underlying writer is sticky: Write and Close
+// return it from then on and write nothing further. The block in progress
+// may have been partly written when it happened, so the stream cannot be
+// completed; a caller that wants the data has to start over.
 type Writer struct {
 	WriterConfig
 
@@ -150,6 +171,7 @@ type Writer struct {
 	h       header
 	index   []record
 	closed  bool
+	err     error
 }
 
 // newBlockWriter creates a new block writer writes the header out.
@@ -209,8 +231,20 @@ func (c WriterConfig) NewWriter(xz io.Writer) (w *Writer, err error) {
 
 }
 
+// setErr records the first failure. Later calls report it rather than
+// continue on a block writer whose state is unknown.
+func (w *Writer) setErr(err error) error {
+	if err != nil && w.err == nil {
+		w.err = err
+	}
+	return err
+}
+
 // Write compresses the uncompressed data provided.
 func (w *Writer) Write(p []byte) (n int, err error) {
+	if w.err != nil {
+		return 0, w.err
+	}
 	if w.closed {
 		return 0, errClosed
 	}
@@ -218,39 +252,43 @@ func (w *Writer) Write(p []byte) (n int, err error) {
 		k, err := w.bw.Write(p[n:])
 		n += k
 		if !errors.Is(err, errNoSpace) {
-			return n, err
+			return n, w.setErr(err)
 		}
 		if err = w.closeBlockWriter(); err != nil {
-			return n, err
+			return n, w.setErr(err)
 		}
 		if err = w.newBlockWriter(); err != nil {
-			return n, err
+			return n, w.setErr(err)
 		}
 	}
 }
 
 // Close closes the writer and adds the footer to the Writer. Close
-// doesn't close the underlying writer.
+// doesn't close the underlying writer. After a failed Write it returns that
+// error and writes nothing.
 func (w *Writer) Close() error {
+	if w.err != nil {
+		return w.err
+	}
 	if w.closed {
 		return errClosed
 	}
 	w.closed = true
 	var err error
 	if err = w.closeBlockWriter(); err != nil {
-		return err
+		return w.setErr(err)
 	}
 
 	f := footer{flags: w.h.flags}
 	if f.indexSize, err = writeIndex(w.xz, w.index); err != nil {
-		return err
+		return w.setErr(err)
 	}
 	data, err := f.MarshalBinary()
 	if err != nil {
-		return err
+		return w.setErr(err)
 	}
 	if _, err = w.xz.Write(data); err != nil {
-		return err
+		return w.setErr(err)
 	}
 	return nil
 }

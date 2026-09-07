@@ -47,7 +47,7 @@ type encoder struct {
 }
 
 // newEncoder creates a new encoder. If the byte writer must be
-// limited use LimitedByteWriter provided by this package. The flags
+// limited use limitedByteWriter provided by this package. The flags
 // argument supports the eosMarker flag, controlling whether a
 // terminating end-of-stream marker must be written.
 func newEncoder(bw io.ByteWriter, state *state, dict *encoderDict,
@@ -74,7 +74,7 @@ func newEncoder(bw io.ByteWriter, state *state, dict *encoderDict,
 // Write writes the bytes from p into the dictionary. If not enough
 // space is available the data in the dictionary buffer will be
 // compressed to make additional space available. If the limit of the
-// underlying writer has been reached ErrLimit will be returned.
+// underlying writer has been reached errLimit will be returned.
 func (e *encoder) Write(p []byte) (n int, err error) {
 	for {
 		k, err := e.dict.Write(p[n:])
@@ -208,7 +208,7 @@ func (e *encoder) writeMatch(m operation) error {
 // stream.
 func (e *encoder) writeOp(op operation) error {
 	if e.re.Available() < int64(e.margin) {
-		return ErrLimit
+		return errLimit
 	}
 	if op.literal {
 		return e.writeLiteral(op)
@@ -218,7 +218,7 @@ func (e *encoder) writeOp(op operation) error {
 
 // compress compressed data from the dictionary buffer. If the flag all
 // is set, all data in the dictionary buffer will be compressed. The
-// function returns ErrLimit if the underlying writer has reached its
+// function returns errLimit if the underlying writer has reached its
 // limit.
 func (e *encoder) compress(flags compressFlags) error {
 	n := 0
@@ -246,7 +246,7 @@ var eosMatch = matchOp(maxDistance, minMatchLen)
 // LZMA stream will be closed and data will remain in the buffer.
 func (e *encoder) Close() error {
 	err := e.compress(all)
-	if err != nil && !errors.Is(err, ErrLimit) {
+	if err != nil && !errors.Is(err, errLimit) {
 		return err
 	}
 	if e.marker {

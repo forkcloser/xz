@@ -1,4 +1,4 @@
-// Copyright 2014-2022 Ulrich Kunitz. All rights reserved.
+// Copyright 2026 Forkcloser. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"github.com/forkcloser/xz/lzma"
 )
 
 // Sentinel errors that callers can test for with errors.Is.
@@ -53,6 +55,35 @@ func corruptf(format string, args ...any) error {
 // unsupportedf builds an error that matches ErrUnsupported.
 func unsupportedf(format string, args ...any) error {
 	return &kindError{msg: fmt.Sprintf(format, args...), kind: ErrUnsupported}
+}
+
+// classifiedError attaches one of this package's sentinels to an error from
+// the lzma package without hiding it: errors.Is finds both the sentinel and
+// the original chain, and the message stays the decoder's.
+type classifiedError struct {
+	err  error
+	kind error
+}
+
+func (e *classifiedError) Error() string   { return e.err.Error() }
+func (e *classifiedError) Unwrap() []error { return []error{e.kind, e.err} }
+
+// classify maps the lzma package's sentinels onto this package's, so a
+// caller sees one vocabulary whether the fault was found in the xz container
+// or inside the LZMA2 payload. Errors that are neither — I/O errors from the
+// underlying reader, io.ErrUnexpectedEOF — pass through unchanged.
+func classify(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, ErrCorrupt), errors.Is(err, ErrUnsupported):
+		return err
+	case errors.Is(err, lzma.ErrCorrupt):
+		return &classifiedError{err: err, kind: ErrCorrupt}
+	case errors.Is(err, lzma.ErrUnsupported):
+		return &classifiedError{err: err, kind: ErrUnsupported}
+	}
+	return err
 }
 
 // Interface assertions. WriteTo in particular is a behavioural contract that

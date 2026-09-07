@@ -12,14 +12,19 @@ different signature.
 
 The typical use case looks like this:
 
-	  b := Bool("flag-b", "b", false, "boolean flag")
-	  h := Bool("help", "h", false, "prints this message")
+	  var b, h bool
+	  BoolVarP(&b, "flag-b", "b", false, "boolean flag")
+	  BoolVarP(&h, "help", "h", false, "prints this message")
 
 	  Parse()
 
-	  if *h {
+	  if h {
 		  gflag.Usage()
 	  }
+
+Only the constructors the gxz command uses are kept at package level;
+upstream's fuller set was trimmed before 1.0. The FlagSet methods carry the
+complete interface.
 */
 package gflag
 
@@ -35,7 +40,7 @@ import (
 )
 
 // CommandLine is the default set of command-line flags parsed from
-// os.Args. The top-level functions such as BoolVar, Arg, etc. are
+// os.Args. The top-level functions such as BoolVarP, Args, etc. are
 // wrappers for the methods of command line.
 var CommandLine = NewFlagSet(os.Args[0], ExitOnError)
 
@@ -173,12 +178,6 @@ func (f *FlagSet) Arg(i int) string {
 	return f.args[i]
 }
 
-// Arg provides the argument number i after parsing of the command line
-// flags.
-func Arg(i int) string {
-	return CommandLine.Arg(i)
-}
-
 // Args returns all arguments after parsing.
 func (f *FlagSet) Args() []string { return f.args }
 
@@ -192,16 +191,6 @@ func (f *FlagSet) NArg() int { return len(f.args) }
 // NArg returns the number of remaining arguments after command line
 // parsing.
 func NArg() int { return len(CommandLine.args) }
-
-// Parsed returns whether the command line has already been parsed.
-func Parsed() bool {
-	return CommandLine.parsed
-}
-
-// Parsed returns whether the flag set has already been parsed.
-func (f *FlagSet) Parsed() bool {
-	return f.parsed
-}
 
 // Parse parses the command line.
 func Parse() {
@@ -471,11 +460,6 @@ func (f *FlagSet) VarP(value Value, name, shorthands string, hasArg HasArg) {
 	}
 }
 
-// VarP creates a flag for the given value for the command line.
-func VarP(value Value, name, shorthands string, hasArg HasArg) {
-	CommandLine.VarP(value, name, shorthands, hasArg)
-}
-
 // Var creates a flag for the given option name.
 func (f *FlagSet) Var(value Value, name string, hasArg HasArg) {
 	shorthands := ""
@@ -484,11 +468,6 @@ func (f *FlagSet) Var(value Value, name string, hasArg HasArg) {
 		name = ""
 	}
 	f.VarP(value, name, shorthands, hasArg)
-}
-
-// Var creates a flag for the given option name for the command line.
-func Var(value Value, name string, hasArg HasArg) {
-	CommandLine.Var(value, name, hasArg)
 }
 
 // addLine adds a usage line to the flag set.
@@ -556,13 +535,6 @@ func (f *FlagSet) BoolP(name, shorthands string, value bool, usage string) *bool
 	return p
 }
 
-// BoolP defines a bool flag with specified name, shorthands, default
-// value and usage string. The return value is the address of a bool
-// variable that stores the value of the flag.
-func BoolP(name, shorthands string, value bool, usage string) *bool {
-	return CommandLine.BoolP(name, shorthands, value, usage)
-}
-
 // BoolVarP defines a bool flag with specified name, shorthands, default
 // value and usage string. The argument p points to a bool variable in
 // which to store the value of the flag.
@@ -578,13 +550,6 @@ func (f *FlagSet) BoolVar(p *bool, name string, value bool, usage string) {
 	f.Var(newBoolValue(value, p), name, OptionalArg)
 }
 
-// BoolVar defines a bool flag with specified name, default value and
-// usage string. The argument p points to a bool variable in which to
-// store the value of the flag.
-func BoolVar(p *bool, name string, value bool, usage string) {
-	CommandLine.BoolVar(p, name, value, usage)
-}
-
 // Bool defines a bool flag with specified name, default value and
 // usage string. The return value is the address of a bool variable that
 // stores the value of the flag.
@@ -592,13 +557,6 @@ func (f *FlagSet) Bool(name string, value bool, usage string) *bool {
 	p := new(bool)
 	f.BoolVar(p, name, value, usage)
 	return p
-}
-
-// Bool defines a bool flag with specified name, default value and
-// usage string. The return value is the address of a bool variable that
-// stores the value of the flag.
-func Bool(name string, value bool, usage string) *bool {
-	return CommandLine.Bool(name, value, usage)
 }
 
 // intValue stores an integer value.
@@ -664,26 +622,12 @@ func (f *FlagSet) CounterP(name, shorthands string, value int, usage string) *in
 	return p
 }
 
-// CounterP defines a counter flag with specified name, shorthands, default
-// value and usage string. The return value is the address of an integer
-// variable that stores the value of the flag.
-func CounterP(name, shorthands string, value int, usage string) *int {
-	return CommandLine.CounterP(name, shorthands, value, usage)
-}
-
 // CounterVar defines a counter flag with specified name, default value and
 // usage string. The argument p points to an integer variable in which to
 // store the value of the flag.
 func (f *FlagSet) CounterVar(p *int, name string, value int, usage string) {
 	f.addLine(counterLine(name, "", usage))
 	f.Var(newIntValue(value, p), name, OptionalArg)
-}
-
-// CounterVar defines a counter flag with specified name, default value and
-// usage string. The argument p points to an integer variable in which to
-// store the value of the flag.
-func CounterVar(p *int, name string, value int, usage string) {
-	CommandLine.CounterVar(p, name, value, usage)
 }
 
 // Counter defines a counter flag with specified name, default value and
@@ -693,13 +637,6 @@ func (f *FlagSet) Counter(name string, value int, usage string) *int {
 	p := new(int)
 	f.CounterVar(p, name, value, usage)
 	return p
-}
-
-// Counter defines a counter flag with specified name, default value and
-// usage string. The return value is the address of an integer variable that
-// stores the value of the flag.
-func Counter(name string, value int, usage string) *int {
-	return CommandLine.Counter(name, value, usage)
 }
 
 // intLine returns the usage line for an integer flag.
@@ -719,13 +656,6 @@ func (f *FlagSet) IntVarP(p *int, name, shorthands string, value int, usage stri
 	f.VarP(newIntValue(value, p), name, shorthands, RequiredArg)
 }
 
-// IntVarP defines an integer flag with specified name, shorthands, default
-// value and usage string. The argument p points to an integer variable in
-// which to store the value of the flag.
-func IntVarP(p *int, name, shorthands string, value int, usage string) {
-	CommandLine.IntVarP(p, name, shorthands, value, usage)
-}
-
 // IntP defines an integer flag with specified name, shorthands, default
 // value and usage string. The return value is the address of an integer
 // variable that stores the value of the flag.
@@ -733,13 +663,6 @@ func (f *FlagSet) IntP(name, shorthands string, value int, usage string) *int {
 	p := new(int)
 	f.IntVarP(p, name, shorthands, value, usage)
 	return p
-}
-
-// IntP defines an integer flag with specified name, shorthands, default
-// value and usage string. The return value is the address of an integer
-// variable that stores the value of the flag.
-func IntP(name, shorthands string, value int, usage string) *int {
-	return CommandLine.IntP(name, shorthands, value, usage)
 }
 
 // IntVar defines an integer flag with specified name, default value and
@@ -750,13 +673,6 @@ func (f *FlagSet) IntVar(p *int, name string, value int, usage string) {
 	f.Var(newIntValue(value, p), name, RequiredArg)
 }
 
-// IntVar defines an integer flag with specified name, default value and
-// usage string. The argument p points to an integer variable in which to
-// store the value of the flag.
-func IntVar(p *int, name string, value int, usage string) {
-	CommandLine.IntVar(p, name, value, usage)
-}
-
 // Int defines an integer flag with specified name, default value and
 // usage string. The return value is the address of an integer variable that
 // stores the value of the flag.
@@ -764,13 +680,6 @@ func (f *FlagSet) Int(name string, value int, usage string) *int {
 	p := new(int)
 	f.IntVar(p, name, value, usage)
 	return p
-}
-
-// Int defines an integer flag with specified name, default value and
-// usage string. The return value is the address of an integer variable that
-// stores the value of the flag.
-func Int(name string, value int, usage string) *int {
-	return CommandLine.Int(name, value, usage)
 }
 
 // The stringValue will store a string option.
@@ -833,44 +742,6 @@ func (f *FlagSet) StringP(name, shorthands, value, usage string) *string {
 	p := new(string)
 	f.StringVarP(p, name, shorthands, value, usage)
 	return p
-}
-
-// StringP defines a string flag with specified name, shorthands, default
-// value and usage string. The return value is the address of a string
-// variable that stores the value of the flag.
-func StringP(name, shorthands, value, usage string) *string {
-	return CommandLine.StringP(name, shorthands, value, usage)
-}
-
-// StringVar defines a string flag with specified name, default value and
-// usage string. The argument p points to a string variable in which to
-// store the value of the flag.
-func (f *FlagSet) StringVar(p *string, name, value, usage string) {
-	f.addLine(stringLine(name, "", value, usage))
-	f.Var(newStringValue(value, p), name, RequiredArg)
-}
-
-// StringVar defines a string flag with specified name, default value and
-// usage string. The argument p points to a string variable in which to
-// store the value of the flag.
-func StringVar(p *string, name, value, usage string) {
-	CommandLine.StringVar(p, name, value, usage)
-}
-
-// String defines a string flag with specified name, default value and
-// usage string. The return value is the address of a string variable that
-// stores the value of the flag.
-func (f *FlagSet) String(name, value, usage string) *string {
-	p := new(string)
-	f.StringVar(p, name, value, usage)
-	return p
-}
-
-// String defines a string flag with specified name, default value and
-// usage string. The return value is the address of a string variable that
-// stores the value of the flag.
-func String(name, value, usage string) *string {
-	return CommandLine.String(name, value, usage)
 }
 
 // presetValue represents an integer value that can be set with multiple
@@ -946,13 +817,4 @@ func (f *FlagSet) Preset(start, end, value int, usage string) *int {
 	p := new(int)
 	f.PresetVar(p, start, end, value, usage)
 	return p
-}
-
-// Preset defines a range of preset flags starting at start and
-// ending at end. The return value is the address of a preset variable
-// in which to store the value of the flag.
-//
-// If start is 1 and end is 9 the flags -1 to -9 will be supported.
-func Preset(start, end, value int, usage string) *int {
-	return CommandLine.Preset(start, end, value, usage)
 }

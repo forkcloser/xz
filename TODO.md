@@ -1,5 +1,32 @@
 # TODO list
 
+## Fork status (forkcloser, 2026-09-07)
+
+Everything below this section is upstream's (ulikunitz/xz): its release
+roadmap, its release procedure and its development log, kept as inherited
+history and not extended. Read against this fork's tree:
+
+- **Done here:** v0.6 item 4 (`operation` is a value type, `lzma/operation.go`);
+  v0.7 item 4 (fuzz targets, `fuzz_test.go`); v0.8 item 1, the reading half
+  (`ParallelReader` — a parallel writer is not implemented); v0.9 item 2
+  (fuzzed, in CI); v1.0 item 2 (the pkg.go.dev link is in the README).
+- **Obsolete here:** the Release Procedure below in its entirety — `goch`,
+  `gospell`, `xb` (the tool is removed from this fork; `gxz -V` reads the
+  module version from the build), `doc/relnotes`, `make-docs` and the
+  `main`/`dev` merge. This fork works through pull requests into `main`; the
+  release procedure is `RELEASING.md` and the user-facing history is
+  `CHANGELOG.md`.
+- **Dropped here:** v0.6 item 2, "fix binary tree matcher". The matcher
+  never produced decodable streams for most inputs and was quadratic on
+  repeated words; this fork removed it (`CHANGELOG.md`) rather than ship it
+  at 1.0. A working match finder would come back as a new `MatchAlgorithm`
+  value.
+- **Still open:** everything else, including the other v0.6 encoder items
+  and the match-finder ideas. What stands between this fork and 1.0.0 is tracked in
+  `1.0-READY.md`, not here.
+- v0.5.13's `xio` package (below, 2025-08-20) is removed in this fork: no
+  importer exists and it is unrelated to xz; the v1 API is `xz` and `lzma`.
+
 ## Release v0.6
 
 1. Review encoder and check for lzma improvements under xz.

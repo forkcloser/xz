@@ -114,6 +114,10 @@ type Writer struct {
 	bw  io.ByteWriter
 	buf *bufio.Writer
 	e   *encoder
+	// err is the first failure of the underlying writer; Write and Close
+	// return it from then on rather than continue on an encoder whose
+	// dictionary was partly consumed by the failed operation.
+	err error
 }
 
 // NewWriter creates a new LZMA writer for the classic format. The
@@ -169,8 +173,13 @@ func (w *Writer) writeHeader() error {
 	return err
 }
 
-// Write puts data into the Writer.
+// Write puts data into the Writer. When the header declares a size, Write
+// accepts at most that many bytes in total and returns ErrNoSpace for the
+// rest.
 func (w *Writer) Write(p []byte) (n int, err error) {
+	if w.err != nil {
+		return 0, w.err
+	}
 	if w.h.Size >= 0 {
 		m := w.h.Size
 		m -= w.e.Compressed() + int64(w.e.dict.Buffered())
@@ -184,14 +193,19 @@ func (w *Writer) Write(p []byte) (n int, err error) {
 	}
 	var werr error
 	if n, werr = w.e.Write(p); werr != nil {
+		w.err = werr
 		err = werr
 	}
 	return n, err
 }
 
 // Close closes the writer stream. It ensures that all data from the
-// buffer will be compressed and the LZMA stream will be finished.
+// buffer will be compressed and the LZMA stream will be finished. After a
+// failed Write it returns that error and writes nothing.
 func (w *Writer) Close() error {
+	if w.err != nil {
+		return w.err
+	}
 	if w.h.Size >= 0 {
 		n := w.e.Compressed() + int64(w.e.dict.Buffered())
 		if n != w.h.Size {
@@ -205,5 +219,6 @@ func (w *Writer) Close() error {
 			err = ferr
 		}
 	}
+	w.err = err
 	return err
 }

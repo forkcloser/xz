@@ -2,10 +2,12 @@
 
 ## Supported Versions
 
-This fork carries no release tags yet, so the supported version is the tip of
-the default branch. The `v0.5.x` line referred to here previously belongs to
-the upstream project, [ulikunitz/xz](https://github.com/ulikunitz/xz), and says
-nothing about this repository.
+The supported version is the latest release of the newest major line, `v1`
+once `v1.0.0` is tagged; until the first tag exists, the tip of the default
+branch. Fixes land on the default branch and ship as the next release; there
+are no maintenance branches for older releases. Version numbers of the
+upstream project, [ulikunitz/xz](https://github.com/ulikunitz/xz) (`v0.5.x`),
+say nothing about this repository.
 
 ## Reporting a Vulnerability
 

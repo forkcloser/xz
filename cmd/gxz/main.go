@@ -2,13 +2,11 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Command gxz supports the compression and decompression of LZMA files.
+// Command gxz compresses and decompresses files in the xz and the classic
+// LZMA (.lzma) formats, with a command line modelled on xz.
 //
 // Use gxz -h to get information about supported flags.
 package main
-
-//go:generate xb cat -o licenses.go xzLicense:github.com/forkcloser/xz/LICENSE goLicense:~/go/LICENSE
-//go:generate xb version-file -o version.go
 
 import (
 	"fmt"
@@ -26,7 +24,7 @@ import (
 
 const (
 	usageStr = `Usage: gxz [OPTION]... [FILE]...
-Compress or uncompress FILEs in the .lzma format (by default, compress FILES
+Compress or uncompress FILEs in the .xz format (by default, compress FILES
 in place).
 
   -c, --stdout      write to standard output and don't delete input files
@@ -178,7 +176,7 @@ func main() {
 		os.Exit(0)
 	}
 	if opts.version {
-		xlog.Printf("version %s\n", version)
+		xlog.Printf("version %s\n", version())
 		os.Exit(0)
 	}
 

@@ -8,11 +8,6 @@ package lzma
 // of bits. The number of bits must be in the range [1,32].
 type directCodec byte
 
-// Bits returns the number of bits supported by this codec.
-func (dc directCodec) Bits() int {
-	return int(dc)
-}
-
 // Encode uses the range encoder to encode a value with the fixed number of
 // bits. The most-significant bit is encoded first.
 func (dc directCodec) Encode(e *rangeEncoder, v uint32) error {

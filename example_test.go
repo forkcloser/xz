@@ -22,9 +22,9 @@ import (
 // exits without running deferred calls.
 
 func ExampleReader() {
-	f, err := os.Open("fox.xz")
+	f, err := os.Open("testdata/fox.xz")
 	if err != nil {
-		log.Fatalf("os.Open(%q) error %s", "fox.xz", err)
+		log.Fatalf("os.Open(%q) error %s", "testdata/fox.xz", err)
 	}
 	defer func() {
 		if err := f.Close(); err != nil {

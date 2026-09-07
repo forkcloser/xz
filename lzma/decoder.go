@@ -292,8 +292,8 @@ func (d *decoder) decompress() error {
 
 // Errors that may be returned while decoding data.
 var (
-	errDataAfterEOS = errors.New("lzma: data after end of stream marker")
-	errSize         = errors.New("lzma: wrong uncompressed data size")
+	errDataAfterEOS = corruptf("lzma: data after end of stream marker")
+	errSize         = corruptf("lzma: wrong uncompressed data size")
 )
 
 // Read reads data from the buffer. If no more data is available io.EOF is

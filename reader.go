@@ -2,9 +2,21 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package xz supports the compression and decompression of xz files. It
-// supports version 1.0.4 of the specification without the non-LZMA2
-// filters. See http://tukaani.org/xz/xz-file-format-1.0.4.txt
+// Package xz supports the compression and decompression of xz files.
+//
+// The container format is the one described by the xz file format
+// specification (https://xz.tukaani.org/format/xz-file-format.txt): stream
+// header and footer, blocks, index, stream padding and multi-stream files,
+// with the None, CRC32, CRC64 and SHA-256 checks. The only filter
+// implemented is LZMA2, which is what xz produces by default. Blocks using
+// any other filter (the BCJ branch filters, delta) or a filter chain of more
+// than one filter are well formed but not decodable here; reading them
+// fails with an error matching ErrUnsupported.
+//
+// Errors are classified: input that is not valid xz matches ErrCorrupt,
+// input this package cannot handle matches ErrUnsupported, a stream cut
+// short is io.ErrUnexpectedEOF, and an I/O error from the underlying reader
+// is passed through untouched.
 package xz
 
 import (
@@ -18,16 +30,17 @@ import (
 	"github.com/forkcloser/xz/lzma"
 )
 
-// ReaderConfig defines the parameters for the xz reader. The
-// SingleStream parameter requests the reader to assume that the
-// underlying stream contains only a single stream.
-//
-// DictCap is the smallest dictionary the reader will use. A block whose
-// header asks for more gets what it asks for, so this raises the floor rather
-// than capping memory; the dictionary itself is grown on demand and costs only
-// what the stream actually decodes.
+// ReaderConfig defines the parameters for the xz reader.
 type ReaderConfig struct {
-	DictCap      int
+	// DictCap is the smallest dictionary the reader will use. A block whose
+	// header asks for more gets what it asks for, so this raises the floor
+	// rather than capping memory; the dictionary itself is grown on demand
+	// and costs only what the stream actually decodes. Zero selects 8 MiB.
+	DictCap int
+	// SingleStream makes the reader stop after the first xz stream instead
+	// of continuing through stream padding into further concatenated
+	// streams. Any byte after the stream is then reported as corruption,
+	// which is what the reference tool does with --single-stream.
 	SingleStream bool
 }
 
@@ -108,12 +121,24 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 	for n < len(p) {
 		if r.sr == nil {
 			if r.SingleStream {
+				// One byte past the stream decides: nothing there is the
+				// clean end, a byte is trailing data, and a failing read
+				// is the transport's problem — not the file's — so the
+				// reader's error goes back as it came.
 				data := make([]byte, 1)
-				_, err = io.ReadFull(r.xz, data)
-				if !errors.Is(err, io.EOF) {
+				k, err := r.xz.Read(data)
+				switch {
+				case k > 0:
 					return n, errUnexpectedData
+				case err == nil:
+					// A Read that returns (0, nil) is allowed and says
+					// nothing either way; ask again.
+					continue
+				case errors.Is(err, io.EOF):
+					return n, io.EOF
+				default:
+					return n, err
 				}
-				return n, io.EOF
 			}
 			for {
 				r.sr, err = r.newStreamReader(r.xz, &r.lz)
@@ -180,7 +205,7 @@ func (c ReaderConfig) newStreamReader(xz io.Reader, cache *lzma2Cache) (r *strea
 
 // readTail reads the index body and the xz footer.
 func (r *streamReader) readTail() error {
-	index, n, err := readIndexBody(r.xz, len(r.index))
+	index, n, err := readIndexBody(r.xz, len(r.index), -1)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
@@ -339,6 +364,9 @@ func (br *blockReader) record() record {
 func (br *blockReader) Read(p []byte) (n int, err error) {
 	n, err = br.r.Read(p)
 	br.n += int64(n)
+	// The filter chain speaks the lzma package's vocabulary; translate it
+	// before anything else looks at the error.
+	err = classify(err)
 
 	u := br.header.uncompressedSize
 	if u >= 0 && br.uncompressedSize() > u {

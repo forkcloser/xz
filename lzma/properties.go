@@ -45,7 +45,7 @@ func (p *Properties) String() string {
 // PropertiesForCode converts a properties code byte into a Properties value.
 func PropertiesForCode(code byte) (p Properties, err error) {
 	if code > maxPropertyCode {
-		return p, errors.New("lzma: invalid properties code")
+		return p, corruptf("lzma: invalid properties code")
 	}
 	p.LC = int(code % 9)
 	code /= 9
@@ -73,7 +73,7 @@ func (p *Properties) verify() error {
 		return errors.New("lzma: pb out of range")
 	}
 	if p.LC+p.LP > maxLCLP {
-		return errors.New("lzma: sum of lc and lp exceeds 4")
+		return corruptf("lzma: sum of lc and lp exceeds 4")
 	}
 	return nil
 }

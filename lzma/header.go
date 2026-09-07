@@ -5,7 +5,6 @@
 package lzma
 
 import (
-	"errors"
 	"fmt"
 )
 
@@ -101,7 +100,7 @@ func (h *Header) marshalBinary() (data []byte, err error) {
 // unmarshalBinary unmarshals the header.
 func (h *Header) unmarshalBinary(data []byte) error {
 	if len(data) != HeaderLen {
-		return errors.New("lzma.unmarshalBinary: data has wrong length")
+		return corruptf("lzma: header has wrong length")
 	}
 
 	// properties
@@ -113,9 +112,9 @@ func (h *Header) unmarshalBinary(data []byte) error {
 	// dictionary capacity
 	h.DictSize = uint32LE(data[1:])
 	if int(h.DictSize) < 0 {
-		return errors.New(
-			"LZMA header: dictionary capacity exceeds maximum " +
-				"integer")
+		return unsupportedf(
+			"lzma: header dictionary size %d exceeds the address space",
+			h.DictSize)
 	}
 
 	// uncompressed size
@@ -125,9 +124,7 @@ func (h *Header) unmarshalBinary(data []byte) error {
 	} else {
 		h.Size = int64(s)
 		if h.Size < 0 {
-			return errors.New(
-				"LZMA header: uncompressed size " +
-					"out of int64 range")
+			return corruptf("lzma: header uncompressed size out of int64 range")
 		}
 	}
 

@@ -71,9 +71,10 @@ const (
 	hLRND = 1<<7 | 1<<6 | 1<<5
 )
 
-// errHeaderByte indicates an unsupported value for the chunk header
-// byte. These bytes starts the variable-length chunk header.
-var errHeaderByte = errors.New("lzma: unsupported chunk header byte")
+// errHeaderByte reports a chunk header byte that no LZMA2 encoder produces.
+// The byte starts the variable-length chunk header, so nothing after it can
+// be trusted either; the input is corrupt rather than merely unsupported.
+var errHeaderByte = corruptf("lzma: invalid chunk header byte")
 
 // headerChunkType converts the header byte into a chunk type. It
 // ignores the uncompressed size bits in the chunk header byte.
@@ -144,7 +145,7 @@ func (h *chunkHeader) String() string {
 // slice. The slice must have the correct length.
 func (h *chunkHeader) UnmarshalBinary(data []byte) error {
 	if len(data) == 0 {
-		return errors.New("no data")
+		return corruptf("lzma: empty chunk header")
 	}
 	c, err := headerChunkType(data[0])
 	if err != nil {
@@ -153,10 +154,10 @@ func (h *chunkHeader) UnmarshalBinary(data []byte) error {
 
 	n := headerLen(c)
 	if len(data) < n {
-		return errors.New("incomplete data")
+		return corruptf("lzma: incomplete chunk header")
 	}
 	if len(data) > n {
-		return errors.New("invalid data length")
+		return corruptf("lzma: chunk header data has wrong length")
 	}
 
 	*h = chunkHeader{ctype: c}
@@ -267,7 +268,7 @@ const (
 
 // errors for the chunk state handling
 var (
-	errChunkType = errors.New("lzma: unexpected chunk type")
+	errChunkType = corruptf("lzma: unexpected chunk type")
 	errState     = errors.New("lzma: wrong chunk state")
 )
 
@@ -370,7 +371,7 @@ func DecodeDictCap(c byte) (n int64, err error) {
 		if c == maxDictCapCode {
 			return maxDictCap, nil
 		}
-		return 0, errors.New("lzma: invalid dictionary size code")
+		return 0, corruptf("lzma: invalid dictionary size code")
 	}
 	return decodeDictCap(c), nil
 }
