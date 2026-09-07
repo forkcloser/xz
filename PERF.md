@@ -61,7 +61,7 @@ machine (the final row is within noise of the current figure above):
 | Step | Change | Reader MB/s |
 | ---- | ------ | ----------- |
 | 0 | upstream baseline | 48.6 |
-| 1 | `lzma.operation` as a value type instead of an interface: no per-operation boxing (`lzma/operation.go`, `decoder.go`, `encoder.go`, `hashtable.go`, `bintree.go`). Also the writer's allocation win. | 52.4 |
+| 1 | `lzma.operation` as a value type instead of an interface: no per-operation boxing (`lzma/operation.go`, `decoder.go`, `encoder.go`, `hashtable.go`; `bintree.go` too, before that matcher was removed). Also the writer's allocation win. | 52.4 |
 | 2 | Buffer each LZMA2 compressed chunk (≤ 64 KiB, size known) and serve the range decoder from a `bytes.Reader` instead of a one-byte `Read` per input byte (`lzma/reader2.go`). | 57.1 |
 | 3 | Branchless bit decode: the `code < bound` comparison is unpredictable by construction, so the range/code/probability updates select by mask (`lzma/rangecodec.go`). | 66.8 |
 | 4 | Hoist range/code into locals and inline the direct-bit decode in `directCodec.Decode`; direct bits have no probability model, so call overhead was the whole cost (`lzma/directcodec.go`). | 74.9 |

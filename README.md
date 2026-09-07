@@ -5,16 +5,33 @@ compressed streams. It includes also a gxz command for compressing and
 decompressing data. The package is completely written in Go and doesn't
 have any dependency on any C code.
 
-APIs are not considered stable. Compression speed and ratio do not match
-the xz tool, whose algorithms have been tuned over a long time.
-Decompression is a different story: see the numbers below, and
-`ParallelReader` for block-parallel decoding of multi-block archives.
+Compression speed and ratio do not match the xz tool, whose algorithms
+have been tuned over a long time. Decompression is a different story: see
+the numbers below, and `ParallelReader` for block-parallel decoding of
+multi-block archives.
+
+## Stability
+
+From v1.0.0 the exported API of `xz`, `lzma` and `xio` follows the Go 1
+compatibility promise within the v1 line: no exported name changes
+meaning or disappears, and code that compiles against v1.0.0 keeps
+compiling. Additive changes (new functions, new fields with zero-value
+defaults) can land in minor releases. `internal/` is not covered, and
+neither is the exact text of error messages — match errors with
+`errors.Is` against `ErrCorrupt`, `ErrUnsupported`, `ErrClosed`,
+`io.ErrUnexpectedEOF` and the `lzma` package's `ErrCorrupt` and
+`ErrUnsupported`, not by string. The minimum Go version is the one in
+`go.mod`; CI runs the current release.
 
 ## About this fork
 
-This here is a friendly fork of https://github.com/ulikunitz/xz.
-Upstream seems inactive. However, if you have time and interest in doing
-that, feel free to carry these changes over there.
+This here is a friendly fork of https://github.com/ulikunitz/xz, taken at
+upstream v0.5.15 and tracking what has landed there since (the only change
+so far, v0.5.16's `IsTerminal` fallback for platforms without terminal
+detection, is ported). Upstream seems inactive. However, if you have time
+and interest in doing that, feel free to carry these changes over there.
+[`CHANGELOG.md`](./CHANGELOG.md) lists what a user migrating from upstream
+will notice.
 
 The fork diverges from upstream in three areas:
 
@@ -39,23 +56,32 @@ counts, sizes and overflows that upstream fed into allocations or loop
 bounds. A `ParallelReader` that is dropped without `Close` winds down
 its goroutines instead of leaking them. Decoding errors are classified:
 everything that means "this input is not valid xz" matches
-`ErrCorrupt`, unsupported-but-valid features match `ErrUnsupported`,
-and I/O errors from the underlying reader pass through untouched, so
-callers can tell a corrupt file from a failed transport. A truncated
-file is reported as such instead of decoding as a shorter one, and a
-writer flush failure surfaces instead of silently producing a short
-stream, as upstream v0.5.16 does for small-dictionary configurations —
-configurations this fork briefly rejected and now encodes correctly.
+`ErrCorrupt` — container and LZMA2 payload alike, the `lzma` package
+having its own `ErrCorrupt` that the xz reader maps — unsupported-but-valid
+features match `ErrUnsupported`, and I/O errors from the underlying reader
+pass through untouched, so callers can tell a corrupt file from a failed
+transport. A truncated file is reported as such instead of decoding as a
+shorter one, and a writer flush failure surfaces instead of silently
+producing a short stream, as upstream v0.5.16 does for small-dictionary
+configurations — configurations this fork briefly rejected and now
+encodes correctly. After a write error the writers report that error
+from then on rather than continue on unknown state (upstream's LZMA2
+writer panics on the next `Write`).
 
-**Verification.** The decoder is differentially tested against
-upstream and against the `xz` tool across encoder configurations,
-payload shapes, multi-stream files and dictionary-growth boundaries,
-and fuzzed both in-repo (serial and parallel readers must agree) and
-against upstream. Malformed-input tests cover truncation and bit flips
-at every offset and a corpus of hostile index constructions with an
-allocation budget. `AUDIT.md` records a full audit of the tree,
-including the findings that led to the fixes above and the negative
-results that were measured and rejected.
+**Verification.** In-tree, the decoder is checked against the `xz`
+tool across check types and encoder configurations, and unit tests
+cover payload shapes, multi-stream files and dictionary-growth
+boundaries. Fuzz targets require the serial and parallel readers to
+agree and round trips through the writer to be exact. Malformed-input
+tests cover truncation and byte flips at every offset — every failure
+must match `ErrCorrupt` or `io.ErrUnexpectedEOF` — and a corpus of
+hostile index constructions with an allocation budget. A differential
+test against upstream (`internal/upstreamdiff`, its own module so the
+library does not depend on upstream; `just test-upstreamdiff`) exchanges
+streams in both directions across configurations and requires the two to
+agree on every corruption verdict except where this fork is deliberately
+stricter. [`PERF.md`](./PERF.md) keeps the performance measurements and
+the negative results that were measured and rejected.
 
 ### Benchmarks
 
@@ -143,6 +169,9 @@ decompression.
 Use following command for installation:
 
     $ go install github.com/forkcloser/xz/cmd/gxz@latest
+
+`gxz -V` prints the module version it was built from. Binaries are not
+published as release assets; `go install` is the supported way to get one.
 
 To test it call the following command.
 
