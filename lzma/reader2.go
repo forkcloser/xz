@@ -201,11 +201,18 @@ func (r *Reader2) Read(p []byte) (n int, err error) {
 		k, err = r.chunkReader.Read(p[n:])
 		n += k
 		if err != nil {
-			if errors.Is(err, io.EOF) {
+			switch {
+			case errors.Is(err, io.EOF):
 				err = r.startChunk()
 				if err == nil {
 					continue
 				}
+			case errors.Is(err, io.ErrUnexpectedEOF) && r.chunkReader == r.decoder:
+				// A compressed chunk is read into memory in full before
+				// the decoder starts (startChunk), so the decoder running
+				// out of bytes is not the input ending early: the chunk
+				// header promised a chunk its bytes do not contain.
+				err = corruptf("lzma: compressed chunk ends before its data does")
 			}
 			r.err = err
 			return n, err

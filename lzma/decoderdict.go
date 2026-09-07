@@ -148,7 +148,7 @@ func (d *decoderDict) byteAt(dist int) byte {
 // first.
 func (d *decoderDict) writeMatch(dist int64, length int) error {
 	if !(0 < length && length <= maxMatchLen) {
-		return errors.New("writeMatch: length out of range")
+		return corruptf("lzma: match length %d out of range", length)
 	}
 	// Grow before validating the distance and the space: growing raises both
 	// dictLen and Available, so checking first could reject a distance the
@@ -157,7 +157,7 @@ func (d *decoderDict) writeMatch(dist int64, length int) error {
 		d.grow(length)
 	}
 	if !(0 < dist && dist <= int64(d.dictLen())) {
-		return errors.New("writeMatch: distance out of range")
+		return corruptf("lzma: match distance %d reaches before the start of the dictionary", dist)
 	}
 	if length > d.buf.Available() {
 		return ErrNoSpace

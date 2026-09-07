@@ -419,8 +419,8 @@ func (h *blockHeader) UnmarshalBinary(data []byte) error {
 	k := r.Len()
 	// The standard spec says that the padding should have not more
 	// than 3 bytes. However we found paddings of 4 or 5 in the
-	// wild. See https://github.com/forkcloser/xz/pull/11 and
-	// https://github.com/forkcloser/xz/issues/15
+	// wild. See https://github.com/ulikunitz/xz/pull/11 and
+	// https://github.com/ulikunitz/xz/issues/15 (upstream).
 	//
 	// The only reasonable approach seems to be to ignore the
 	// padding size. We still check that all padding bytes are zero.
@@ -663,13 +663,21 @@ func writeIndex(w io.Writer, index []record) (n int64, err error) {
 	return n, err
 }
 
+// minBlockSize is the smallest number of bytes a block can occupy in a
+// stream: an eight-byte header (the smallest encodable size), the one-byte
+// LZMA2 end-of-stream chunk of an empty block, and padding to a multiple of
+// four. Any check adds to that.
+const minBlockSize = 12
+
 // readIndexBody reads the index from the reader. It assumes that the
 // index indicator has already been read. A negative expectedRecordLen
 // disables the record-count check (used when the index is parsed before
-// the blocks, as the parallel reader does); the records are read
+// the blocks, as the parallel reader does); the records are then read
 // incrementally, so a hostile count is bounded by the index itself rather
-// than by that check.
-func readIndexBody(r io.Reader, expectedRecordLen int) (records []record, n int64, err error) {
+// than by that check, and a non-negative maxRecords rejects a count that
+// more blocks than the stream has room for would need before any record is
+// read.
+func readIndexBody(r io.Reader, expectedRecordLen, maxRecords int) (records []record, n int64, err error) {
 	crc := crc32.NewIEEE()
 	// index indicator
 	crc.Write([]byte{0})
@@ -690,6 +698,11 @@ func readIndexBody(r io.Reader, expectedRecordLen int) (records []record, n int6
 		return nil, n, corruptf(
 			"xz: index length is %d; want %d",
 			recLen, expectedRecordLen)
+	}
+	if maxRecords >= 0 && recLen > maxRecords {
+		return nil, n, corruptf(
+			"xz: index declares %d records but the stream has room for at most %d blocks",
+			recLen, maxRecords)
 	}
 
 	// List of records. The count is attacker controlled and the parallel

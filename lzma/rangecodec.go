@@ -5,7 +5,6 @@
 package lzma
 
 import (
-	"errors"
 	"io"
 )
 
@@ -13,7 +12,7 @@ import (
 // overflow therefore we need uint64. The cache value is used to handle
 // overflows.
 type rangeEncoder struct {
-	lbw      *LimitedByteWriter
+	lbw      *limitedByteWriter
 	nrange   uint32
 	low      uint64
 	cacheLen int64
@@ -25,9 +24,9 @@ const maxInt64 = 1<<63 - 1
 
 // newRangeEncoder creates a new range encoder.
 func newRangeEncoder(bw io.ByteWriter) (re *rangeEncoder, err error) {
-	lbw, ok := bw.(*LimitedByteWriter)
+	lbw, ok := bw.(*limitedByteWriter)
 	if !ok {
-		lbw = &LimitedByteWriter{BW: bw, N: maxInt64}
+		lbw = &limitedByteWriter{BW: bw, N: maxInt64}
 	}
 	return &rangeEncoder{
 		lbw:      lbw,
@@ -47,7 +46,7 @@ func (e *rangeEncoder) Available() int64 {
 // the underlying writer doesn't return an error.
 func (e *rangeEncoder) writeByte(c byte) error {
 	if e.Available() < 1 {
-		return ErrLimit
+		return errLimit
 	}
 	return e.lbw.WriteByte(c)
 }
@@ -176,7 +175,7 @@ func (d *rangeDecoder) init(br io.ByteReader) error {
 		return d.err
 	}
 	if b != 0 {
-		return errors.New("newRangeDecoder: first byte not zero")
+		return corruptf("lzma: range coder stream does not start with a zero byte")
 	}
 
 	for range 4 {
@@ -187,7 +186,7 @@ func (d *rangeDecoder) init(br io.ByteReader) error {
 	}
 
 	if d.code >= d.nrange {
-		return errors.New("newRangeDecoder: d.code >= d.nrange")
+		return corruptf("lzma: range coder initial code out of range")
 	}
 
 	return nil

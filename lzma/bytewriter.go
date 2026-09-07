@@ -9,25 +9,26 @@ import (
 	"io"
 )
 
-// ErrLimit indicates that the limit of the LimitedByteWriter has been
-// reached.
-var ErrLimit = errors.New("limit reached")
+// errLimit indicates that the limit of the limitedByteWriter has been
+// reached. It is internal to the encoder: Writer2 turns it into a chunk
+// boundary and the classic Writer never sets a limit, so it does not reach a
+// caller.
+var errLimit = errors.New("lzma: chunk limit reached")
 
-// LimitedByteWriter provides a byte writer that can be written until a
+// limitedByteWriter provides a byte writer that can be written until a
 // limit is reached. The field N provides the number of remaining
 // bytes.
-type LimitedByteWriter struct {
+type limitedByteWriter struct {
 	BW io.ByteWriter
 	N  int64
 }
 
 // WriteByte writes a single byte to the limited byte writer. It returns
-// ErrLimit if the limit has been reached. If the byte is successfully
-// written the field N of the LimitedByteWriter will be decremented by
-// one.
-func (l *LimitedByteWriter) WriteByte(c byte) error {
+// errLimit if the limit has been reached. If the byte is successfully
+// written the field N will be decremented by one.
+func (l *limitedByteWriter) WriteByte(c byte) error {
 	if l.N <= 0 {
-		return ErrLimit
+		return errLimit
 	}
 	if err := l.BW.WriteByte(c); err != nil {
 		return err

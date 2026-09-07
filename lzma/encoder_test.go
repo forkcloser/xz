@@ -114,13 +114,13 @@ func TestEncoderCycle2(t *testing.T) {
 		t.Fatalf("properties error %s", err)
 	}
 	state := newState(props)
-	lbw := &LimitedByteWriter{BW: buf, N: 100}
+	lbw := &limitedByteWriter{BW: buf, N: 100}
 	w, err := newEncoder(lbw, state, encoderDict, 0)
 	if err != nil {
 		t.Fatalf("NewEncoder error %s", err)
 	}
 	_, err = io.WriteString(w, txt)
-	if err != nil && !errors.Is(err, ErrLimit) {
+	if err != nil && !errors.Is(err, errLimit) {
 		t.Fatalf("WriteString error %s", err)
 	}
 	if err = w.Close(); err != nil {

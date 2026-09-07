@@ -1,4 +1,4 @@
-// Copyright 2014-2022 Ulrich Kunitz. All rights reserved.
+// Copyright 2026 Forkcloser. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -60,7 +60,7 @@ func TestWriter2CloseReportsFlushFailure(t *testing.T) {
 				"underlying writer failed", allow)
 			continue
 		}
-		if !errors.Is(err, sentinel) && !errors.Is(err, ErrLimit) {
+		if !errors.Is(err, sentinel) && !errors.Is(err, errLimit) {
 			t.Errorf("allow=%d: Close gave %v; want the write error", allow, err)
 		}
 	}

@@ -1,3 +1,7 @@
+// Code generated from LICENSE and the Go distribution's LICENSE for the
+// -L flag. Upstream regenerated it with `xb cat`; the tool is gone, so a
+// change to LICENSE has to be mirrored here by hand.
+
 package main
 
 const goLicense = `Copyright (c) 2009 The Go Authors. All rights reserved.
@@ -29,6 +33,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 `
 const xzLicense = `Copyright (c) 2014-2022  Ulrich Kunitz
+Copyright (c) 2026  Forkcloser (the changes made in this fork)
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without

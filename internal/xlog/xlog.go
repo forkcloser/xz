@@ -3,17 +3,19 @@
 // license that can be found in the LICENSE file.
 
 // Package xlog provides a simple logging package that allows to disable
-// certain message categories. It defines a type, Logger, with multiple
-// methods for formatting output. The package has also a predefined
-// 'standard' Logger accessible through helper function Print[f|ln],
-// Fatal[f|ln], Panic[f|ln], Warn[f|ln], Print[f|ln] and Debug[f|ln]
-// that are easier to use then creating a Logger manually. That logger
-// writes to standard error and prints the date and time of each logged
-// message, which can be configured using the function SetFlags.
+// certain message categories. It defines a type, Logger, and a predefined
+// 'standard' Logger reached through the package-level functions (Printf,
+// Warn, Debugf, Fatal, Fatalf, Panicf and the flag and prefix setters),
+// which is what the gxz command and the library's debug output use. That
+// logger writes to standard error and prints the date and time of each
+// logged message, which can be configured using the function SetFlags.
 //
 // The Fatal functions call os.Exit(1) after the message is output
 // unless not suppressed by the flags. The Panic functions call panic
 // after the writing the log message unless suppressed.
+//
+// Only the entry points the tree uses are kept; upstream's full Print, Warn,
+// Debug, Fatal and Panic families were trimmed before 1.0.
 package xlog
 
 import (
@@ -185,71 +187,12 @@ func (l *Logger) Outputf(calldepth int, noflag int, format string, v ...any) err
 	return l.output(calldepth+1, now, s)
 }
 
-// Outputln works like output but formats the output like Println.
-func (l *Logger) Outputln(calldepth int, noflag int, v ...any) error {
-	now := time.Now()
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.flag&noflag != 0 {
-		return nil
-	}
-	s := fmt.Sprintln(v...)
-	return l.output(calldepth+1, now, s)
-}
-
-// Panic prints the message like Print and calls panic. The printing
-// might be suppressed by the flag Lnopanic.
-func (l *Logger) Panic(v ...any) {
-	l.Output(2, Lnopanic, v...)
-	s := fmt.Sprint(v...)
-	panic(s)
-}
-
-// Panic prints the message like Print and calls panic. The printing
-// might be suppressed by the flag Lnopanic.
-func Panic(v ...any) {
-	std.Output(2, Lnopanic, v...)
-	s := fmt.Sprint(v...)
-	panic(s)
-}
-
-// Panicf prints the message like Printf and calls panic. The printing
-// might be suppressed by the flag Lnopanic.
-func (l *Logger) Panicf(format string, v ...any) {
-	l.Outputf(2, Lnopanic, format, v...)
-	s := fmt.Sprintf(format, v...)
-	panic(s)
-}
-
 // Panicf prints the message like Printf and calls panic. The printing
 // might be suppressed by the flag Lnopanic.
 func Panicf(format string, v ...any) {
 	std.Outputf(2, Lnopanic, format, v...)
 	s := fmt.Sprintf(format, v...)
 	panic(s)
-}
-
-// Panicln prints the message like Println and calls panic. The printing
-// might be suppressed by the flag Lnopanic.
-func (l *Logger) Panicln(v ...any) {
-	l.Outputln(2, Lnopanic, v...)
-	s := fmt.Sprintln(v...)
-	panic(s)
-}
-
-// Panicln prints the message like Println and calls panic. The printing
-// might be suppressed by the flag Lnopanic.
-func Panicln(v ...any) {
-	std.Outputln(2, Lnopanic, v...)
-	s := fmt.Sprintln(v...)
-	panic(s)
-}
-
-// Fatal prints the message like Print and calls os.Exit(1). The
-// printing might be suppressed by the flag Lnofatal.
-func (l *Logger) Fatal(v ...any) {
-	l.Output(2, Lnofatal, v...)
-	os.Exit(1)
 }
 
 // Fatal prints the message like Print and calls os.Exit(1). The
@@ -261,36 +204,9 @@ func Fatal(v ...any) {
 
 // Fatalf prints the message like Printf and calls os.Exit(1). The
 // printing might be suppressed by the flag Lnofatal.
-func (l *Logger) Fatalf(format string, v ...any) {
-	l.Outputf(2, Lnofatal, format, v...)
-	os.Exit(1)
-}
-
-// Fatalf prints the message like Printf and calls os.Exit(1). The
-// printing might be suppressed by the flag Lnofatal.
 func Fatalf(format string, v ...any) {
 	std.Outputf(2, Lnofatal, format, v...)
 	os.Exit(1)
-}
-
-// Fatalln prints the message like Println and calls os.Exit(1). The
-// printing might be suppressed by the flag Lnofatal.
-func (l *Logger) Fatalln(format string, v ...any) {
-	l.Outputln(2, Lnofatal, v...)
-	os.Exit(1)
-}
-
-// Fatalln prints the message like Println and calls os.Exit(1). The
-// printing might be suppressed by the flag Lnofatal.
-func Fatalln(format string, v ...any) {
-	std.Outputln(2, Lnofatal, v...)
-	os.Exit(1)
-}
-
-// Warn prints the message like Print. The printing might be suppressed
-// by the flag Lnowarn.
-func (l *Logger) Warn(v ...any) {
-	l.Output(2, Lnowarn, v...)
 }
 
 // Warn prints the message like Print. The printing might be suppressed
@@ -299,64 +215,10 @@ func Warn(v ...any) {
 	std.Output(2, Lnowarn, v...)
 }
 
-// Warnf prints the message like Printf. The printing might be suppressed
-// by the flag Lnowarn.
-func (l *Logger) Warnf(format string, v ...any) {
-	l.Outputf(2, Lnowarn, format, v...)
-}
-
-// Warnf prints the message like Printf. The printing might be suppressed
-// by the flag Lnowarn.
-func Warnf(format string, v ...any) {
-	std.Outputf(2, Lnowarn, format, v...)
-}
-
-// Warnln prints the message like Println. The printing might be suppressed
-// by the flag Lnowarn.
-func (l *Logger) Warnln(v ...any) {
-	l.Outputln(2, Lnowarn, v...)
-}
-
-// Warnln prints the message like Println. The printing might be suppressed
-// by the flag Lnowarn.
-func Warnln(v ...any) {
-	std.Outputln(2, Lnowarn, v...)
-}
-
-// Print prints the message like fmt.Print. The printing might be suppressed
-// by the flag Lnoprint.
-func (l *Logger) Print(v ...any) {
-	l.Output(2, Lnoprint, v...)
-}
-
-// Print prints the message like fmt.Print. The printing might be suppressed
-// by the flag Lnoprint.
-func Print(v ...any) {
-	std.Output(2, Lnoprint, v...)
-}
-
-// Printf prints the message like fmt.Printf. The printing might be suppressed
-// by the flag Lnoprint.
-func (l *Logger) Printf(format string, v ...any) {
-	l.Outputf(2, Lnoprint, format, v...)
-}
-
 // Printf prints the message like fmt.Printf. The printing might be suppressed
 // by the flag Lnoprint.
 func Printf(format string, v ...any) {
 	std.Outputf(2, Lnoprint, format, v...)
-}
-
-// Println prints the message like fmt.Println. The printing might be
-// suppressed by the flag Lnoprint.
-func (l *Logger) Println(v ...any) {
-	l.Outputln(2, Lnoprint, v...)
-}
-
-// Println prints the message like fmt.Println. The printing might be
-// suppressed by the flag Lnoprint.
-func Println(v ...any) {
-	std.Outputln(2, Lnoprint, v...)
 }
 
 // DebugEnabled reports whether the logger emits debug output, so hot paths
@@ -375,40 +237,10 @@ func DebugEnabled() bool {
 	return std.DebugEnabled()
 }
 
-// Debug prints the message like Print. The printing might be suppressed
-// by the flag Lnodebug.
-func (l *Logger) Debug(v ...any) {
-	l.Output(2, Lnodebug, v...)
-}
-
-// Debug prints the message like Print. The printing might be suppressed
-// by the flag Lnodebug.
-func Debug(v ...any) {
-	std.Output(2, Lnodebug, v...)
-}
-
-// Debugf prints the message like Printf. The printing might be suppressed
-// by the flag Lnodebug.
-func (l *Logger) Debugf(format string, v ...any) {
-	l.Outputf(2, Lnodebug, format, v...)
-}
-
 // Debugf prints the message like Printf. The printing might be suppressed
 // by the flag Lnodebug.
 func Debugf(format string, v ...any) {
 	std.Outputf(2, Lnodebug, format, v...)
-}
-
-// Debugln prints the message like Println. The printing might be suppressed
-// by the flag Lnodebug.
-func (l *Logger) Debugln(v ...any) {
-	l.Outputln(2, Lnodebug, v...)
-}
-
-// Debugln prints the message like Println. The printing might be suppressed
-// by the flag Lnodebug.
-func Debugln(v ...any) {
-	std.Outputln(2, Lnodebug, v...)
 }
 
 // Flags returns the current flags used by the logger.
@@ -435,18 +267,6 @@ func SetFlags(flag int) {
 	std.SetFlags(flag)
 }
 
-// Prefix returns the prefix used by the logger.
-func (l *Logger) Prefix() string {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.prefix
-}
-
-// Prefix returns the prefix used by the standard logger of the package.
-func Prefix() string {
-	return std.Prefix()
-}
-
 // SetPrefix sets the prefix for the logger.
 func (l *Logger) SetPrefix(prefix string) {
 	l.mu.Lock()
@@ -457,16 +277,4 @@ func (l *Logger) SetPrefix(prefix string) {
 // SetPrefix sets the prefix of the standard logger of the package.
 func SetPrefix(prefix string) {
 	std.SetPrefix(prefix)
-}
-
-// SetOutput sets the output of the logger.
-func (l *Logger) SetOutput(w io.Writer) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.out = w
-}
-
-// SetOutput sets the output for the standard logger of the package.
-func SetOutput(w io.Writer) {
-	std.SetOutput(w)
 }

@@ -76,6 +76,13 @@ func (c *Writer2Config) Verify() error {
 type Writer2 struct {
 	w io.Writer
 
+	// err is the first error returned by the underlying writer or the
+	// encoder. Once set, Write, Flush and Close return it: the chunk in
+	// progress may have been partly written, so continuing would produce a
+	// stream the encoder cannot vouch for — and, with the chunk accounting
+	// left mid-flight, used to panic on the next Write.
+	err error
+
 	start   *state
 	encoder *encoder
 
@@ -83,7 +90,7 @@ type Writer2 struct {
 	ctype  chunkType
 
 	buf bytes.Buffer
-	lbw LimitedByteWriter
+	lbw limitedByteWriter
 }
 
 // NewWriter2 creates an LZMA2 chunk sequence writer with the default
@@ -104,7 +111,7 @@ func (c Writer2Config) NewWriter2(lzma2 io.Writer) (w *Writer2, err error) {
 		ctype:  start.defaultChunkType(),
 	}
 	w.buf.Grow(maxCompressed)
-	w.lbw = LimitedByteWriter{BW: &w.buf, N: maxCompressed}
+	w.lbw = limitedByteWriter{BW: &w.buf, N: maxCompressed}
 	m, err := c.Matcher.new(c.DictCap)
 	if err != nil {
 		return nil, err
@@ -136,9 +143,13 @@ var errClosed = errors.New("lzma: writer closed")
 // Use Flush or Close to ensure that data is written to the underlying
 // writer.
 func (w *Writer2) Write(p []byte) (n int, err error) {
+	if w.err != nil {
+		return 0, w.err
+	}
 	if w.cstate == stop {
 		return 0, errClosed
 	}
+	defer func() { w.setErr(err) }()
 	for n < len(p) {
 		m := maxUncompressed - w.written()
 		if m <= 0 {
@@ -152,10 +163,10 @@ func (w *Writer2) Write(p []byte) (n int, err error) {
 		}
 		k, err := w.encoder.Write(q)
 		n += k
-		if err != nil && !errors.Is(err, ErrLimit) {
+		if err != nil && !errors.Is(err, errLimit) {
 			return n, err
 		}
-		if errors.Is(err, ErrLimit) || k == m {
+		if errors.Is(err, errLimit) || k == m {
 			if err = w.flushChunk(); err != nil {
 				return n, err
 			}
@@ -281,31 +292,48 @@ func (w *Writer2) flushChunk() error {
 	return nil
 }
 
+// setErr records the first failure so later calls report it instead of
+// continuing on a writer whose state is unknown. errClosed is a state, not a
+// failure, and is not recorded.
+func (w *Writer2) setErr(err error) {
+	if err != nil && w.err == nil && !errors.Is(err, errClosed) {
+		w.err = err
+	}
+}
+
 // Flush writes all buffered data out to the underlying stream. This
 // could result in multiple chunks to be created.
-func (w *Writer2) Flush() error {
+func (w *Writer2) Flush() (err error) {
+	if w.err != nil {
+		return w.err
+	}
 	if w.cstate == stop {
 		return errClosed
 	}
+	defer func() { w.setErr(err) }()
 	for w.written() > 0 {
-		if err := w.flushChunk(); err != nil {
+		if err = w.flushChunk(); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// Close terminates the LZMA2 stream with an EOS chunk.
-func (w *Writer2) Close() error {
+// Close terminates the LZMA2 stream with an EOS chunk. After a failed Write
+// or Flush it returns that error and writes nothing.
+func (w *Writer2) Close() (err error) {
+	if w.err != nil {
+		return w.err
+	}
 	if w.cstate == stop {
 		return errClosed
 	}
-	if err := w.Flush(); err != nil {
+	defer func() { w.setErr(err) }()
+	if err = w.Flush(); err != nil {
 		return err
 	}
 	// write zero byte EOS chunk
-	_, err := w.w.Write([]byte{0})
-	if err != nil {
+	if _, err = w.w.Write([]byte{0}); err != nil {
 		return err
 	}
 	w.cstate = stop

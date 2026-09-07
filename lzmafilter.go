@@ -5,7 +5,6 @@
 package xz
 
 import (
-	"errors"
 	"fmt"
 	"io"
 
@@ -80,8 +79,10 @@ func (f lzmaFilter) reader(r io.Reader, c *ReaderConfig, cache *lzma2Cache) (
 	}
 	dc := int(f.dictCap)
 	if dc < 1 {
-		return nil, errors.New("xz: LZMA2 filter parameter " +
-			"dictionary capacity overflow")
+		// Only reachable where int is 32 bits wide: the block asks for a
+		// dictionary the address space cannot hold. The file is valid; this
+		// platform cannot decode it.
+		return nil, unsupportedf("xz: LZMA2 dictionary capacity %d exceeds the address space", f.dictCap)
 	}
 	if dc > config.DictCap {
 		config.DictCap = dc
@@ -116,8 +117,7 @@ func (f lzmaFilter) writeCloser(w io.WriteCloser, c *WriterConfig,
 
 	dc := int(f.dictCap)
 	if dc < 1 {
-		return nil, errors.New("xz: LZMA2 filter parameter " +
-			"dictionary capacity overflow")
+		return nil, unsupportedf("xz: LZMA2 dictionary capacity %d exceeds the address space", f.dictCap)
 	}
 	if dc > config.DictCap {
 		config.DictCap = dc

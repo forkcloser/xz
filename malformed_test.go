@@ -1,4 +1,4 @@
-// Copyright 2014-2022 Ulrich Kunitz. All rights reserved.
+// Copyright 2026 Forkcloser. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -437,5 +437,59 @@ func TestIndexIndicatorAtBlockIsCorrupt(t *testing.T) {
 	}
 	if !errors.Is(err, ErrCorrupt) {
 		t.Errorf("parallel reader returned %v; want a match for ErrCorrupt", err)
+	}
+}
+
+// TestBlockHeaderRunningPastBlockIsCorrupt covers a block header whose size
+// byte claims more bytes than the block's section of the file holds. The
+// parallel reader reads each block through a section reader bounded by the
+// index, so the header read ran into io.EOF — and that bare EOF was taken for
+// the end of the stream: the read returned zero bytes and no error, a
+// truncated file passed off as complete. The sequential reader reported the
+// same input as unexpected EOF all along.
+//
+// The blocks have to be small enough that the enlarged header overruns them
+// (TestSingleByteCorruptionAtEveryOffset's 1 KiB blocks are not: there the
+// enlarged header stays inside the block and fails its CRC instead), so the
+// input is highly compressible.
+func TestBlockHeaderRunningPastBlockIsCorrupt(t *testing.T) {
+	data := bytes.Repeat([]byte("a"), 180000)
+	full := compressMultiBlock(t, data, 60000)
+	blocks, _, err := parseBlocks(bytes.NewReader(full), int64(len(full)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The first block header starts after the 12-byte stream header; 0xff
+	// there claims a 1024-byte header.
+	const hdrOff = 12
+	if blocks[0].paddedSize() >= 1024 {
+		t.Fatalf("first block is %d bytes; the fixture needs it under 1024",
+			blocks[0].paddedSize())
+	}
+	bad := append([]byte{}, full...)
+	bad[hdrOff] = 0xff
+
+	pr, err := NewParallelReader(bytes.NewReader(bad), int64(len(bad)))
+	if err != nil {
+		t.Fatalf("NewParallelReader: %v", err)
+	}
+	got, err := io.ReadAll(pr)
+	_ = pr.Close()
+	if err == nil {
+		t.Fatalf("parallel reader returned %d bytes and no error for a block header that overruns its block", len(got))
+	}
+	if !errors.Is(err, ErrCorrupt) {
+		t.Errorf("parallel reader returned %v; want a match for ErrCorrupt", err)
+	}
+
+	r, err := NewReader(bytes.NewReader(bad))
+	if err == nil {
+		_, err = io.ReadAll(r)
+	}
+	if err == nil {
+		t.Fatal("sequential reader accepted a block header that overruns its block")
+	}
+	if !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, ErrCorrupt) {
+		t.Errorf("sequential reader returned %v; want unexpected EOF or a match for ErrCorrupt", err)
 	}
 }

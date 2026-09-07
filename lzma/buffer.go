@@ -126,9 +126,10 @@ func (b *buffer) Discard(n int) (discarded int, err error) {
 	return n, err
 }
 
-// ErrNoSpace indicates that there is insufficient space for the Write
-// operation.
-var ErrNoSpace = errors.New("insufficient space")
+// ErrNoSpace reports that a write did not fit. It reaches callers of the
+// classic Writer: when the header declares an uncompressed size, Write
+// accepts exactly that many bytes and returns ErrNoSpace for the rest.
+var ErrNoSpace = errors.New("lzma: insufficient space")
 
 // Write puts data into the  buffer. If less bytes are written than
 // requested ErrNoSpace is returned.
