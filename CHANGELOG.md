@@ -9,7 +9,7 @@ upstream's own `doc/relnotes`. The entries below are what a user of
 `github.com/ulikunitz/xz` v0.5.16 will notice when switching the import
 path.
 
-## [Unreleased]
+## [1.0.0-rc.1] - 2026-09-07
 
 ### Added
 
