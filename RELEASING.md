@@ -10,11 +10,12 @@ into `gxz -V` through the build info.
    today's date. Every behaviour a user could notice belongs there.
 2. `just lint && just test` on a clean tree, and CI green on `main` for the
    commit to be tagged (all five verify legs and the fuzz job).
-3. Tag and push. The tag is signed — `CONTRIBUTING.md` requires it — and is
-   pushed alone, never with `--tags`:
+3. Tag and push with the shared recipe, as a repository admin (the
+   `limen:tags` ruleset's only bypass actor). It refuses a dirty tree, signs
+   the tag — the organization's `CONTRIBUTING.md` requires it — and pushes
+   the tag alone, never with `--tags`:
 
-       git tag -s vX.Y.Z -m vX.Y.Z
-       git push origin refs/tags/vX.Y.Z
+       just do release vX.Y.Z
 
 4. Check what the proxy sees: `go list -m github.com/forkcloser/xz@vX.Y.Z`
    from outside the tree, then `go install github.com/forkcloser/xz/cmd/gxz@vX.Y.Z`
