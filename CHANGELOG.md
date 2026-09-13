@@ -9,6 +9,15 @@ upstream's own `doc/relnotes`. The entries below are what a user of
 `github.com/ulikunitz/xz` v0.5.16 will notice when switching the import
 path.
 
+## [Unreleased]
+
+### Removed
+
+- Terminal detection on DragonFly BSD, NetBSD, OpenBSD and illumos. `gxz` on
+  those systems now takes the generic path and never refuses to write
+  compressed data to a terminal. Supported platforms are Linux, macOS,
+  Windows and FreeBSD.
+
 ## [1.0.0-rc.1] - 2026-09-07
 
 ### Added
