@@ -11,14 +11,7 @@ path.
 
 ## [Unreleased]
 
-### Removed
-
-- Terminal detection on DragonFly BSD, NetBSD, OpenBSD and illumos. `gxz` on
-  those systems now takes the generic path and never refuses to write
-  compressed data to a terminal. Supported platforms are Linux, macOS,
-  Windows and FreeBSD.
-
-## [1.0.0-rc.1] - 2026-09-07
+## [1.0.0] - 2026-09-12
 
 ### Added
 
@@ -80,6 +73,8 @@ path.
 - Copyright headers name this fork on the files it authored, and `LICENSE`
   carries the fork's line alongside upstream's; the licence terms are
   unchanged (BSD-3-Clause).
+- Requires Go 1.26: the `go` directive is 1.26.0, raised with
+  `golang.org/x/sys` v0.48.0.
 
 ### Removed
 
@@ -102,6 +97,10 @@ path.
   documentation.
 - Unreachable functions in `internal/gflag` and `internal/xlog`. Both are
   internal; nothing outside the module could use them.
+- Terminal detection on DragonFly BSD, NetBSD, OpenBSD and illumos. `gxz` on
+  those systems now takes the generic path and never refuses to write
+  compressed data to a terminal. Supported platforms are Linux, macOS,
+  Windows and FreeBSD.
 
 ### Fixed
 
