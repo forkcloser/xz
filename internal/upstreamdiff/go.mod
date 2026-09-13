@@ -1,6 +1,6 @@
 module github.com/forkcloser/xz/internal/upstreamdiff
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/forkcloser/xz v0.0.0
