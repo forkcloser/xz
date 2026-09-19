@@ -195,10 +195,10 @@ To decompress it use the following command.
 
 ## Security & Vulnerabilities
 
-The security policy is documented in [SECURITY.md](SECURITY.md). 
+The security policy is documented in [SECURITY.md](SECURITY.md).
 
 The software is not affected by the supply chain attack on the original xz
-implementation, [CVE-2024-3094](https://nvd.nist.gov/vuln/detail/CVE-2024-3094).
+implementation, [CVE-2024-3094](https://www.cve.org/CVERecord?id=CVE-2024-3094).
 This implementation doesn't share any files with the original xz implementation
 and no patches or pull requests are accepted without a review.
 
