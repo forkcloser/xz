@@ -7,7 +7,7 @@
     "ignoreDeps: internal/upstreamdiff requires github.com/forkcloser/xz at v0.0.0 behind a replace to the parent tree, so the version is meaningless there; without this Renovate proposes bumping it to every new tag of this very module."
   ],
   "extends": [
-    "github>farcloser/limen#v0.4.0"
+    "github>farcloser/limen#v0.5.0"
   ],
   "forkProcessing": "enabled",
   "gitIgnoredAuthors": [
