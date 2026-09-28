@@ -102,7 +102,7 @@ func newHashFunc(flags byte) (newHash func() hash.Hash, err error) {
 		err = errInvalidFlags
 	}
 
-	return
+	return newHash, err
 }
 
 // header provides the actual content of the xz file header: the flags.
@@ -218,7 +218,8 @@ func (f *footer) MarshalBinary() (data []byte, err error) {
 
 	if f.indexSize%4 != 0 {
 		return nil, errors.New(
-			"xz: index size not aligned to four bytes")
+			"xz: index size not aligned to four bytes",
+		)
 	}
 
 	data = make([]byte, footerLen)
@@ -431,14 +432,16 @@ func (h *blockHeader) UnmarshalBinary(data []byte) error {
 	var err error
 
 	h.compressedSize, err = readSizeInBlockHeader(
-		r, flags&compressedSizePresent != 0)
+		r, flags&compressedSizePresent != 0,
+	)
 	if err != nil {
 		return err
 	}
 
 	// Uncompressed size
 	h.uncompressedSize, err = readSizeInBlockHeader(
-		r, flags&uncompressedSizePresent != 0)
+		r, flags&uncompressedSizePresent != 0,
+	)
 	if err != nil {
 		return err
 	}
@@ -476,7 +479,8 @@ func (h *blockHeader) MarshalBinary() (data []byte, err error) {
 		if i < len(h.filters)-1 {
 			if f.id() == lzmaFilterID {
 				return nil, errors.New(
-					"xz: LZMA2 filter is not the last")
+					"xz: LZMA2 filter is not the last",
+				)
 			}
 		} else {
 			// last filter
@@ -595,7 +599,8 @@ func readFilter(r io.Reader) (f filter, err error) {
 	default:
 		if id >= minReservedID {
 			return nil, corruptf(
-				"xz: reserved filter id in block stream header")
+				"xz: reserved filter id in block stream header",
+			)
 		}
 
 		return nil, unsupportedf("xz: invalid filter id")
@@ -761,13 +766,15 @@ func readIndexBody(r io.Reader, expectedRecordLen, maxRecords int) (records []re
 	if expectedRecordLen >= 0 && recLen != expectedRecordLen {
 		return nil, n, corruptf(
 			"xz: index length is %d; want %d",
-			recLen, expectedRecordLen)
+			recLen, expectedRecordLen,
+		)
 	}
 
 	if maxRecords >= 0 && recLen > maxRecords {
 		return nil, n, corruptf(
 			"xz: index declares %d records but the stream has room for at most %d blocks",
-			recLen, maxRecords)
+			recLen, maxRecords,
+		)
 	}
 
 	// List of records. The count is attacker controlled and the parallel

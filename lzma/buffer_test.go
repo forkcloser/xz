@@ -275,7 +275,8 @@ func TestMatchLen(t *testing.T) {
 		if n != c.n {
 			t.Errorf(
 				"MatchLen(%d,[]byte(%q)) returned %d; want %d",
-				c.d, s, n, c.n)
+				c.d, s, n, c.n,
+			)
 		}
 	}
 }

@@ -110,7 +110,8 @@ func (e *ErrDictSize) Error() string {
 
 func newErrDictSize(messageformat string,
 	configDictCap int, headerDictSize uint32,
-	args ...any) *ErrDictSize {
+	args ...any,
+) *ErrDictSize {
 	newArgs := make([]any, len(args)+2)
 	newArgs[0] = configDictCap
 	newArgs[1] = headerDictSize
@@ -184,7 +185,8 @@ func (c ReaderConfig) NewReader(lzma io.Reader) (r *Reader, err error) {
 	if size > maxStreamSize {
 		return nil, unsupportedf(
 			"lzma: stream size %d exceeds a pebibyte (1024^5)",
-			size)
+			size,
+		)
 	}
 
 	if dictSize < MinDictCap {

@@ -64,7 +64,7 @@ func (c *literalCodec) Encode(e *rangeEncoder, s byte,
 
 			i := ((1 + matchBit) << 8) | symbol
 			if err = probs[i].Encode(e, bit); err != nil {
-				return
+				return err
 			}
 
 			symbol = (symbol << 1) | bit
@@ -83,7 +83,7 @@ func (c *literalCodec) Encode(e *rangeEncoder, s byte,
 		r <<= 1
 
 		if err = probs[symbol].Encode(e, bit); err != nil {
-			return
+			return err
 		}
 
 		symbol = (symbol << 1) | bit
@@ -99,7 +99,7 @@ func (c *literalCodec) Encode(e *rangeEncoder, s byte,
 // loops are free of calls and error branches; read errors are sticky on the
 // decoder and checked once per operation.
 func (c *literalCodec) decode(d *rangeDecoder,
-	state uint32, match byte, litState uint32, rng, code uint32,
+	state uint32, match byte, litState, rng, code uint32,
 ) (s byte, nrng, ncode uint32) {
 	k := litState * 0x300
 	probs := c.probs[k : k+0x300]

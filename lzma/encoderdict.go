@@ -34,12 +34,14 @@ type encoderDict struct {
 func newEncoderDict(dictCap, bufSize int, m matcher) (d *encoderDict, err error) {
 	if !(1 <= dictCap && int64(dictCap) <= MaxDictCap) {
 		return nil, errors.New(
-			"lzma: dictionary capacity out of range")
+			"lzma: dictionary capacity out of range",
+		)
 	}
 
 	if bufSize < 1 {
 		return nil, errors.New(
-			"lzma: buffer size must be larger than zero")
+			"lzma: buffer size must be larger than zero",
+		)
 	}
 
 	d = &encoderDict{

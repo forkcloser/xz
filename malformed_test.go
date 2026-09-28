@@ -218,17 +218,20 @@ func TestUnsupportedFilterID(t *testing.T) {
 	// A reserved filter id must be reported as reserved rather than merely
 	// unknown, and an unknown one as unsupported.
 	if _, err := readFilter(bytes.NewReader(
-		uvarintBytes(minReservedID))); err == nil {
+		uvarintBytes(minReservedID),
+	)); err == nil {
 		t.Error("reserved filter id accepted")
 	}
 
 	if _, err := readFilter(bytes.NewReader([]byte{0x22})); !errors.Is(
-		err, ErrUnsupported) {
+		err, ErrUnsupported,
+	) {
 		t.Errorf("unknown filter id gave %v; want a match for ErrUnsupported", err)
 	}
 
 	if _, err := readFilters(bytes.NewReader([]byte{0x21, 0x01, 0x00}), 2); !errors.Is(
-		err, ErrUnsupported) {
+		err, ErrUnsupported,
+	) {
 		t.Errorf("two filters gave %v; want a match for ErrUnsupported", err)
 	}
 }

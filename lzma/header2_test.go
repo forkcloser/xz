@@ -68,7 +68,12 @@ func TestHeaderLen(t *testing.T) {
 		c chunkType
 		n int
 	}{
-		{cEOS, 1}, {cU, 3}, {cUD, 3}, {cL, 5}, {cLR, 5}, {cLRN, 6},
+		{cEOS, 1},
+		{cU, 3},
+		{cUD, 3},
+		{cL, 5},
+		{cLR, 5},
+		{cLRN, 6},
 		{cLRND, 6},
 	}
 	for _, tc := range tests {

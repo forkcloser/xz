@@ -345,7 +345,7 @@ func (cw *countingWriter) Write(p []byte) (n int, err error) {
 		return n, errors.New("xz: counter overflow")
 	}
 
-	return
+	return n, err
 }
 
 // blockWriter is writes a single block.

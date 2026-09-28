@@ -76,7 +76,7 @@ func (b *buffer) Available() int {
 // addIndex adds a non-negative integer to the index i and returns the
 // resulting index. The function takes care of wrapping the index as
 // well as potential overflow situations.
-func (b *buffer) addIndex(i int, n int) int {
+func (b *buffer) addIndex(i, n int) int {
 	// subtraction of len(b.data) prevents overflow
 	i += n - len(b.data)
 	if i < 0 {
@@ -129,7 +129,8 @@ func (b *buffer) Discard(n int) (discarded int, err error) {
 	if m < n {
 		n = m
 		err = errors.New(
-			"buffer.Discard: discarded less bytes then requested")
+			"buffer.Discard: discarded less bytes then requested",
+		)
 	}
 
 	b.rear = b.addIndex(b.rear, n)

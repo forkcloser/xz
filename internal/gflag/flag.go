@@ -144,11 +144,11 @@ func writeLines(w io.Writer, ls lines) (n int, err error) {
 		n += k
 
 		if err != nil {
-			return
+			return n, err
 		}
 	}
 
-	return
+	return n, err
 }
 
 func (l lines) Len() int           { return len(l) }

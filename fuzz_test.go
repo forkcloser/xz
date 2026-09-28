@@ -114,7 +114,8 @@ func FuzzParallelReader(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		r, err := ParallelReaderConfig{Workers: 2}.NewParallelReader(
-			bytes.NewReader(data), int64(len(data)))
+			bytes.NewReader(data), int64(len(data)),
+		)
 		if err != nil {
 			return
 		}

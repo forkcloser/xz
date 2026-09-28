@@ -352,7 +352,8 @@ type blockReader struct {
 // newBlockReader creates a new block reader. A non-nil cache lets the block
 // reuse the LZMA2 reader of the previous block.
 func (c *ReaderConfig) newBlockReader(xz io.Reader, h *blockHeader,
-	hlen int, hash hash.Hash, cache *lzma2Cache) (br *blockReader, err error) {
+	hlen int, hash hash.Hash, cache *lzma2Cache,
+) (br *blockReader, err error) {
 	br = &blockReader{
 		lxz:       countingReader{r: xz},
 		header:    h,
@@ -451,7 +452,8 @@ func (br *blockReader) Read(p []byte) (n int, err error) {
 }
 
 func (c *ReaderConfig) newFilterReader(r io.Reader, f []filter,
-	cache *lzma2Cache) (fr io.Reader, err error) {
+	cache *lzma2Cache,
+) (fr io.Reader, err error) {
 	if err = verifyFilters(f); err != nil {
 		return nil, err
 	}

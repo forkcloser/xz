@@ -32,7 +32,8 @@ func newRangeEncoder(bw io.ByteWriter) (re *rangeEncoder, err error) {
 	return &rangeEncoder{
 		lbw:      lbw,
 		nrange:   0xffffffff,
-		cacheLen: 1}, nil
+		cacheLen: 1,
+	}, nil
 }
 
 // Available returns the number of bytes that still can be written. The

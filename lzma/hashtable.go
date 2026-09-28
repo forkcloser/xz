@@ -78,10 +78,11 @@ func hashTableExponent(n uint32) int {
 }
 
 // newHashTable creates a new hash table for words of length wordLen
-func newHashTable(capacity int, wordLen int) (t *hashTable, err error) {
+func newHashTable(capacity, wordLen int) (t *hashTable, err error) {
 	if !(0 < capacity) {
 		return nil, errors.New(
-			"newHashTable: capacity must not be negative")
+			"newHashTable: capacity must not be negative",
+		)
 	}
 
 	exp := hashTableExponent(uint32(capacity))
@@ -249,7 +250,8 @@ func (t *hashTable) hash(p []byte) uint64 {
 func (t *hashTable) Matches(p []byte, positions []int64) int {
 	if len(p) != t.wordLen {
 		panic(fmt.Errorf(
-			"byte slice must have length %d", t.wordLen))
+			"byte slice must have length %d", t.wordLen,
+		))
 	}
 
 	h := t.hash(p)

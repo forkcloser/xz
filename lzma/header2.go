@@ -93,7 +93,7 @@ func headerChunkType(h byte) (c chunkType, err error) {
 			return 0, errHeaderByte
 		}
 
-		return
+		return c, err
 	}
 
 	switch h & hLRND {
@@ -109,7 +109,7 @@ func headerChunkType(h byte) (c chunkType, err error) {
 		return 0, errHeaderByte
 	}
 
-	return
+	return c, err
 }
 
 // uncompressedHeaderLen provides the length of an uncompressed header

@@ -62,8 +62,10 @@ var formats = map[string]*format{
 		newCompressor: func(w io.Writer, opts *options,
 		) (c io.WriteCloser, err error) {
 			lc := lzma.WriterConfig{
-				Properties: &lzma.Properties{LC: 3, LP: 0,
-					PB: 2},
+				Properties: &lzma.Properties{
+					LC: 3, LP: 0,
+					PB: 2,
+				},
 				DictCap: 1 << lzmaDictCapExps[opts.preset],
 			}
 
@@ -137,12 +139,14 @@ func targetName(path string, opts *options) (target string, err error) {
 	if !opts.decompress {
 		if strings.HasSuffix(path, ext) {
 			return "", fmt.Errorf(
-				"%s: file has already %s suffix", path, ext)
+				"%s: file has already %s suffix", path, ext,
+			)
 		}
 
 		if strings.HasSuffix(path, tarExt) {
 			return "", fmt.Errorf(
-				"%s: file has already %s suffix", path, tarExt)
+				"%s: file has already %s suffix", path, tarExt,
+			)
 		}
 
 		return path + ext, nil
@@ -240,7 +244,8 @@ func newWriter(path string, perm os.FileMode, opts *options,
 			if !opts.force {
 				return nil, &userPathError{
 					Path: name,
-					Err:  errors.New("file exists")}
+					Err:  errors.New("file exists"),
+				}
 			}
 		}
 
@@ -366,8 +371,10 @@ func openFile(path string, opts *options) (f *os.File, err error) {
 	fm := fi.Mode()
 	if !fm.IsRegular() {
 		if !opts.force || fm&os.ModeSymlink == 0 {
-			return nil, &userPathError{Path: path,
-				Err: errNoRegular}
+			return nil, &userPathError{
+				Path: path,
+				Err:  errNoRegular,
+			}
 		}
 	}
 
@@ -385,8 +392,10 @@ func openFile(path string, opts *options) (f *os.File, err error) {
 	}
 
 	if fm&specialBits != 0 && !opts.force {
-		return nil, &userPathError{Path: path,
-			Err: errors.New("setuid, setgid and/or sticky bit set")}
+		return nil, &userPathError{
+			Path: path,
+			Err:  errors.New("setuid, setgid and/or sticky bit set"),
+		}
 	}
 
 	return f, nil
@@ -425,7 +434,8 @@ func readerFormat(br *bufio.Reader, opts *options) (f *format, err error) {
 
 // newDecompressor creates a new decompressor.
 func newDecompressor(br *bufio.Reader, opts *options) (dec io.Reader,
-	err error) {
+	err error,
+) {
 	if !opts.decompress {
 		panic("no decompressor needed")
 	}
@@ -500,7 +510,7 @@ func (r *reader) Close() error {
 func (r *reader) SetSuccess() { r.success = true }
 
 func (r *reader) Perm() os.FileMode {
-	const defaultPerm os.FileMode = 0666
+	const defaultPerm os.FileMode = 0o666
 
 	fi, err := r.f.Stat()
 	if err != nil {
@@ -550,14 +560,14 @@ func processFile(path string, opts *options) (err error) {
 	r, err := newReader(path, opts)
 	if err != nil {
 		printErr(err)
-		return
+		return err
 	}
 	defer func() { _ = r.Close() }()
 
 	w, err := newWriter(path, r.Perm(), opts)
 	if err != nil {
 		printErr(err)
-		return
+		return err
 	}
 
 	defer func() { _ = w.Close() }()

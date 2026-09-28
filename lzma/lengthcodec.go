@@ -66,7 +66,7 @@ func (lc *lengthCodec) init() {
 // subtracting minMatchLen (2) from the actual length.
 //
 //	l = length - minMatchLen
-func (lc *lengthCodec) Encode(e *rangeEncoder, l uint32, posState uint32,
+func (lc *lengthCodec) Encode(e *rangeEncoder, l, posState uint32,
 ) (err error) {
 	if l > maxMatchLen-minMatchLen {
 		return errors.New("lengthCodec.Encode: l out of range")
@@ -74,30 +74,30 @@ func (lc *lengthCodec) Encode(e *rangeEncoder, l uint32, posState uint32,
 
 	if l < 8 {
 		if err = lc.choice[0].Encode(e, 0); err != nil {
-			return
+			return err
 		}
 
 		return lc.low[posState].Encode(e, l)
 	}
 
 	if err = lc.choice[0].Encode(e, 1); err != nil {
-		return
+		return err
 	}
 
 	if l < 16 {
 		if err = lc.choice[1].Encode(e, 0); err != nil {
-			return
+			return err
 		}
 
 		return lc.mid[posState].Encode(e, l-8)
 	}
 
 	if err = lc.choice[1].Encode(e, 1); err != nil {
-		return
+		return err
 	}
 
 	if err = lc.high.Encode(e, l-16); err != nil {
-		return
+		return err
 	}
 
 	return nil

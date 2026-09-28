@@ -85,8 +85,10 @@ func TestFlagSet_Int(t *testing.T) {
 	b := f.IntP("test-b", "b", 0, "")
 	c := f.Int("c", 0, "")
 
-	err := f.Parse([]string{"--test-a=0x23", "foo", "-b", "077",
-		"-c", "33", "bar"})
+	err := f.Parse([]string{
+		"--test-a=0x23", "foo", "-b", "077",
+		"-c", "33", "bar",
+	})
 	if err != nil {
 		t.Fatalf("f.Parse error %s", err)
 	}
@@ -95,8 +97,8 @@ func TestFlagSet_Int(t *testing.T) {
 		t.Errorf("*a is %d; want %d", *a, 0x23)
 	}
 
-	if *b != 077 {
-		t.Errorf("*b is %d; want %d", *b, 077)
+	if *b != 0o77 {
+		t.Errorf("*b is %d; want %d", *b, 0o77)
 	}
 
 	if *c != 33 {

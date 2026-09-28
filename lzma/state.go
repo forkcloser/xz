@@ -143,7 +143,7 @@ func (s *state) states(dictHead int64) (state1, state2, posState uint32) {
 	posState = uint32(dictHead) & s.posBitMask
 	state2 = (s.state << maxPosBits) | posState
 
-	return
+	return state1, state2, posState
 }
 
 // litState computes the literal state.

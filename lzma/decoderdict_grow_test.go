@@ -61,9 +61,11 @@ func dictState(d *decoderDict, maxDist int) []byte {
 // through byteAt, and the bytes read out — stays identical. Growth must be
 // invisible to the decoder; only the allocation differs.
 func TestDecoderDictGrowMatchesEager(t *testing.T) {
-	caps := []int{1, 2, 3, 7, 273, 274, 1000, 4096,
+	caps := []int{
+		1, 2, 3, 7, 273, 274, 1000, 4096,
 		initialDictCap - 1, initialDictCap, initialDictCap + 1,
-		3 * initialDictCap}
+		3 * initialDictCap,
+	}
 	// Starting from one byte forces a growth step on nearly every write, so
 	// the small capacities exercise growth and wrapping together instead of
 	// being allocated whole up front.

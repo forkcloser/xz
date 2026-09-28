@@ -51,7 +51,8 @@ type encoder struct {
 // argument supports the eosMarker flag, controlling whether a
 // terminating end-of-stream marker must be written.
 func newEncoder(bw io.ByteWriter, state *state, dict *encoderDict,
-	flags encoderFlags) (e *encoder, err error) {
+	flags encoderFlags,
+) (e *encoder, err error) {
 	re, err := newRangeEncoder(bw)
 	if err != nil {
 		return nil, err
@@ -151,7 +152,8 @@ func (e *encoder) writeMatch(m operation) error {
 		!(dist == e.state.rep[0] && m.n == 1) {
 		panic(fmt.Errorf(
 			"match length %d out of range; dist %d rep[0] %d",
-			m.n, dist, e.state.rep[0]))
+			m.n, dist, e.state.rep[0],
+		))
 	}
 
 	state, state2, posState := e.state.states(e.dict.Pos())

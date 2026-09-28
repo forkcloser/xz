@@ -170,7 +170,8 @@ func TestSingleStreamReportsIOErrorAsIs(t *testing.T) {
 	ioErr := errors.New("disk on fire")
 
 	r, err := ReaderConfig{SingleStream: true}.NewReader(
-		&errAfterReader{r: bytes.NewReader(file), err: ioErr})
+		&errAfterReader{r: bytes.NewReader(file), err: ioErr},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +201,8 @@ func TestSingleStreamReportsIOErrorAsIs(t *testing.T) {
 	}
 
 	r, err = ReaderConfig{SingleStream: true}.NewReader(
-		bytes.NewReader(append(append([]byte{}, file...), 0)))
+		bytes.NewReader(append(append([]byte{}, file...), 0)),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

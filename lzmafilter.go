@@ -75,7 +75,8 @@ type lzma2Cache struct {
 // reader with the required dictionary capacity, that reader is reset and
 // reused instead.
 func (f lzmaFilter) reader(r io.Reader, c *ReaderConfig, cache *lzma2Cache) (
-	fr io.Reader, err error) {
+	fr io.Reader, err error,
+) {
 	config := new(lzma.Reader2Config)
 	if c != nil {
 		config.DictCap = c.DictCap

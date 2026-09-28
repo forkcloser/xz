@@ -8,10 +8,14 @@ import "testing"
 
 func TestHeaderMarshalling(t *testing.T) {
 	tests := []Header{
-		{Properties: Properties{3, 0, 2}, DictSize: 8 * 1024 * 1024,
-			Size: -1},
-		{Properties: Properties{2, 2, 3}, DictSize: 4096,
-			Size: 10},
+		{
+			Properties: Properties{3, 0, 2}, DictSize: 8 * 1024 * 1024,
+			Size: -1,
+		},
+		{
+			Properties: Properties{2, 2, 3}, DictSize: 4096,
+			Size: 10,
+		},
 	}
 	for _, h := range tests {
 		data, err := h.marshalBinary()
@@ -32,10 +36,14 @@ func TestHeaderMarshalling(t *testing.T) {
 
 func TestValidHeader(t *testing.T) {
 	tests := []Header{
-		{Properties: Properties{3, 0, 2}, DictSize: 8 * 1024 * 1024,
-			Size: -1},
-		{Properties: Properties{2, 2, 3}, DictSize: 4096,
-			Size: 10},
+		{
+			Properties: Properties{3, 0, 2}, DictSize: 8 * 1024 * 1024,
+			Size: -1,
+		},
+		{
+			Properties: Properties{2, 2, 3}, DictSize: 4096,
+			Size: 10,
+		},
 	}
 	for _, h := range tests {
 		data, err := h.marshalBinary()

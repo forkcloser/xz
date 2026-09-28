@@ -40,7 +40,8 @@ func (a MatchAlgorithm) String() string {
 }
 
 var errUnsupportedMatchAlgorithm = errors.New(
-	"lzma: unsupported match algorithm value")
+	"lzma: unsupported match algorithm value",
+)
 
 // verify checks whether the matcher value is supported.
 func (a MatchAlgorithm) verify() error {

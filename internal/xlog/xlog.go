@@ -76,8 +76,8 @@ var std = New(os.Stderr, "", Lstdflags)
 
 // itoa converts the integer to ASCII. A negative widths will avoid
 // zero-padding. The function supports only non-negative integers.
-func itoa(buf *[]byte, i int, wid int) {
-	var u = uint(i)
+func itoa(buf *[]byte, i, wid int) {
+	u := uint(i)
 	if u == 0 && wid <= 1 {
 		*buf = append(*buf, '0')
 		return
@@ -199,7 +199,7 @@ func (l *Logger) Output(calldepth, noflag int, v ...any) error {
 }
 
 // Outputf works like output but formats the output like Printf.
-func (l *Logger) Outputf(calldepth int, noflag int, format string, v ...any) error {
+func (l *Logger) Outputf(calldepth, noflag int, format string, v ...any) error {
 	now := time.Now()
 
 	l.mu.Lock()

@@ -78,7 +78,8 @@ func checkUncompressedSize(rec record) error {
 	if rec.uncompressedSize > math.MaxInt {
 		return corruptf(
 			"xz: uncompressed size %d in index exceeds the address space",
-			rec.uncompressedSize)
+			rec.uncompressedSize,
+		)
 	}
 
 	limit := int64(math.MaxInt64)
@@ -90,7 +91,8 @@ func checkUncompressedSize(rec record) error {
 		return corruptf(
 			"xz: uncompressed size %d in index exceeds the maximum %d "+
 				"for a block of %d bytes",
-			rec.uncompressedSize, limit, rec.unpaddedSize)
+			rec.uncompressedSize, limit, rec.unpaddedSize,
+		)
 	}
 
 	return nil
@@ -450,7 +452,8 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 			// enormous stream.
 			if d.uncompressedSize > math.MaxInt64-total {
 				return nil, 0, corruptf(
-					"xz: total uncompressed size overflows int64")
+					"xz: total uncompressed size overflows int64",
+				)
 			}
 
 			total += d.uncompressedSize
@@ -591,7 +594,8 @@ func (d *parallelDecoder) decodeOne(bd *blockDesc, s *workerScratch) (res blockR
 			s.lz.r = nil
 			res = blockResult{err: fmt.Errorf(
 				"xz: panic while decoding block at offset %d: %v",
-				bd.offset, v)}
+				bd.offset, v,
+			)}
 		}
 	}()
 

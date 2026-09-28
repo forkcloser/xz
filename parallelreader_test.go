@@ -19,8 +19,10 @@ import (
 // and runs.
 func parallelTestData(n int) []byte {
 	rng := rand.New(rand.NewSource(7))
-	words := []string{"the ", "quick ", "brown ", "fox ", "jumps ",
-		"over ", "lazy ", "dog ", "0000000000000000", "\n"}
+	words := []string{
+		"the ", "quick ", "brown ", "fox ", "jumps ",
+		"over ", "lazy ", "dog ", "0000000000000000", "\n",
+	}
 
 	var buf bytes.Buffer
 	for buf.Len() < n {
@@ -53,7 +55,7 @@ func compressMultiBlock(tb testing.TB, data []byte, blockSize int64) []byte {
 	return buf.Bytes()
 }
 
-func testParallelRead(t *testing.T, xz []byte, want []byte, workers int) {
+func testParallelRead(t *testing.T, xz, want []byte, workers int) {
 	t.Helper()
 
 	c := ParallelReaderConfig{Workers: workers}
@@ -312,7 +314,8 @@ func TestParallelReaderAbandonedReleasesGoroutines(t *testing.T) {
 	// dispatcher is parked on a full queue when the reader becomes garbage.
 	func() {
 		r, err := ParallelReaderConfig{Workers: 4}.NewParallelReader(
-			bytes.NewReader(xz), int64(len(xz)))
+			bytes.NewReader(xz), int64(len(xz)),
+		)
 		if err != nil {
 			t.Fatalf("NewParallelReader error %s", err)
 		}

@@ -111,7 +111,8 @@ func readAllParallel(t *testing.T, file []byte, workers int) error {
 
 	err := func() error {
 		r, err := ParallelReaderConfig{Workers: workers}.NewParallelReader(
-			bytes.NewReader(file), int64(len(file)))
+			bytes.NewReader(file), int64(len(file)),
+		)
 		if err != nil {
 			return err
 		}

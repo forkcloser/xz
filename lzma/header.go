@@ -118,7 +118,8 @@ func (h *Header) unmarshalBinary(data []byte) error {
 	if int(h.DictSize) < 0 {
 		return unsupportedf(
 			"lzma: header dictionary size %d exceeds the address space",
-			h.DictSize)
+			h.DictSize,
+		)
 	}
 
 	// uncompressed size
