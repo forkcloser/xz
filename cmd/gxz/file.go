@@ -20,6 +20,15 @@ import (
 	"github.com/forkcloser/xz/lzma"
 )
 
+// What gxz refuses about a file or a format.
+var (
+	errEmptyName   = errors.New("empty file name not supported")
+	errHasSuffix   = errors.New("file already has the suffix")
+	errFormat      = errors.New("compression format not supported")
+	errFileExists  = errors.New("file exists")
+	errSpecialBits = errors.New("setuid, setgid and/or sticky bit set")
+)
+
 // signalHandler establishes the signal handler for SIGTERM(1) and
 // handles it in its own go routine. The returned quit channel must be
 // closed to terminate the signal handler go routine.
@@ -126,7 +135,7 @@ func targetName(path string, opts *options) (target string, err error) {
 	}
 
 	if len(path) == 0 {
-		return "", errors.New("empty file name not supported")
+		return "", errEmptyName
 	}
 
 	ext := "." + opts.format
@@ -138,15 +147,11 @@ func targetName(path string, opts *options) (target string, err error) {
 
 	if !opts.decompress {
 		if strings.HasSuffix(path, ext) {
-			return "", fmt.Errorf(
-				"%s: file has already %s suffix", path, ext,
-			)
+			return "", fmt.Errorf("%s: %w %s", path, errHasSuffix, ext)
 		}
 
 		if strings.HasSuffix(path, tarExt) {
-			return "", fmt.Errorf(
-				"%s: file has already %s suffix", path, tarExt,
-			)
+			return "", fmt.Errorf("%s: %w %s", path, errHasSuffix, tarExt)
 		}
 
 		return path + ext, nil
@@ -201,8 +206,7 @@ type writer struct {
 func writerFormat(opts *options) (f *format, err error) {
 	var ok bool
 	if f, ok = formats[opts.format]; !ok {
-		return nil, fmt.Errorf("compression format %q not supported",
-			opts.format)
+		return nil, fmt.Errorf("%w: %q", errFormat, opts.format)
 	}
 
 	return f, nil
@@ -246,7 +250,7 @@ func newWriter(path string, perm os.FileMode, opts *options,
 			if !opts.force {
 				return nil, &userPathError{
 					Path: name,
-					Err:  errors.New("file exists"),
+					Err:  errFileExists,
 				}
 			}
 		}
@@ -396,7 +400,7 @@ func openFile(path string, opts *options) (f *os.File, err error) {
 	if fm&specialBits != 0 && !opts.force {
 		return nil, &userPathError{
 			Path: path,
-			Err:  errors.New("setuid, setgid and/or sticky bit set"),
+			Err:  errSpecialBits,
 		}
 	}
 
@@ -420,8 +424,7 @@ func readerFormat(br *bufio.Reader, opts *options) (f *format, err error) {
 	}
 
 	if opts.format != "auto" {
-		return nil, fmt.Errorf("compression format %s not supported",
-			opts.format)
+		return nil, fmt.Errorf("%w: %q", errFormat, opts.format)
 	}
 
 	for format, f := range formats {

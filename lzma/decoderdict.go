@@ -9,6 +9,11 @@ import (
 	"fmt"
 )
 
+// errDecoderDictCap is a dictionary capacity outside what the decoder supports.
+var (
+	errDecoderDictCap = errors.New("lzma: dictCap out of range")
+)
+
 // decoderDict provides the dictionary for the decoder. The whole
 // dictionary is used as reader buffer.
 //
@@ -45,7 +50,7 @@ func newDecoderDict(dictCap int) (d *decoderDict, err error) {
 func newDecoderDictSize(dictCap, initial int) (d *decoderDict, err error) {
 	// lower limit supports easy test cases
 	if !(1 <= dictCap && int64(dictCap) <= MaxDictCap) {
-		return nil, errors.New("lzma: dictCap out of range")
+		return nil, errDecoderDictCap
 	}
 
 	if initial > dictCap {

@@ -5,7 +5,13 @@
 package lzma
 
 import (
+	"errors"
 	"fmt"
+)
+
+// errHeaderDictSize is a dictionary size the classic LZMA header cannot carry.
+var (
+	errHeaderDictSize = errors.New("lzma: DictCap out of range")
 )
 
 // uint32LE reads an uint32 integer from a byte slice
@@ -76,8 +82,7 @@ func (h *Header) marshalBinary() (data []byte, err error) {
 	}
 
 	if !(h.DictSize <= MaxDictCap) {
-		return nil, fmt.Errorf("lzma: DictCap %d out of range",
-			h.DictSize)
+		return nil, fmt.Errorf("%w: %d", errHeaderDictSize, h.DictSize)
 	}
 
 	data = make([]byte, 13)

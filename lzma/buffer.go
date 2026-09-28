@@ -8,6 +8,12 @@ import (
 	"errors"
 )
 
+// Discard's refusals.
+var (
+	errDiscardNegative = errors.New("buffer.Discard: negative argument")
+	errDiscardShort    = errors.New("buffer.Discard: discarded less bytes then requested")
+)
+
 // buffer provides a circular buffer of bytes. If the front index equals
 // the rear index the buffer is empty. As a consequence front cannot be
 // equal rear for a full buffer. So a full buffer has a length that is
@@ -90,15 +96,13 @@ func (b *buffer) Peek(p []byte) (n int, err error) {
 // If Discards skips fewer than n bytes, it returns an error.
 func (b *buffer) Discard(n int) (discarded int, err error) {
 	if n < 0 {
-		return 0, errors.New("buffer.Discard: negative argument")
+		return 0, errDiscardNegative
 	}
 
 	m := b.Buffered()
 	if m < n {
 		n = m
-		err = errors.New(
-			"buffer.Discard: discarded less bytes then requested",
-		)
+		err = errDiscardShort
 	}
 
 	b.rear = b.addIndex(b.rear, n)

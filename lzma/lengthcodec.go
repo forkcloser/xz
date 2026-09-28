@@ -6,6 +6,11 @@ package lzma
 
 import "errors"
 
+// errLengthRange is a match length offset the length codec cannot encode.
+var (
+	errLengthRange = errors.New("lengthCodec.Encode: l out of range")
+)
+
 // maxPosBits defines the number of bits of the position value that are used to
 // to compute the posState value. The value is used to select the tree codec
 // for length encoding and decoding.
@@ -34,7 +39,7 @@ type lengthCodec struct {
 func (lc *lengthCodec) Encode(e *rangeEncoder, l, posState uint32,
 ) (err error) {
 	if l > maxMatchLen-minMatchLen {
-		return errors.New("lengthCodec.Encode: l out of range")
+		return errLengthRange
 	}
 
 	if l < 8 {

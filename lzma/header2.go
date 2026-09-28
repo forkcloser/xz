@@ -10,6 +10,12 @@ import (
 	"io"
 )
 
+// Chunk types outside the LZMA2 set.
+var (
+	errUnknownChunkType = errors.New("unsupported chunk type")
+	errInvalidChunkType = errors.New("invalid chunk type")
+)
+
 const (
 	// maximum size of compressed data in a chunk
 	maxCompressed = 1 << 16
@@ -129,7 +135,7 @@ func headerLen(c chunkType) int {
 		return 6
 	}
 
-	panic(fmt.Errorf("unsupported chunk type %d", c))
+	panic(fmt.Errorf("%w %d", errUnknownChunkType, c))
 }
 
 // chunkHeader represents the contents of a chunk header.
@@ -195,7 +201,7 @@ func (h *chunkHeader) UnmarshalBinary(data []byte) error {
 // whether the content of the chunk header is correct.
 func (h *chunkHeader) MarshalBinary() (data []byte, err error) {
 	if h.ctype > cLRND {
-		return nil, errors.New("invalid chunk type")
+		return nil, errInvalidChunkType
 	}
 
 	if err = h.props.verify(); err != nil {

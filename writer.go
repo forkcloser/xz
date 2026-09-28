@@ -14,6 +14,17 @@ import (
 	"github.com/forkcloser/xz/lzma"
 )
 
+// Writer configurations and filter lists the writer refuses, and a size it cannot count.
+var (
+	errWriterConfigNil = errors.New("xz: writer configuration is nil")
+	errBlockSize       = errors.New("xz: block size out of range")
+	errNoFilters       = errors.New("xz: no filters")
+	errTooManyFilters  = errors.New("xz: more than four filters")
+	errFilterNotLast   = errors.New("xz: last filter is not last")
+	errWrongLastFilter = errors.New("xz: wrong last filter")
+	errCounterOverflow = errors.New("xz: counter overflow")
+)
+
 // WriterConfig describes the parameters for an xz writer. The zero value
 // selects the defaults given for each field.
 type WriterConfig struct {
@@ -52,7 +63,7 @@ type WriterConfig struct {
 // replaced by default values.
 func (c *WriterConfig) Verify() error {
 	if c == nil {
-		return errors.New("xz: writer configuration is nil")
+		return errWriterConfigNil
 	}
 
 	c.fill()
@@ -68,7 +79,7 @@ func (c *WriterConfig) Verify() error {
 	}
 
 	if c.BlockSize <= 0 {
-		return errors.New("xz: block size out of range")
+		return errBlockSize
 	}
 
 	if err := verifyFlags(c.CheckSum); err != nil {
@@ -85,21 +96,21 @@ const maxInt64 = 1<<63 - 1
 // sequence of filters.
 func verifyFilters(f []filter) error {
 	if len(f) == 0 {
-		return errors.New("xz: no filters")
+		return errNoFilters
 	}
 
 	if len(f) > 4 {
-		return errors.New("xz: more than four filters")
+		return errTooManyFilters
 	}
 
 	for _, g := range f[:len(f)-1] {
 		if g.last() {
-			return errors.New("xz: last filter is not last")
+			return errFilterNotLast
 		}
 	}
 
 	if !f[len(f)-1].last() {
-		return errors.New("xz: wrong last filter")
+		return errWrongLastFilter
 	}
 
 	return nil
@@ -342,7 +353,7 @@ func (cw *countingWriter) Write(p []byte) (n int, err error) {
 
 	cw.n += int64(n)
 	if err == nil && cw.n < 0 {
-		return n, errors.New("xz: counter overflow")
+		return n, errCounterOverflow
 	}
 
 	return n, err

@@ -17,6 +17,11 @@ import (
 	"io"
 )
 
+// errDictCap is a dictionary capacity outside the range the readers and writers support.
+var (
+	errDictCap = errors.New("lzma: dictionary capacity is out of range")
+)
+
 // ReaderConfig stores the parameters for the reader of the classic LZMA
 // format.
 type ReaderConfig struct {
@@ -32,7 +37,7 @@ func (c *ReaderConfig) Verify() error {
 	c.fill()
 
 	if !(MinDictCap <= c.DictCap && int64(c.DictCap) <= MaxDictCap) {
-		return errors.New("lzma: dictionary capacity is out of range")
+		return errDictCap
 	}
 
 	return nil

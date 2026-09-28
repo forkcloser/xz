@@ -10,6 +10,15 @@ import (
 	"io"
 )
 
+// What WriterConfig.Verify refuses; the dictionary capacity is errDictCap.
+var (
+	errWriterConfigNil = errors.New("lzma: WriterConfig is nil")
+	errNoProperties    = errors.New("lzma: WriterConfig has no Properties set")
+	errBufSizeSmall    = errors.New("lzma: lookahead buffer size too small")
+	errNegativeSize    = errors.New("lzma: negative size not supported")
+	errEOSRequired     = errors.New("lzma: EOS marker is required")
+)
+
 // MinDictCap and MaxDictCap provide the range of supported dictionary
 // capacities.
 const (
@@ -50,11 +59,11 @@ func (c *WriterConfig) Verify() error {
 	var err error
 
 	if c == nil {
-		return errors.New("lzma: WriterConfig is nil")
+		return errWriterConfigNil
 	}
 
 	if c.Properties == nil {
-		return errors.New("lzma: WriterConfig has no Properties set")
+		return errNoProperties
 	}
 
 	if err = c.Properties.verify(); err != nil {
@@ -62,19 +71,19 @@ func (c *WriterConfig) Verify() error {
 	}
 
 	if !(MinDictCap <= c.DictCap && int64(c.DictCap) <= MaxDictCap) {
-		return errors.New("lzma: dictionary capacity is out of range")
+		return errDictCap
 	}
 
 	if !(maxMatchLen <= c.BufSize) {
-		return errors.New("lzma: lookahead buffer size too small")
+		return errBufSizeSmall
 	}
 
 	if c.SizeInHeader {
 		if c.Size < 0 {
-			return errors.New("lzma: negative size not supported")
+			return errNegativeSize
 		}
 	} else if !c.EOSMarker {
-		return errors.New("lzma: EOS marker is required")
+		return errEOSRequired
 	}
 
 	if err = c.Matcher.verify(); err != nil {

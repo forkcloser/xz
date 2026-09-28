@@ -16,6 +16,12 @@ import (
 	"sync"
 )
 
+// A nil configuration, and a block decoder that panicked instead of returning.
+var (
+	errParallelConfigNil = errors.New("xz: parallel reader parameters are nil")
+	errDecodePanic       = errors.New("xz: panic while decoding block")
+)
+
 // ParallelReaderConfig defines the parameters for the parallel xz
 // reader. Workers is the number of blocks decoded concurrently; values
 // below 1 select runtime.GOMAXPROCS(0).
@@ -29,7 +35,7 @@ type ParallelReaderConfig struct {
 // will actually be used.
 func (c *ParallelReaderConfig) Verify() error {
 	if c == nil {
-		return errors.New("xz: parallel reader parameters are nil")
+		return errParallelConfigNil
 	}
 
 	rc := ReaderConfig{DictCap: c.DictCap}
@@ -557,10 +563,7 @@ func (d *parallelDecoder) decodeOne(bd *blockDesc, s *workerScratch) (res blockR
 			d.putBuf(buf)
 
 			s.lz.r = nil
-			res = blockResult{err: fmt.Errorf(
-				"xz: panic while decoding block at offset %d: %v",
-				bd.offset, v,
-			)}
+			res = blockResult{err: fmt.Errorf("%w at offset %d: %v", errDecodePanic, bd.offset, v)}
 		}
 	}()
 

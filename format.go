@@ -16,6 +16,15 @@ import (
 	"github.com/forkcloser/xz/lzma"
 )
 
+// Values the footer and block-header encoders refuse to write.
+var (
+	errIndexSize    = errors.New("xz: index size out of range")
+	errIndexAlign   = errors.New("xz: index size not aligned to four bytes")
+	errFilterCount  = errors.New("xz: filter count wrong")
+	errLZMA2NotLast = errors.New("xz: LZMA2 filter is not the last")
+	errLastNotLZMA2 = errors.New("xz: last filter must be the LZMA2 filter")
+)
+
 // allZeros checks whether a given byte slice has only zeros.
 func allZeros(p []byte) bool {
 	for _, c := range p {
@@ -213,13 +222,11 @@ func (f *footer) MarshalBinary() (data []byte, err error) {
 	}
 
 	if !(minIndexSize <= f.indexSize && f.indexSize <= maxIndexSize) {
-		return nil, errors.New("xz: index size out of range")
+		return nil, errIndexSize
 	}
 
 	if f.indexSize%4 != 0 {
-		return nil, errors.New(
-			"xz: index size not aligned to four bytes",
-		)
+		return nil, errIndexAlign
 	}
 
 	data = make([]byte, footerLen)
@@ -472,21 +479,18 @@ func (h *blockHeader) UnmarshalBinary(data []byte) error {
 // MarshalBinary marshals the binary header.
 func (h *blockHeader) MarshalBinary() (data []byte, err error) {
 	if !(minFilters <= len(h.filters) && len(h.filters) <= maxFilters) {
-		return nil, errors.New("xz: filter count wrong")
+		return nil, errFilterCount
 	}
 
 	for i, f := range h.filters {
 		if i < len(h.filters)-1 {
 			if f.id() == lzmaFilterID {
-				return nil, errors.New(
-					"xz: LZMA2 filter is not the last",
-				)
+				return nil, errLZMA2NotLast
 			}
 		} else {
 			// last filter
 			if f.id() != lzmaFilterID {
-				return nil, errors.New("xz: " +
-					"last filter must be the LZMA2 filter")
+				return nil, errLastNotLZMA2
 			}
 		}
 	}

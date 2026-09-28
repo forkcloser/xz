@@ -39,6 +39,13 @@ import (
 	"strings"
 )
 
+// What the parser reports about an option on the command line.
+var (
+	errUnsupportedOption = errors.New("unsupported")
+	errNoArgument        = errors.New("no argument present")
+	errArgument          = errors.New("doesn't support an argument")
+)
+
 // CommandLine is the default set of command-line flags parsed from
 // os.Args. The top-level functions such as BoolVarP, Args, etc. are
 // wrappers for the methods of command line.
@@ -773,8 +780,7 @@ func (f *FlagSet) parseArg(i int) (next int, err error) {
 		}
 		// case 2: equal sign
 		if flag.HasArg == NoArg {
-			err = fmt.Errorf("option %s doesn't support argument",
-				arg)
+			err = fmt.Errorf("option %s: %w", arg, errArgument)
 		} else {
 			err = flag.Value.Set(flagArg[1])
 		}
@@ -841,7 +847,7 @@ func (f *FlagSet) processExtraFlagArg(flag *Flag, i int) error {
 	}
 	// no argument
 	if flag.HasArg == RequiredArg {
-		return errors.New("no argument present")
+		return errNoArgument
 	}
 	// flag.HasArg == OptionalArg
 	flag.Value.Update()
@@ -855,7 +861,7 @@ func (f *FlagSet) lookupShortOption(r rune) (flag *Flag, err error) {
 
 	name := string([]rune{r})
 	if flag, ok = f.formal[name]; !ok {
-		return nil, fmt.Errorf("short option %s is unsupported", name)
+		return nil, fmt.Errorf("short option %s: %w", name, errUnsupportedOption)
 	}
 
 	if !strings.ContainsRune(flag.Shorthands, r) {
@@ -874,7 +880,7 @@ func (f *FlagSet) lookupLongOption(name string) (flag *Flag, err error) {
 
 	var ok bool
 	if flag, ok = f.formal[name]; !ok {
-		return nil, fmt.Errorf("long option %s is unsupported", name)
+		return nil, fmt.Errorf("long option %s: %w", name, errUnsupportedOption)
 	}
 
 	if flag.Name != name {
