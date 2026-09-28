@@ -23,6 +23,7 @@ func ByteReader(r io.Reader) io.ByteReader {
 	if !ok {
 		return &breader{r, make([]byte, 1)}
 	}
+
 	return br
 }
 
@@ -33,7 +34,9 @@ func (r *breader) ReadByte() (c byte, err error) {
 		if err == nil {
 			err = errors.New("breader.ReadByte: no data")
 		}
+
 		return 0, err
 	}
+
 	return r.p[0], nil
 }

@@ -47,14 +47,17 @@ func PropertiesForCode(code byte) (p Properties, err error) {
 	if code > maxPropertyCode {
 		return p, corruptf("lzma: invalid properties code")
 	}
+
 	p.LC = int(code % 9)
 	code /= 9
 	p.LP = int(code % 5)
 	code /= 5
+
 	p.PB = int(code % 5)
 	if err = p.verify(); err != nil {
 		return Properties{}, err
 	}
+
 	return p, nil
 }
 
@@ -63,18 +66,23 @@ func (p *Properties) verify() error {
 	if p == nil {
 		return errors.New("lzma: properties are nil")
 	}
+
 	if !(minLC <= p.LC && p.LC <= maxLC) {
 		return errors.New("lzma: lc out of range")
 	}
+
 	if !(minLP <= p.LP && p.LP <= maxLP) {
 		return errors.New("lzma: lp out of range")
 	}
+
 	if !(minPB <= p.PB && p.PB <= maxPB) {
 		return errors.New("lzma: pb out of range")
 	}
+
 	if p.LC+p.LP > maxLCLP {
 		return corruptf("lzma: sum of lc and lp exceeds 4")
 	}
+
 	return nil
 }
 

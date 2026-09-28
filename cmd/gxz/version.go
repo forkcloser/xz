@@ -16,5 +16,6 @@ func version() string {
 	if !ok || info.Main.Version == "" {
 		return "(unknown)"
 	}
+
 	return info.Main.Version
 }

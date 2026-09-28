@@ -14,6 +14,7 @@ func uint32LE(b []byte) uint32 {
 	x |= uint32(b[2]) << 16
 	x |= uint32(b[1]) << 8
 	x |= uint32(b[0])
+
 	return x
 }
 
@@ -28,6 +29,7 @@ func uint64LE(b []byte) uint64 {
 	x |= uint64(b[2]) << 16
 	x |= uint64(b[1]) << 8
 	x |= uint64(b[0])
+
 	return x
 }
 
@@ -72,6 +74,7 @@ func (h *Header) marshalBinary() (data []byte, err error) {
 	if err = h.Properties.verify(); err != nil {
 		return nil, err
 	}
+
 	if !(h.DictSize <= MaxDictCap) {
 		return nil, fmt.Errorf("lzma: DictCap %d out of range",
 			h.DictSize)
@@ -92,6 +95,7 @@ func (h *Header) marshalBinary() (data []byte, err error) {
 	} else {
 		s = noHeaderSize
 	}
+
 	putUint64LE(data[5:], s)
 
 	return data, nil
@@ -137,14 +141,17 @@ func validDictSize(dictcap int) bool {
 	if int64(dictcap) == MaxDictCap {
 		return true
 	}
+
 	for n := uint(10); n < 32; n++ {
 		if dictcap == 1<<n {
 			return true
 		}
+
 		if dictcap == 1<<n+1<<(n-1) {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -160,8 +167,10 @@ func ValidHeader(data []byte) bool {
 	if err := h.unmarshalBinary(data); err != nil {
 		return false
 	}
+
 	if !validDictSize(int(h.DictSize)) {
 		return false
 	}
+
 	return h.Size < 0 || h.Size <= 1<<38
 }

@@ -53,18 +53,23 @@ func (c *WriterConfig) fill() {
 	if c.Properties == nil {
 		c.Properties = &lzma.Properties{LC: 3, LP: 0, PB: 2}
 	}
+
 	if c.DictCap == 0 {
 		c.DictCap = 8 * 1024 * 1024
 	}
+
 	if c.BufSize == 0 {
 		c.BufSize = 4096
 	}
+
 	if c.BlockSize == 0 {
 		c.BlockSize = maxInt64
 	}
+
 	if c.CheckSum == 0 {
 		c.CheckSum = CRC64
 	}
+
 	if c.NoCheckSum {
 		c.CheckSum = None
 	}
@@ -76,7 +81,9 @@ func (c *WriterConfig) Verify() error {
 	if c == nil {
 		return errors.New("xz: writer configuration is nil")
 	}
+
 	c.fill()
+
 	lc := lzma.Writer2Config{
 		Properties: c.Properties,
 		DictCap:    c.DictCap,
@@ -86,12 +93,15 @@ func (c *WriterConfig) Verify() error {
 	if err := lc.Verify(); err != nil {
 		return err
 	}
+
 	if c.BlockSize <= 0 {
 		return errors.New("xz: block size out of range")
 	}
+
 	if err := verifyFlags(c.CheckSum); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -109,17 +119,21 @@ func verifyFilters(f []filter) error {
 	if len(f) == 0 {
 		return errors.New("xz: no filters")
 	}
+
 	if len(f) > 4 {
 		return errors.New("xz: more than four filters")
 	}
+
 	for _, g := range f[:len(f)-1] {
 		if g.last() {
 			return errors.New("xz: last filter is not last")
 		}
 	}
+
 	if !f[len(f)-1].last() {
 		return errors.New("xz: wrong last filter")
 	}
+
 	return nil
 }
 
@@ -129,6 +143,7 @@ func (c *WriterConfig) newFilterWriteCloser(w io.Writer, f []filter) (fw io.Writ
 	if err = verifyFilters(f); err != nil {
 		return nil, err
 	}
+
 	fw = nopWriteCloser(w)
 	for _, v := range slices.Backward(f) {
 		fw, err = v.writeCloser(fw, c)
@@ -136,6 +151,7 @@ func (c *WriterConfig) newFilterWriteCloser(w io.Writer, f []filter) (fw io.Writ
 			return nil, err
 		}
 	}
+
 	return fw, nil
 }
 
@@ -177,13 +193,16 @@ type Writer struct {
 // newBlockWriter creates a new block writer writes the header out.
 func (w *Writer) newBlockWriter() error {
 	var err error
+
 	w.bw, err = w.WriterConfig.newBlockWriter(w.xz, w.newHash())
 	if err != nil {
 		return err
 	}
+
 	if err = w.bw.writeHeader(w.xz); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -194,7 +213,9 @@ func (w *Writer) closeBlockWriter() error {
 	if err = w.bw.Close(); err != nil {
 		return err
 	}
+
 	w.index = append(w.index, w.bw.record())
+
 	return nil
 }
 
@@ -208,6 +229,7 @@ func (c WriterConfig) NewWriter(xz io.Writer) (w *Writer, err error) {
 	if err = c.Verify(); err != nil {
 		return nil, err
 	}
+
 	w = &Writer{
 		WriterConfig: c,
 		xz:           xz,
@@ -217,18 +239,21 @@ func (c WriterConfig) NewWriter(xz io.Writer) (w *Writer, err error) {
 	if w.newHash, err = newHashFunc(c.CheckSum); err != nil {
 		return nil, err
 	}
+
 	data, err := w.h.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("w.h.MarshalBinary(): error %w", err)
 	}
+
 	if _, err = xz.Write(data); err != nil {
 		return nil, err
 	}
+
 	if err = w.newBlockWriter(); err != nil {
 		return nil, err
 	}
-	return w, nil
 
+	return w, nil
 }
 
 // setErr records the first failure. Later calls report it rather than
@@ -237,6 +262,7 @@ func (w *Writer) setErr(err error) error {
 	if err != nil && w.err == nil {
 		w.err = err
 	}
+
 	return err
 }
 
@@ -245,18 +271,23 @@ func (w *Writer) Write(p []byte) (n int, err error) {
 	if w.err != nil {
 		return 0, w.err
 	}
+
 	if w.closed {
 		return 0, errClosed
 	}
+
 	for {
 		k, err := w.bw.Write(p[n:])
+
 		n += k
 		if !errors.Is(err, errNoSpace) {
 			return n, w.setErr(err)
 		}
+
 		if err = w.closeBlockWriter(); err != nil {
 			return n, w.setErr(err)
 		}
+
 		if err = w.newBlockWriter(); err != nil {
 			return n, w.setErr(err)
 		}
@@ -270,10 +301,13 @@ func (w *Writer) Close() error {
 	if w.err != nil {
 		return w.err
 	}
+
 	if w.closed {
 		return errClosed
 	}
+
 	w.closed = true
+
 	var err error
 	if err = w.closeBlockWriter(); err != nil {
 		return w.setErr(err)
@@ -283,13 +317,16 @@ func (w *Writer) Close() error {
 	if f.indexSize, err = writeIndex(w.xz, w.index); err != nil {
 		return w.setErr(err)
 	}
+
 	data, err := f.MarshalBinary()
 	if err != nil {
 		return w.setErr(err)
 	}
+
 	if _, err = w.xz.Write(data); err != nil {
 		return w.setErr(err)
 	}
+
 	return nil
 }
 
@@ -302,10 +339,12 @@ type countingWriter struct {
 // Write writes data to the countingWriter.
 func (cw *countingWriter) Write(p []byte) (n int, err error) {
 	n, err = cw.w.Write(p)
+
 	cw.n += int64(n)
 	if err == nil && cw.n < 0 {
 		return n, errors.New("xz: counter overflow")
 	}
+
 	return
 }
 
@@ -332,15 +371,18 @@ func (c *WriterConfig) newBlockWriter(xz io.Writer, hash hash.Hash) (bw *blockWr
 		filters:   c.filters(),
 		hash:      hash,
 	}
+
 	bw.w, err = c.newFilterWriteCloser(&bw.cxz, bw.filters)
 	if err != nil {
 		return nil, err
 	}
+
 	if bw.hash.Size() != 0 {
 		bw.mw = io.MultiWriter(bw.w, bw.hash)
 	} else {
 		bw.mw = bw.w
 	}
+
 	return bw, nil
 }
 
@@ -356,14 +398,18 @@ func (bw *blockWriter) writeHeader(w io.Writer) error {
 		h.compressedSize = bw.compressedSize()
 		h.uncompressedSize = bw.uncompressedSize()
 	}
+
 	data, err := h.MarshalBinary()
 	if err != nil {
 		return err
 	}
+
 	if _, err = w.Write(data); err != nil {
 		return err
 	}
+
 	bw.headerLen = len(data)
+
 	return nil
 }
 
@@ -385,9 +431,11 @@ func (bw *blockWriter) unpaddedSize() int64 {
 	if bw.headerLen <= 0 {
 		panic("xz: block header not written")
 	}
+
 	n := int64(bw.headerLen)
 	n += bw.compressedSize()
 	n += int64(bw.hash.Size())
+
 	return n
 }
 
@@ -415,11 +463,14 @@ func (bw *blockWriter) Write(p []byte) (n int, err error) {
 	}
 
 	var werr error
+
 	n, werr = bw.mw.Write(p)
+
 	bw.n += int64(n)
 	if werr != nil {
 		return n, werr
 	}
+
 	return n, err
 }
 
@@ -428,16 +479,20 @@ func (bw *blockWriter) Close() error {
 	if bw.closed {
 		return errClosed
 	}
+
 	bw.closed = true
 	if err := bw.w.Close(); err != nil {
 		return err
 	}
+
 	s := bw.hash.Size()
 	k := padLen(bw.cxz.n)
 	p := make([]byte, k+s)
 	bw.hash.Sum(p[k:k])
+
 	if _, err := bw.cxz.w.Write(p); err != nil {
 		return err
 	}
+
 	return nil
 }

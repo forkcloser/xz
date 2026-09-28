@@ -34,12 +34,15 @@ func (dc *distCodec) deepcopy(src *distCodec) {
 	if dc == src {
 		return
 	}
+
 	for i := range dc.posSlotCodecs {
 		dc.posSlotCodecs[i].deepcopy(&src.posSlotCodecs[i])
 	}
+
 	for i := range dc.posModel {
 		dc.posModel[i].deepcopy(&src.posModel[i])
 	}
+
 	dc.alignCodec.deepcopy(&src.alignCodec)
 }
 
@@ -48,11 +51,13 @@ func (dc *distCodec) init() {
 	for i := range dc.posSlotCodecs {
 		dc.posSlotCodecs[i].init(posSlotBits)
 	}
+
 	for i := range dc.posModel {
 		posSlot := startPosModel + i
 		bits := (posSlot >> 1) - 1
 		dc.posModel[i].init(bits)
 	}
+
 	dc.alignCodec.init(alignBits)
 }
 
@@ -61,6 +66,7 @@ func lenState(l uint32) uint32 {
 	if l >= lenStates {
 		l = lenStates - 1
 	}
+
 	return l
 }
 
@@ -70,8 +76,11 @@ func lenState(l uint32) uint32 {
 // indicates the end of the stream.
 func (dc *distCodec) Encode(e *rangeEncoder, dist uint32, l uint32) (err error) {
 	// Compute the posSlot using nlz32
-	var posSlot uint32
-	var bits uint32
+	var (
+		posSlot uint32
+		bits    uint32
+	)
+
 	if dist < startPosModel {
 		posSlot = dist
 	} else {
@@ -91,10 +100,12 @@ func (dc *distCodec) Encode(e *rangeEncoder, dist uint32, l uint32) (err error) 
 		tc := &dc.posModel[posSlot-startPosModel]
 		return tc.Encode(dist, e)
 	}
+
 	dic := directCodec(bits - alignBits)
 	if err = dic.Encode(e, dist>>alignBits); err != nil {
 		return
 	}
+
 	return dc.alignCodec.Encode(dist, e)
 }
 
@@ -106,6 +117,7 @@ func (dc *distCodec) Encode(e *rangeEncoder, dist uint32, l uint32) (err error) 
 func (dc *distCodec) decode(d *rangeDecoder, l, rng, code uint32,
 ) (dist, nrng, ncode uint32) {
 	var posSlot uint32
+
 	posSlot, rng, code = dc.posSlotCodecs[lenState(l)].decode(d, rng, code)
 
 	// posSlot equals distance
@@ -116,11 +128,14 @@ func (dc *distCodec) decode(d *rangeDecoder, l, rng, code uint32,
 	// posSlot uses the individual models
 	bits := (posSlot >> 1) - 1
 	dist = (2 | (posSlot & 1)) << bits
+
 	var u uint32
+
 	if posSlot < endPosModel {
 		tc := &dc.posModel[posSlot-startPosModel]
 		u, rng, code = tc.decode(d, rng, code)
 		dist += u
+
 		return dist, rng, code
 	}
 
@@ -131,5 +146,6 @@ func (dc *distCodec) decode(d *rangeDecoder, l, rng, code uint32,
 	dist += u << alignBits
 	u, rng, code = dc.alignCodec.decode(d, rng, code)
 	dist += u
+
 	return dist, rng, code
 }

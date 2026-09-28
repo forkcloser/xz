@@ -54,7 +54,9 @@ func (o operation) String() string {
 		} else {
 			c = '.'
 		}
+
 		return fmt.Sprintf("L{%c/%02x}", c, o.b)
 	}
+
 	return fmt.Sprintf("M{%d,%d}", o.distance, o.n)
 }

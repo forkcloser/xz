@@ -28,6 +28,7 @@ func newRangeEncoder(bw io.ByteWriter) (re *rangeEncoder, err error) {
 	if !ok {
 		lbw = &limitedByteWriter{BW: bw, N: maxInt64}
 	}
+
 	return &rangeEncoder{
 		lbw:      lbw,
 		nrange:   0xffffffff,
@@ -48,6 +49,7 @@ func (e *rangeEncoder) writeByte(c byte) error {
 	if e.Available() < 1 {
 		return errLimit
 	}
+
 	return e.lbw.WriteByte(c)
 }
 
@@ -61,7 +63,9 @@ func (e *rangeEncoder) DirectEncodeBit(b uint32) error {
 	if e.nrange >= top {
 		return nil
 	}
+
 	e.nrange <<= 8
+
 	return e.shiftLow()
 }
 
@@ -71,10 +75,12 @@ func (e *rangeEncoder) EncodeBit(b uint32, p *prob) error {
 	bound := p.bound(e.nrange)
 	if b&1 == 0 {
 		e.nrange = bound
+
 		p.inc()
 	} else {
 		e.low += uint64(bound)
 		e.nrange -= bound
+
 		p.dec()
 	}
 
@@ -83,7 +89,9 @@ func (e *rangeEncoder) EncodeBit(b uint32, p *prob) error {
 	if e.nrange >= top {
 		return nil
 	}
+
 	e.nrange <<= 8
+
 	return e.shiftLow()
 }
 
@@ -94,6 +102,7 @@ func (e *rangeEncoder) Close() error {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -107,19 +116,25 @@ func (e *rangeEncoder) shiftLow() error {
 			if err != nil {
 				return err
 			}
+
 			tmp = 0xff
+
 			e.cacheLen--
 			if e.cacheLen <= 0 {
 				if e.cacheLen < 0 {
 					panic("negative cacheLen")
 				}
+
 				break
 			}
 		}
+
 		e.cache = byte(uint32(e.low) >> 24)
 	}
+
 	e.cacheLen++
 	e.low = uint64(uint32(e.low) << 8)
+
 	return nil
 }
 
@@ -155,8 +170,10 @@ func (b *byteSliceReader) ReadByte() (c byte, err error) {
 	if b.pos >= len(b.buf) {
 		return 0, io.EOF
 	}
+
 	c = b.buf[b.pos]
 	b.pos++
+
 	return c, nil
 }
 
@@ -174,6 +191,7 @@ func (d *rangeDecoder) init(br io.ByteReader) error {
 	if d.err != nil {
 		return d.err
 	}
+
 	if b != 0 {
 		return corruptf("lzma: range coder stream does not start with a zero byte")
 	}
@@ -181,6 +199,7 @@ func (d *rangeDecoder) init(br io.ByteReader) error {
 	for range 4 {
 		d.code = (d.code << 8) | uint32(d.readByte())
 	}
+
 	if d.err != nil {
 		return d.err
 	}
@@ -199,6 +218,7 @@ func newRangeDecoder(br io.ByteReader) (d *rangeDecoder, err error) {
 	if err = d.init(br); err != nil {
 		return nil, err
 	}
+
 	return d, nil
 }
 
@@ -233,6 +253,7 @@ func decodeBitArith(p *prob, rng, code uint32) (bit, nrng, ncode uint32) {
 	bound := (rng >> probbits) * pv
 	// mask is 0xffffffff when the bit is 1 (code >= bound), else 0.
 	var mask uint32
+
 	if code >= bound {
 		bit = 1
 		mask = ^mask
@@ -242,6 +263,7 @@ func decodeBitArith(p *prob, rng, code uint32) (bit, nrng, ncode uint32) {
 	ncode = code - bound&mask
 	nrng = (rng-bound)&mask | bound&^mask
 	*p = prob(pv + ((((1 << probbits) - pv) >> movebits) &^ mask) - ((pv >> movebits) & mask))
+
 	return bit, nrng, ncode
 }
 
@@ -259,7 +281,9 @@ func (d *rangeDecoder) readByte() byte {
 	if pos >= len(d.buf) {
 		return d.readByteSlow()
 	}
+
 	d.pos = pos + 1
+
 	return d.buf[pos]
 }
 
@@ -271,15 +295,18 @@ func (d *rangeDecoder) readByteSlow() byte {
 	if d.err != nil {
 		return 0
 	}
+
 	if d.br == nil {
 		d.err = io.EOF
 		return 0
 	}
+
 	c, err := d.br.ReadByte()
 	if err != nil {
 		d.err = err
 		return 0
 	}
+
 	return c
 }
 
@@ -295,6 +322,7 @@ func (d *rangeDecoder) decodeBit(p *prob, rng, code uint32) (b, nrng, ncode uint
 	b, rng, code = decodeBitArith(p, rng, code)
 	if rng < rcTop {
 		rng <<= 8
+
 		code <<= 8
 		if pos := d.pos; pos < len(d.buf) {
 			code |= uint32(d.buf[pos])
@@ -303,5 +331,6 @@ func (d *rangeDecoder) decodeBit(p *prob, rng, code uint32) (b, nrng, ncode uint
 			code |= uint32(d.readByteSlow())
 		}
 	}
+
 	return b, rng, code
 }

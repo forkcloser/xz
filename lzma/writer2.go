@@ -30,9 +30,11 @@ func (c *Writer2Config) fill() {
 	if c.Properties == nil {
 		c.Properties = &Properties{LC: 3, LP: 0, PB: 2}
 	}
+
 	if c.DictCap == 0 {
 		c.DictCap = 8 * 1024 * 1024
 	}
+
 	if c.BufSize == 0 {
 		c.BufSize = 4096
 	}
@@ -42,25 +44,33 @@ func (c *Writer2Config) fill() {
 // replaced by default values.
 func (c *Writer2Config) Verify() error {
 	c.fill()
+
 	var err error
+
 	if c == nil {
 		return errors.New("lzma: WriterConfig is nil")
 	}
+
 	if c.Properties == nil {
 		return errors.New("lzma: WriterConfig has no Properties set")
 	}
+
 	if err = c.Properties.verify(); err != nil {
 		return err
 	}
+
 	if !(MinDictCap <= c.DictCap && int64(c.DictCap) <= MaxDictCap) {
 		return errors.New("lzma: dictionary capacity is out of range")
 	}
+
 	if !(maxMatchLen <= c.BufSize) {
 		return errors.New("lzma: lookahead buffer size too small")
 	}
+
 	if err = c.Matcher.verify(); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -104,6 +114,7 @@ func (c Writer2Config) NewWriter2(lzma2 io.Writer) (w *Writer2, err error) {
 	if err = c.Verify(); err != nil {
 		return nil, err
 	}
+
 	w = &Writer2{
 		w:      lzma2,
 		start:  newState(*c.Properties),
@@ -112,18 +123,22 @@ func (c Writer2Config) NewWriter2(lzma2 io.Writer) (w *Writer2, err error) {
 	}
 	w.buf.Grow(maxCompressed)
 	w.lbw = limitedByteWriter{BW: &w.buf, N: maxCompressed}
+
 	m, err := c.Matcher.new(c.DictCap)
 	if err != nil {
 		return nil, err
 	}
+
 	d, err := newEncoderDict(c.DictCap, c.BufSize, m)
 	if err != nil {
 		return nil, err
 	}
+
 	w.encoder, err = newEncoder(&w.lbw, cloneState(w.start), d, 0)
 	if err != nil {
 		return nil, err
 	}
+
 	return w, nil
 }
 
@@ -132,6 +147,7 @@ func (w *Writer2) written() int {
 	if w.encoder == nil {
 		return 0
 	}
+
 	return int(w.encoder.Compressed()) + w.encoder.dict.Buffered()
 }
 
@@ -146,32 +162,39 @@ func (w *Writer2) Write(p []byte) (n int, err error) {
 	if w.err != nil {
 		return 0, w.err
 	}
+
 	if w.cstate == stop {
 		return 0, errClosed
 	}
 	defer func() { w.setErr(err) }()
+
 	for n < len(p) {
 		m := maxUncompressed - w.written()
 		if m <= 0 {
 			panic("lzma: maxUncompressed reached")
 		}
+
 		var q []byte
 		if n+m < len(p) {
 			q = p[n : n+m]
 		} else {
 			q = p[n:]
 		}
+
 		k, err := w.encoder.Write(q)
+
 		n += k
 		if err != nil && !errors.Is(err, errLimit) {
 			return n, err
 		}
+
 		if errors.Is(err, errLimit) || k == m {
 			if err = w.flushChunk(); err != nil {
 				return n, err
 			}
 		}
 	}
+
 	return n, nil
 }
 
@@ -182,9 +205,11 @@ func (w *Writer2) writeUncompressedChunk() error {
 	if u <= 0 {
 		return errors.New("lzma: can't write empty uncompressed chunk")
 	}
+
 	if u > maxUncompressed {
 		panic("overrun of uncompressed data limit")
 	}
+
 	switch w.ctype {
 	case cLRND:
 		w.ctype = cUD
@@ -200,14 +225,18 @@ func (w *Writer2) writeUncompressedChunk() error {
 		ctype:        w.ctype,
 		uncompressed: uint32(u - 1),
 	}
+
 	hdata, err := header.MarshalBinary()
 	if err != nil {
 		return err
 	}
+
 	if _, err = w.w.Write(hdata); err != nil {
 		return err
 	}
+
 	_, err = w.encoder.dict.CopyN(w.w, int(u))
+
 	return err
 }
 
@@ -222,30 +251,38 @@ func (w *Writer2) writeCompressedChunk() error {
 	if u <= 0 {
 		return errors.New("writeCompressedChunk: empty chunk")
 	}
+
 	if u > maxUncompressed {
 		panic("overrun of uncompressed data limit")
 	}
+
 	c := w.buf.Len()
 	if c <= 0 {
 		panic("no compressed data")
 	}
+
 	if c > maxCompressed {
 		panic("overrun of compressed data limit")
 	}
+
 	header := chunkHeader{
 		ctype:        w.ctype,
 		uncompressed: uint32(u - 1),
 		compressed:   uint16(c - 1),
 		props:        w.encoder.state.Properties,
 	}
+
 	hdata, err := header.MarshalBinary()
 	if err != nil {
 		return err
 	}
+
 	if _, err = w.w.Write(hdata); err != nil {
 		return err
 	}
+
 	_, err = io.Copy(w.w, &w.buf)
+
 	return err
 }
 
@@ -260,6 +297,7 @@ func (w *Writer2) writeChunk() error {
 	if u < c && int64(w.encoder.dict.Len()) >= w.encoder.Compressed() {
 		return w.writeUncompressedChunk()
 	}
+
 	return w.writeCompressedChunk()
 }
 
@@ -269,26 +307,33 @@ func (w *Writer2) flushChunk() error {
 	if w.written() == 0 {
 		return nil
 	}
+
 	var err error
 	if err = w.encoder.Close(); err != nil {
 		return err
 	}
+
 	if err = w.writeChunk(); err != nil {
 		return err
 	}
+
 	w.buf.Reset()
+
 	w.lbw.N = maxCompressed
 	if err = w.encoder.Reopen(&w.lbw); err != nil {
 		return err
 	}
+
 	if err = w.cstate.next(w.ctype); err != nil {
 		return err
 	}
+
 	w.ctype = w.cstate.defaultChunkType()
 	// Snapshot into the existing state rather than cloning a new one: the
 	// deepcopy methods reuse the probability arrays, so the per-chunk
 	// snapshot costs no allocation.
 	w.start.deepcopy(w.encoder.state)
+
 	return nil
 }
 
@@ -307,15 +352,18 @@ func (w *Writer2) Flush() (err error) {
 	if w.err != nil {
 		return w.err
 	}
+
 	if w.cstate == stop {
 		return errClosed
 	}
 	defer func() { w.setErr(err) }()
+
 	for w.written() > 0 {
 		if err = w.flushChunk(); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -325,10 +373,12 @@ func (w *Writer2) Close() (err error) {
 	if w.err != nil {
 		return w.err
 	}
+
 	if w.cstate == stop {
 		return errClosed
 	}
 	defer func() { w.setErr(err) }()
+
 	if err = w.Flush(); err != nil {
 		return err
 	}
@@ -336,6 +386,8 @@ func (w *Writer2) Close() (err error) {
 	if _, err = w.w.Write([]byte{0}); err != nil {
 		return err
 	}
+
 	w.cstate = stop
+
 	return nil
 }

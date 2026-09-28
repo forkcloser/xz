@@ -18,10 +18,12 @@ func TestHeaderMarshalling(t *testing.T) {
 		if err != nil {
 			t.Fatalf("marshalBinary error %s", err)
 		}
+
 		var g Header
 		if err = g.unmarshalBinary(data); err != nil {
 			t.Fatalf("unmarshalBinary error %s", err)
 		}
+
 		if h != g {
 			t.Errorf("got header %#v; want %#v", g, h)
 		}
@@ -40,11 +42,13 @@ func TestValidHeader(t *testing.T) {
 		if err != nil {
 			t.Fatalf("marshalBinary error %s", err)
 		}
+
 		if !ValidHeader(data) {
 			t.Errorf("ValidHeader returns false for header %v;"+
 				" want true", h)
 		}
 	}
+
 	const a = "1234567890123"
 	if ValidHeader([]byte(a)) {
 		t.Errorf("ValidHeader returns true for %s; want false", a)

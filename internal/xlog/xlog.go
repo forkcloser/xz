@@ -82,13 +82,16 @@ func itoa(buf *[]byte, i int, wid int) {
 		*buf = append(*buf, '0')
 		return
 	}
+
 	var b [32]byte
+
 	bp := len(b)
 	for ; u > 0 || wid > 0; u /= 10 {
 		bp--
 		wid--
 		b[bp] = byte(u%10) + '0'
 	}
+
 	*buf = append(*buf, b[bp:]...)
 }
 
@@ -105,6 +108,7 @@ func (l *Logger) formatHeader(t time.Time, file string, line int) {
 			itoa(&l.buf, day, 2)
 			l.buf = append(l.buf, ' ')
 		}
+
 		if l.flag&(Ltime|Lmicroseconds) != 0 {
 			hour, minute, sec := t.Clock()
 			itoa(&l.buf, hour, 2)
@@ -112,13 +116,16 @@ func (l *Logger) formatHeader(t time.Time, file string, line int) {
 			itoa(&l.buf, minute, 2)
 			l.buf = append(l.buf, ':')
 			itoa(&l.buf, sec, 2)
+
 			if l.flag&Lmicroseconds != 0 {
 				l.buf = append(l.buf, '.')
 				itoa(&l.buf, t.Nanosecond()/1e3, 6)
 			}
+
 			l.buf = append(l.buf, ' ')
 		}
 	}
+
 	if l.flag&(Lshortfile|Llongfile) != 0 {
 		if l.flag&Lshortfile != 0 {
 			short := file
@@ -128,8 +135,10 @@ func (l *Logger) formatHeader(t time.Time, file string, line int) {
 					break
 				}
 			}
+
 			file = short
 		}
+
 		l.buf = append(l.buf, file...)
 		l.buf = append(l.buf, ':')
 		itoa(&l.buf, line, -1)
@@ -138,25 +147,35 @@ func (l *Logger) formatHeader(t time.Time, file string, line int) {
 }
 
 func (l *Logger) output(calldepth int, now time.Time, s string) error {
-	var file string
-	var line int
+	var (
+		file string
+		line int
+	)
+
 	if l.flag&(Lshortfile|Llongfile) != 0 {
 		l.mu.Unlock()
+
 		var ok bool
+
 		_, file, line, ok = runtime.Caller(calldepth)
 		if !ok {
 			file = "???"
 			line = 0
 		}
+
 		l.mu.Lock()
 	}
+
 	l.buf = l.buf[:0]
 	l.formatHeader(now, file, line)
+
 	l.buf = append(l.buf, s...)
 	if len(s) == 0 || s[len(s)-1] != '\n' {
 		l.buf = append(l.buf, '\n')
 	}
+
 	_, err := l.out.Write(l.buf)
+
 	return err
 }
 
@@ -166,24 +185,32 @@ func (l *Logger) output(calldepth int, now time.Time, s string) error {
 // calls of Output use the call depth 2. Access to the function is serialized.
 func (l *Logger) Output(calldepth, noflag int, v ...any) error {
 	now := time.Now()
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	if l.flag&noflag != 0 {
 		return nil
 	}
+
 	s := fmt.Sprint(v...)
+
 	return l.output(calldepth+1, now, s)
 }
 
 // Outputf works like output but formats the output like Printf.
 func (l *Logger) Outputf(calldepth int, noflag int, format string, v ...any) error {
 	now := time.Now()
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	if l.flag&noflag != 0 {
 		return nil
 	}
+
 	s := fmt.Sprintf(format, v...)
+
 	return l.output(calldepth+1, now, s)
 }
 
@@ -228,6 +255,7 @@ func Printf(format string, v ...any) {
 func (l *Logger) DebugEnabled() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	return l.flag&Lnodebug == 0
 }
 
@@ -247,6 +275,7 @@ func Debugf(format string, v ...any) {
 func (l *Logger) Flags() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	return l.flag
 }
 
@@ -259,6 +288,7 @@ func Flags() int {
 func (l *Logger) SetFlags(flag int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	l.flag = flag
 }
 
@@ -271,6 +301,7 @@ func SetFlags(flag int) {
 func (l *Logger) SetPrefix(prefix string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	l.prefix = prefix
 }
 

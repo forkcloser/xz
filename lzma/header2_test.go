@@ -45,15 +45,18 @@ func TestHeaderChunkType(t *testing.T) {
 		{h: 1<<7 | 1<<6 | 1<<5 | 0x1f, c: cLRND},
 		{h: 1<<7 | 1<<6 | 1<<5, c: cLRND},
 	}
+
 	if _, err := headerChunkType(3); err == nil {
 		t.Fatalf("headerChunkType(%d) got %v; want %v",
 			3, err, errHeaderByte)
 	}
+
 	for _, tc := range tests {
 		c, err := headerChunkType(tc.h)
 		if err != nil {
 			t.Fatalf("headerChunkType error %s", err)
 		}
+
 		if c != tc.c {
 			t.Errorf("got %s; want %s", c, tc.c)
 		}
@@ -79,22 +82,29 @@ func TestHeaderLen(t *testing.T) {
 
 func chunkHeaderSamples(t *testing.T) []chunkHeader {
 	t.Helper()
+
 	props := Properties{LC: 3, LP: 0, PB: 2}
 	headers := make([]chunkHeader, 0, 12)
+
 	for c := cEOS; c <= cLRND; c++ {
 		var h chunkHeader
+
 		h.ctype = c
 		if c >= cUD {
 			h.uncompressed = 0x0304
 		}
+
 		if c >= cL {
 			h.compressed = 0x0201
 		}
+
 		if c >= cLRN {
 			h.props = props
 		}
+
 		headers = append(headers, h)
 	}
+
 	return headers
 }
 
@@ -104,10 +114,12 @@ func TestChunkHeaderMarshalling(t *testing.T) {
 		if err != nil {
 			t.Fatalf("MarshalBinary for %v error %s", h, err)
 		}
+
 		var g chunkHeader
 		if err = g.UnmarshalBinary(data); err != nil {
 			t.Fatalf("UnmarshalBinary error %s", err)
 		}
+
 		if g != h {
 			t.Fatalf("got %v; want %v", g, h)
 		}
@@ -120,12 +132,17 @@ func TestReadChunkHeader(t *testing.T) {
 		if err != nil {
 			t.Fatalf("MarshalBinary for %v error %s", h, err)
 		}
+
 		r := bytes.NewReader(data)
-		var g chunkHeader
-		var buf [6]byte
+
+		var (
+			g   chunkHeader
+			buf [6]byte
+		)
 		if err := readChunkHeader(r, buf[:], &g); err != nil {
 			t.Fatalf("readChunkHeader for %v error %s", h, err)
 		}
+
 		if g != h {
 			t.Fatalf("got %v; want %v", g, h)
 		}
@@ -134,21 +151,29 @@ func TestReadChunkHeader(t *testing.T) {
 
 func TestReadEOS(t *testing.T) {
 	var b [1]byte
+
 	r := bytes.NewReader(b[:])
-	var h chunkHeader
-	var buf [6]byte
+
+	var (
+		h   chunkHeader
+		buf [6]byte
+	)
 	if err := readChunkHeader(r, buf[:], &h); err != nil {
 		t.Fatalf("readChunkHeader error %s", err)
 	}
+
 	if h.ctype != cEOS {
 		t.Errorf("ctype got %s; want %s", h.ctype, cEOS)
 	}
+
 	if h.compressed != 0 {
 		t.Errorf("compressed got %d; want %d", h.compressed, 0)
 	}
+
 	if h.uncompressed != 0 {
 		t.Errorf("uncompressed got %d; want %d", h.uncompressed, 0)
 	}
+
 	wantProps := Properties{}
 	if h.props != wantProps {
 		t.Errorf("props got %v; want %v", h.props, wantProps)

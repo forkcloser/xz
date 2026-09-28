@@ -83,6 +83,7 @@ func classify(err error) error {
 	case errors.Is(err, lzma.ErrUnsupported):
 		return &classifiedError{err: err, kind: ErrUnsupported}
 	}
+
 	return err
 }
 

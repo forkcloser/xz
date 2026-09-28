@@ -27,6 +27,7 @@ func signalHandler(w *writer) chan<- struct{} {
 	quit := make(chan struct{})
 	sigch := make(chan os.Signal, 1)
 	signal.Notify(sigch, os.Interrupt, syscall.SIGPIPE)
+
 	go func() {
 		select {
 		case <-quit:
@@ -37,6 +38,7 @@ func signalHandler(w *writer) chan<- struct{} {
 			os.Exit(7)
 		}
 	}()
+
 	return quit
 }
 
@@ -64,6 +66,7 @@ var formats = map[string]*format{
 					PB: 2},
 				DictCap: 1 << lzmaDictCapExps[opts.preset],
 			}
+
 			return lc.NewWriter(w)
 		},
 		newDecompressor: func(r io.Reader, opts *options,
@@ -71,6 +74,7 @@ var formats = map[string]*format{
 			lc := lzma.ReaderConfig{
 				DictCap: 1 << lzmaDictCapExps[opts.preset],
 			}
+
 			return lc.NewReader(r)
 		},
 		validHeader: func(br *bufio.Reader) bool {
@@ -78,6 +82,7 @@ var formats = map[string]*format{
 			if err != nil {
 				return false
 			}
+
 			return lzma.ValidHeader(h)
 		},
 	},
@@ -87,6 +92,7 @@ var formats = map[string]*format{
 			cfg := xz.WriterConfig{
 				DictCap: 1 << lzmaDictCapExps[opts.preset],
 			}
+
 			return cfg.NewWriter(w)
 		},
 		newDecompressor: func(r io.Reader, opts *options,
@@ -94,6 +100,7 @@ var formats = map[string]*format{
 			cfg := xz.ReaderConfig{
 				DictCap: 1 << lzmaDictCapExps[opts.preset],
 			}
+
 			return cfg.NewReader(r)
 		},
 		validHeader: func(br *bufio.Reader) bool {
@@ -101,6 +108,7 @@ var formats = map[string]*format{
 			if err != nil {
 				return false
 			}
+
 			return xz.ValidHeader(h)
 		},
 	},
@@ -114,39 +122,50 @@ func targetName(path string, opts *options) (target string, err error) {
 	if path == "-" {
 		panic("path name - not supported")
 	}
+
 	if len(path) == 0 {
 		return "", errors.New("empty file name not supported")
 	}
+
 	ext := "." + opts.format
+
 	tarExt := ".txz"
 	if opts.format == "lzma" {
 		tarExt = ".tlz"
 	}
+
 	if !opts.decompress {
 		if strings.HasSuffix(path, ext) {
 			return "", fmt.Errorf(
 				"%s: file has already %s suffix", path, ext)
 		}
+
 		if strings.HasSuffix(path, tarExt) {
 			return "", fmt.Errorf(
 				"%s: file has already %s suffix", path, tarExt)
 		}
+
 		return path + ext, nil
 	}
+
 	if strings.HasSuffix(path, ext) {
 		target = path[:len(path)-len(ext)]
 		if filepath.Base(target) == "" {
 			return "", &userPathError{path, errBase}
 		}
+
 		return target, nil
 	}
+
 	if strings.HasSuffix(path, tarExt) {
 		target = path[:len(path)-len(tarExt)]
 		if filepath.Base(target) == "" {
 			return "", &userPathError{path, errBase}
 		}
+
 		return target + ".tar", nil
 	}
+
 	return path, nil
 }
 
@@ -159,6 +178,7 @@ func tmpName(path string, decompress bool) string {
 	} else {
 		ext = ".compress"
 	}
+
 	return path + ext
 }
 
@@ -180,6 +200,7 @@ func writerFormat(opts *options) (f *format, err error) {
 		return nil, fmt.Errorf("compression format %q not supported",
 			opts.format)
 	}
+
 	return f, nil
 }
 
@@ -188,13 +209,16 @@ func newCompressor(w io.Writer, opts *options) (cmp io.WriteCloser, err error) {
 	if opts.decompress {
 		panic("no compressor needed")
 	}
+
 	f, err := writerFormat(opts)
 	if err != nil {
 		return nil, err
 	}
+
 	if cmp, err = f.newCompressor(w, opts); err != nil {
 		return nil, err
 	}
+
 	return cmp, nil
 }
 
@@ -211,6 +235,7 @@ func newWriter(path string, perm os.FileMode, opts *options,
 		if err != nil {
 			return nil, err
 		}
+
 		if _, err = os.Stat(name); !os.IsNotExist(err) {
 			if !opts.force {
 				return nil, &userPathError{
@@ -218,23 +243,29 @@ func newWriter(path string, perm os.FileMode, opts *options,
 					Err:  errors.New("file exists")}
 			}
 		}
+
 		tmp := tmpName(name, opts.decompress)
 		if w.f, err = os.OpenFile(tmp,
 			os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm); err != nil {
 			return nil, err
 		}
+
 		w.name = name
 	}
+
 	w.bw = bufio.NewWriter(w.f)
 	if opts.decompress {
 		w.Writer = w.bw
 		return w, nil
 	}
+
 	w.cmp, err = newCompressor(w.bw, opts)
 	if err != nil {
 		return nil, &userPathError{w.name, err}
 	}
+
 	w.Writer = w.cmp
+
 	return w, nil
 }
 
@@ -259,31 +290,40 @@ func (w *writer) Close() error {
 		if isStdout(w.f) {
 			return nil
 		}
+
 		if err = w.f.Close(); err != nil {
 			return err
 		}
+
 		if err = os.Remove(w.f.Name()); err != nil {
 			return err
 		}
+
 		return nil
 	}
+
 	if w.cmp != nil {
 		if err = w.cmp.Close(); err != nil {
 			return err
 		}
 	}
+
 	if err = w.bw.Flush(); err != nil {
 		return err
 	}
+
 	if isStdout(w.f) {
 		return nil
 	}
+
 	if err = w.f.Close(); err != nil {
 		return err
 	}
+
 	if err = os.Rename(w.f.Name(), w.name); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -317,10 +357,12 @@ func openFile(path string, opts *options) (f *os.File, err error) {
 	if path == "-" {
 		return os.Stdin, nil
 	}
+
 	fi, err := os.Lstat(path)
 	if err != nil {
 		return nil, err
 	}
+
 	fm := fi.Mode()
 	if !fm.IsRegular() {
 		if !opts.force || fm&os.ModeSymlink == 0 {
@@ -328,20 +370,25 @@ func openFile(path string, opts *options) (f *os.File, err error) {
 				Err: errNoRegular}
 		}
 	}
+
 	if f, err = os.Open(path); err != nil {
 		return nil, err
 	}
+
 	if fi, err = f.Stat(); err != nil {
 		return nil, err
 	}
+
 	fm = fi.Mode()
 	if !fm.IsRegular() {
 		return nil, &userPathError{Path: path, Err: errNoRegular}
 	}
+
 	if fm&specialBits != 0 && !opts.force {
 		return nil, &userPathError{Path: path,
 			Err: errors.New("setuid, setgid and/or sticky bit set")}
 	}
+
 	return f, nil
 }
 
@@ -357,18 +404,22 @@ func readerFormat(br *bufio.Reader, opts *options) (f *format, err error) {
 		if !f.validHeader(br) {
 			return nil, errInvalidFormat
 		}
+
 		return f, nil
 	}
+
 	if opts.format != "auto" {
 		return nil, fmt.Errorf("compression format %s not supported",
 			opts.format)
 	}
+
 	for format, f := range formats {
 		if f.validHeader(br) {
 			opts.format = format
 			return f, nil
 		}
 	}
+
 	return nil, errInvalidFormat
 }
 
@@ -378,13 +429,16 @@ func newDecompressor(br *bufio.Reader, opts *options) (dec io.Reader,
 	if !opts.decompress {
 		panic("no decompressor needed")
 	}
+
 	f, err := readerFormat(br, opts)
 	if err != nil {
 		return nil, err
 	}
+
 	if dec, err = f.newDecompressor(br, opts); err != nil {
 		return nil, err
 	}
+
 	return dec, nil
 }
 
@@ -394,16 +448,20 @@ func newReader(path string, opts *options) (r *reader, err error) {
 	if err != nil {
 		return nil, err
 	}
+
 	br := bufio.NewReader(f)
 	if !opts.decompress {
 		r = &reader{f: f, Reader: br, keep: opts.keep || opts.stdout}
 		return r, nil
 	}
+
 	dec, err := newDecompressor(br, opts)
 	if err != nil {
 		return nil, &userPathError{path, err}
 	}
+
 	r = &reader{f: f, Reader: dec, keep: opts.keep || opts.stdout}
+
 	return r, nil
 }
 
@@ -419,18 +477,23 @@ func (r *reader) Close() error {
 		return errInval
 	}
 	defer func() { r.f = nil }()
+
 	if isStdin(r.f) {
 		return nil
 	}
+
 	if err := r.f.Close(); err != nil {
 		return err
 	}
+
 	if r.keep || !r.success {
 		return nil
 	}
+
 	if err := os.Remove(r.f.Name()); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -471,6 +534,7 @@ func userError(err error) error {
 	if !errors.As(err, &pe) {
 		return err
 	}
+
 	return &userPathError{Path: pe.Path, Err: pe.Err}
 }
 
@@ -489,28 +553,37 @@ func processFile(path string, opts *options) (err error) {
 		return
 	}
 	defer func() { _ = r.Close() }()
+
 	w, err := newWriter(path, r.Perm(), opts)
 	if err != nil {
 		printErr(err)
 		return
 	}
+
 	defer func() { _ = w.Close() }()
+
 	quitSignalHandler := signalHandler(w)
 	if _, err = io.Copy(w, r); err != nil {
 		close(quitSignalHandler)
 		printErr(err)
+
 		return err
 	}
+
 	close(quitSignalHandler)
 	w.SetSuccess()
+
 	if err = w.Close(); err != nil {
 		printErr(err)
 		return err
 	}
+
 	r.SetSuccess()
+
 	if err = r.Close(); err != nil {
 		printErr(err)
 		return err
 	}
+
 	return nil
 }

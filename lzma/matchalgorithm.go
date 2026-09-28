@@ -35,6 +35,7 @@ func (a MatchAlgorithm) String() string {
 	if s, ok := maStrings[a]; ok {
 		return s
 	}
+
 	return "unknown"
 }
 
@@ -46,6 +47,7 @@ func (a MatchAlgorithm) verify() error {
 	if _, ok := maStrings[a]; !ok {
 		return errUnsupportedMatchAlgorithm
 	}
+
 	return nil
 }
 
@@ -53,5 +55,6 @@ func (a MatchAlgorithm) new(dictCap int) (m matcher, err error) {
 	if a == HashTable4 {
 		return newHashTable(dictCap, 4)
 	}
+
 	return nil, errUnsupportedMatchAlgorithm
 }

@@ -16,6 +16,7 @@ func (dc directCodec) Encode(e *rangeEncoder, v uint32) error {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -35,8 +36,10 @@ func (dc directCodec) decode(d *rangeDecoder, rng, code uint32) (v, nrng, ncode 
 		t := 0 - (code >> 31)
 		code += rng & t
 		v = (v << 1) | ((t + 1) & 1)
+
 		if rng < rcTop {
 			rng <<= 8
+
 			code <<= 8
 			if pos := d.pos; pos < len(d.buf) {
 				code |= uint32(d.buf[pos])
@@ -46,5 +49,6 @@ func (dc directCodec) decode(d *rangeDecoder, rng, code uint32) (v, nrng, ncode 
 			}
 		}
 	}
+
 	return v, rng, code
 }

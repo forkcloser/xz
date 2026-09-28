@@ -41,6 +41,7 @@ func (b *buffer) grow(newCap int) {
 	if newCap <= b.Cap() {
 		return
 	}
+
 	data := make([]byte, newCap+1)
 	copy(data, b.data[:b.front])
 	b.data = data
@@ -58,6 +59,7 @@ func (b *buffer) Buffered() int {
 	if delta < 0 {
 		delta += len(b.data)
 	}
+
 	return delta
 }
 
@@ -67,6 +69,7 @@ func (b *buffer) Available() int {
 	if delta < 0 {
 		delta += len(b.data)
 	}
+
 	return delta
 }
 
@@ -79,6 +82,7 @@ func (b *buffer) addIndex(i int, n int) int {
 	if i < 0 {
 		i += len(b.data)
 	}
+
 	return i
 }
 
@@ -88,6 +92,7 @@ func (b *buffer) addIndex(i int, n int) int {
 func (b *buffer) Read(p []byte) (n int, err error) {
 	n, err = b.Peek(p)
 	b.rear = b.addIndex(b.rear, n)
+
 	return n, err
 }
 
@@ -96,15 +101,18 @@ func (b *buffer) Read(p []byte) (n int, err error) {
 // requested.
 func (b *buffer) Peek(p []byte) (n int, err error) {
 	m := b.Buffered()
+
 	n = len(p)
 	if m < n {
 		n = m
 		p = p[:n]
 	}
+
 	k := copy(p, b.data[b.rear:])
 	if k < n {
 		copy(p[k:], b.data)
 	}
+
 	return n, nil
 }
 
@@ -116,13 +124,16 @@ func (b *buffer) Discard(n int) (discarded int, err error) {
 	if n < 0 {
 		return 0, errors.New("buffer.Discard: negative argument")
 	}
+
 	m := b.Buffered()
 	if m < n {
 		n = m
 		err = errors.New(
 			"buffer.Discard: discarded less bytes then requested")
 	}
+
 	b.rear = b.addIndex(b.rear, n)
+
 	return n, err
 }
 
@@ -135,17 +146,21 @@ var ErrNoSpace = errors.New("lzma: insufficient space")
 // requested ErrNoSpace is returned.
 func (b *buffer) Write(p []byte) (n int, err error) {
 	m := b.Available()
+
 	n = len(p)
 	if m < n {
 		n = m
 		p = p[:m]
 		err = ErrNoSpace
 	}
+
 	k := copy(b.data[b.front:], p)
 	if k < n {
 		copy(b.data, p[k:])
 	}
+
 	b.front = b.addIndex(b.front, n)
+
 	return n, err
 }
 
@@ -155,8 +170,10 @@ func (b *buffer) WriteByte(c byte) error {
 	if b.Available() < 1 {
 		return ErrNoSpace
 	}
+
 	b.data[b.front] = c
 	b.front = b.addIndex(b.front, 1)
+
 	return nil
 }
 
@@ -165,11 +182,13 @@ func prefixLen(a, b []byte) int {
 	if len(a) > len(b) {
 		a, b = b, a
 	}
+
 	for i, c := range a {
 		if b[i] != c {
 			return i
 		}
 	}
+
 	return len(a)
 }
 
@@ -177,14 +196,18 @@ func prefixLen(a, b []byte) int {
 // distance from the rear and the byte slice p.
 func (b *buffer) matchLen(distance int, p []byte) int {
 	var n int
+
 	i := b.rear - distance
 	if i < 0 {
 		if n = prefixLen(p, b.data[len(b.data)+i:]); n < -i {
 			return n
 		}
+
 		p = p[n:]
 		i = 0
 	}
+
 	n += prefixLen(p, b.data[i:])
+
 	return n
 }

@@ -35,6 +35,7 @@ func writerConfigFor(flags byte) WriterConfig {
 	if flags == None {
 		return WriterConfig{NoCheckSum: true}
 	}
+
 	return WriterConfig{CheckSum: flags}
 }
 
@@ -45,32 +46,40 @@ func writerConfigFor(flags byte) WriterConfig {
 // NoCheckSum field.
 func TestNoneCheckSumFieldIsNotSelectable(t *testing.T) {
 	var buf bytes.Buffer
+
 	w, err := WriterConfig{CheckSum: None}.NewWriter(&buf)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err = w.Write([]byte("x")); err != nil {
 		t.Fatal(err)
 	}
+
 	if err = w.Close(); err != nil {
 		t.Fatal(err)
 	}
+
 	if got := buf.Bytes()[7]; got != CRC64 {
 		t.Fatalf("CheckSum: None produced check %#x; documenting it as %#x",
 			got, CRC64)
 	}
 
 	buf.Reset()
+
 	w, err = WriterConfig{NoCheckSum: true}.NewWriter(&buf)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err = w.Write([]byte("x")); err != nil {
 		t.Fatal(err)
 	}
+
 	if err = w.Close(); err != nil {
 		t.Fatal(err)
 	}
+
 	if got := buf.Bytes()[7]; got != None {
 		t.Fatalf("NoCheckSum produced check %#x; want %#x", got, None)
 	}
@@ -78,19 +87,24 @@ func TestNoneCheckSumFieldIsNotSelectable(t *testing.T) {
 
 func TestCheckTypesRoundTrip(t *testing.T) {
 	data := parallelTestData(1 << 16)
+
 	for _, ct := range checkTypes {
 		t.Run(ct.name, func(t *testing.T) {
 			var buf bytes.Buffer
+
 			w, err := writerConfigFor(ct.flags).NewWriter(&buf)
 			if err != nil {
 				t.Fatalf("NewWriter: %s", err)
 			}
+
 			if _, err = w.Write(data); err != nil {
 				t.Fatalf("Write: %s", err)
 			}
+
 			if err = w.Close(); err != nil {
 				t.Fatalf("Close: %s", err)
 			}
+
 			file := buf.Bytes()
 
 			// The check size shows up in the stream: a bigger check makes a
@@ -104,6 +118,7 @@ func TestCheckTypesRoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatalf("sequential read: %s", err)
 			}
+
 			if !bytes.Equal(got, data) {
 				t.Error("sequential decode differs from the original")
 			}
@@ -113,10 +128,12 @@ func TestCheckTypesRoundTrip(t *testing.T) {
 				t.Fatalf("NewParallelReader: %s", err)
 			}
 			defer func() { _ = pr.Close() }()
+
 			got, err = io.ReadAll(pr)
 			if err != nil {
 				t.Fatalf("parallel read: %s", err)
 			}
+
 			if !bytes.Equal(got, data) {
 				t.Error("parallel decode differs from the original")
 			}
@@ -130,22 +147,28 @@ func TestCheckTypesRoundTrip(t *testing.T) {
 // report it.
 func TestCheckTypesDetectCorruption(t *testing.T) {
 	data := parallelTestData(1 << 15)
+
 	for _, ct := range checkTypes {
 		if ct.flags == None {
 			continue // nothing to detect with
 		}
+
 		t.Run(ct.name, func(t *testing.T) {
 			var buf bytes.Buffer
+
 			w, err := writerConfigFor(ct.flags).NewWriter(&buf)
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if _, err = w.Write(data); err != nil {
 				t.Fatal(err)
 			}
+
 			if err = w.Close(); err != nil {
 				t.Fatal(err)
 			}
+
 			good := buf.Bytes()
 
 			// Corrupt the stored check itself, which sits just before the
@@ -153,16 +176,19 @@ func TestCheckTypesDetectCorruption(t *testing.T) {
 			// the LZMA decoder before the check is ever compared; damaging
 			// the check can only be caught by comparing it.
 			bad := append([]byte{}, good...)
+
 			checkPos := len(bad) - footerLen - 12 - ct.size
 			if checkPos <= 0 || checkPos >= len(bad) {
 				t.Skipf("cannot locate the check in a %d byte file", len(bad))
 			}
+
 			bad[checkPos] ^= 0x01
 
 			r, err := NewReader(bytes.NewReader(bad))
 			if err != nil {
 				return // rejected already, which is also detection
 			}
+
 			if _, err = io.ReadAll(r); err == nil {
 				t.Error("a corrupted check was accepted")
 			}
@@ -172,10 +198,12 @@ func TestCheckTypesDetectCorruption(t *testing.T) {
 
 func mustReader(t *testing.T, file []byte) *Reader {
 	t.Helper()
+
 	r, err := NewReader(bytes.NewReader(file))
 	if err != nil {
 		t.Fatalf("NewReader: %s", err)
 	}
+
 	return r
 }
 
@@ -188,30 +216,39 @@ func TestCheckTypesAgainstXZ(t *testing.T) {
 	if err != nil {
 		t.Skip("xz not installed")
 	}
+
 	data := parallelTestData(1 << 16)
+
 	for _, ct := range checkTypes {
 		t.Run(ct.name, func(t *testing.T) {
 			var buf bytes.Buffer
+
 			w, err := writerConfigFor(ct.flags).NewWriter(&buf)
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if _, err = w.Write(data); err != nil {
 				t.Fatal(err)
 			}
+
 			if err = w.Close(); err != nil {
 				t.Fatal(err)
 			}
 
 			cmd := exec.Command(xzBin, "-dc")
 			cmd.Stdin = bytes.NewReader(buf.Bytes())
+
 			var out, stderr bytes.Buffer
+
 			cmd.Stdout = &out
+
 			cmd.Stderr = &stderr
 			if err := cmd.Run(); err != nil {
 				t.Fatalf("xz -dc rejected our %s output: %s (%s)",
 					ct.name, err, stderr.String())
 			}
+
 			if !bytes.Equal(out.Bytes(), data) {
 				t.Errorf("xz -dc decoded our %s output to different bytes",
 					ct.name)
@@ -228,7 +265,9 @@ func TestReadXZProducedFiles(t *testing.T) {
 	if err != nil {
 		t.Skip("xz not installed")
 	}
+
 	data := parallelTestData(1 << 18)
+
 	src := t.TempDir() + "/data"
 	if err := os.WriteFile(src, data, 0o644); err != nil {
 		t.Fatal(err)
@@ -244,21 +283,26 @@ func TestReadXZProducedFiles(t *testing.T) {
 	} {
 		t.Run(args[0], func(t *testing.T) {
 			cmd := exec.Command(xzBin, append(args, src)...)
+
 			var out bytes.Buffer
+
 			cmd.Stdout = &out
 			if err := cmd.Run(); err != nil {
 				t.Fatalf("xz %v: %s", args, err)
 			}
+
 			file := out.Bytes()
 
 			r, err := NewReader(bytes.NewReader(file))
 			if err != nil {
 				t.Fatalf("NewReader: %s", err)
 			}
+
 			got, err := io.ReadAll(r)
 			if err != nil {
 				t.Fatalf("sequential read: %s", err)
 			}
+
 			if !bytes.Equal(got, data) {
 				t.Error("sequential decode differs from the original")
 			}
@@ -268,10 +312,12 @@ func TestReadXZProducedFiles(t *testing.T) {
 				t.Fatalf("NewParallelReader: %s", err)
 			}
 			defer func() { _ = pr.Close() }()
+
 			got, err = io.ReadAll(pr)
 			if err != nil {
 				t.Fatalf("parallel read: %s", err)
 			}
+
 			if !bytes.Equal(got, data) {
 				t.Error("parallel decode differs from the original")
 			}
@@ -288,13 +334,16 @@ func TestStringersDoNotPanic(t *testing.T) {
 		if s := flagString(flags); s == "" {
 			t.Errorf("flagString(%#x) is empty", flags)
 		}
+
 		if s := (header{flags: flags}).String(); s == "" {
 			t.Errorf("header{%#x}.String() is empty", flags)
 		}
+
 		if s := (footer{indexSize: 8, flags: flags}).String(); s == "" {
 			t.Errorf("footer{%#x}.String() is empty", flags)
 		}
 	}
+
 	if got := flagString(0x7); got != "invalid" {
 		t.Errorf("flagString of an unknown check is %q; want %q", got, "invalid")
 	}
@@ -303,6 +352,7 @@ func TestStringersDoNotPanic(t *testing.T) {
 	if s := f.String(); s == "" {
 		t.Error("lzmaFilter.String() is empty")
 	}
+
 	for _, h := range []blockHeader{
 		{compressedSize: -1, uncompressedSize: -1},
 		{compressedSize: 10, uncompressedSize: 20, filters: []filter{&f}},

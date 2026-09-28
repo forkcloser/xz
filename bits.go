@@ -42,7 +42,9 @@ func putUvarint(p []byte, x uint64) int {
 		x >>= 7
 		i++
 	}
+
 	p[i] = byte(x)
+
 	return i + 1
 }
 
@@ -66,23 +68,29 @@ const maxUvarintLen = 9
 // slip past a scanner that checked it with a different decoder.
 func readUvarint(r io.ByteReader) (x uint64, n int, err error) {
 	var s uint
+
 	i := 0
+
 	for {
 		b, err := r.ReadByte()
 		if err != nil {
 			return x, i, err
 		}
+
 		i++
 		if b < 0x80 {
 			// A final byte of zero means the value fits in fewer bytes.
 			if i > 1 && b == 0 {
 				return x, i, errNonCanonicalUvarint
 			}
+
 			return x | uint64(b)<<s, i, nil
 		}
+
 		if i >= maxUvarintLen {
 			return x, i, errOverflowU64
 		}
+
 		x |= uint64(b&0x7f) << s
 		s += 7
 	}

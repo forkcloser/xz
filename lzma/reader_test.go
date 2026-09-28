@@ -22,6 +22,7 @@ func TestNewReader(t *testing.T) {
 		t.Fatalf("open examples/a.lzma: %s", err)
 	}
 	defer func() { _ = f.Close() }()
+
 	_, err = NewReader(bufio.NewReader(f))
 	if err != nil {
 		t.Fatalf("NewReader: %s", err)
@@ -35,39 +36,50 @@ const (
 
 func readOrigFile(t *testing.T) []byte {
 	t.Helper()
+
 	orig, err := os.ReadFile(filepath.Join(dirname, origname))
 	if err != nil {
 		t.Fatalf("ReadFile: %s", err)
 	}
+
 	return orig
 }
 
 func testDecodeFile(t *testing.T, filename string, orig []byte) {
 	t.Helper()
+
 	pathname := filepath.Join(dirname, filename)
+
 	f, err := os.Open(pathname)
 	if err != nil {
 		t.Fatalf("Open(%q): %s", pathname, err)
 	}
+
 	defer func() {
 		if err = f.Close(); err != nil {
 			t.Fatalf("f.Close() error %s", err)
 		}
 	}()
+
 	t.Logf("file %s opened", filename)
+
 	l, err := NewReader(bufio.NewReader(f))
 	if err != nil {
 		t.Fatalf("NewReader: %s", err)
 	}
+
 	decoded, err := io.ReadAll(l)
 	if err != nil {
 		t.Fatalf("ReadAll: %s", err)
 	}
+
 	t.Logf("%s", decoded)
+
 	if len(orig) != len(decoded) {
 		t.Fatalf("length decoded is %d; want %d",
 			len(decoded), len(orig))
 	}
+
 	if !bytes.Equal(orig, decoded) {
 		t.Fatalf("decoded file differs from original")
 	}
@@ -76,21 +88,23 @@ func testDecodeFile(t *testing.T, filename string, orig []byte) {
 func TestReaderSimple(t *testing.T) {
 	// DebugOn(os.Stderr)
 	// defer DebugOff()
-
 	testDecodeFile(t, "a.lzma", readOrigFile(t))
 }
 
 func TestReaderAll(t *testing.T) {
 	dirname := "examples"
+
 	dir, err := os.Open(dirname)
 	if err != nil {
 		t.Fatalf("Open: %s", err)
 	}
+
 	defer func() {
 		if err := dir.Close(); err != nil {
 			t.Fatalf("dir.Close() error %s", err)
 		}
 	}()
+
 	all, err := dir.Readdirnames(0)
 	if err != nil {
 		t.Fatalf("Readdirnames: %s", err)
@@ -102,10 +116,12 @@ func TestReaderAll(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Match: %s", err)
 		}
+
 		if match {
 			files = append(files, fn)
 		}
 	}
+
 	t.Log("files:", files)
 	orig := readOrigFile(t)
 	// actually test the files
@@ -124,10 +140,12 @@ func Example_reader() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	_, err = io.Copy(os.Stdout, r)
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	if err := f.Close(); err != nil {
 		log.Fatal(err)
 	}
@@ -142,30 +160,39 @@ type wrapTest struct {
 
 func (w *wrapTest) testFile(t *testing.T, filename string, orig []byte) {
 	t.Helper()
+
 	pathname := filepath.Join(dirname, filename)
+
 	f, err := os.Open(pathname)
 	if err != nil {
 		t.Fatalf("Open(\"%s\"): %s", pathname, err)
 	}
+
 	defer func() {
 		if err := f.Close(); err != nil {
 			log.Fatal(err)
 		}
 	}()
+
 	t.Logf("%s file %s opened", w.name, filename)
+
 	l, err := NewReader(w.wrap(f))
 	if err != nil {
 		t.Fatalf("%s NewReader: %s", w.name, err)
 	}
+
 	decoded, err := io.ReadAll(l)
 	if err != nil {
 		t.Fatalf("%s ReadAll: %s", w.name, err)
 	}
+
 	t.Logf("%s", decoded)
+
 	if len(orig) != len(decoded) {
 		t.Fatalf("%s length decoded is %d; want %d",
 			w.name, len(decoded), len(orig))
 	}
+
 	if !bytes.Equal(orig, decoded) {
 		t.Fatalf("%s decoded file differs from original", w.name)
 	}
@@ -178,6 +205,7 @@ func TestReaderWrap(t *testing.T) {
 		{"OneByteReader", iotest.OneByteReader},
 		// TimeOutReader would require buffer
 	}
+
 	orig := readOrigFile(t)
 	for _, tst := range tests {
 		tst.testFile(t, "a.lzma", orig)
@@ -186,15 +214,18 @@ func TestReaderWrap(t *testing.T) {
 
 func TestReaderBadFiles(t *testing.T) {
 	dirname := "examples"
+
 	dir, err := os.Open(dirname)
 	if err != nil {
 		t.Fatalf("Open: %s", err)
 	}
+
 	defer func() {
 		if err := dir.Close(); err != nil {
 			t.Fatalf("dir.Close() error %s", err)
 		}
 	}()
+
 	all, err := dir.Readdirnames(0)
 	if err != nil {
 		t.Fatalf("Readdirnames: %s", err)
@@ -206,13 +237,17 @@ func TestReaderBadFiles(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Match: %s", err)
 		}
+
 		if match {
 			files = append(files, fn)
 		}
 	}
+
 	t.Log("files:", files)
+
 	for _, filename := range files {
 		pathname := filepath.Join(dirname, filename)
+
 		f, err := os.Open(pathname)
 		if err != nil {
 			t.Fatalf("Open(\"%s\"): %s", pathname, err)
@@ -222,17 +257,22 @@ func TestReaderBadFiles(t *testing.T) {
 				t.Fatalf("f.Close() error %s", err)
 			}
 		}(f)
+
 		t.Logf("file %s opened", filename)
+
 		l, err := NewReader(f)
 		if err != nil {
 			t.Fatalf("NewReader: %s", err)
 		}
+
 		decoded, err := io.ReadAll(l)
 		if err == nil {
 			t.Errorf("ReadAll for %s: no error", filename)
 			t.Logf("%s", decoded)
+
 			continue
 		}
+
 		t.Logf("%s: error %s", filename, err)
 	}
 }
@@ -243,6 +283,7 @@ func (r repReader) Read(p []byte) (n int, err error) {
 	for i := range p {
 		p[i] = byte(r)
 	}
+
 	return len(p), nil
 }
 
@@ -254,52 +295,67 @@ func newCodeReader(r io.Reader) *io.PipeReader {
 	pr, pw := io.Pipe()
 	go func() {
 		bw := bufio.NewWriter(pw)
+
 		lw, err := NewWriter(bw)
 		if err != nil {
 			log.Fatalf("NewWriter error %s", err)
 		}
+
 		if _, err = io.Copy(lw, r); err != nil {
 			log.Fatalf("io.Copy error %s", err)
 		}
+
 		if err = lw.Close(); err != nil {
 			log.Fatalf("lw.Close error %s", err)
 		}
+
 		if err = bw.Flush(); err != nil {
 			log.Fatalf("bw.Flush() error %s", err)
 		}
+
 		if err = pw.CloseWithError(io.EOF); err != nil {
 			log.Fatalf("pw.CloseWithError(io.EOF) error %s", err)
 		}
 	}()
+
 	return pr
 }
 
 func TestReaderErrAgain(t *testing.T) {
 	lengths := []int64{0, 128, 1024, 4095, 4096, 4097, 8191, 8192, 8193}
 	buf := make([]byte, 128)
+
 	const c = 'A'
+
 	for _, n := range lengths {
 		t.Logf("n: %d", n)
 		pr := newCodeReader(newRepReader(c, n))
+
 		r, err := NewReader(pr)
 		if err != nil {
 			t.Fatalf("NewReader(pr) error %s", err)
 		}
+
 		k := int64(0)
+
 		for {
 			m, err := r.Read(buf)
 			k += int64(m)
+
 			if errors.Is(err, io.EOF) {
 				break
 			}
+
 			if err != nil {
 				t.Errorf("r.Read(buf) error %s", err)
 				break
 			}
+
 			if m > len(buf) {
 				t.Fatalf("r.Read(buf) %d; want <= %d", m,
 					len(buf))
 			}
+
 			for i, b := range buf[:m] {
 				if b != c {
 					t.Fatalf("buf[%d]=%c; want %c", i, b,
@@ -307,6 +363,7 @@ func TestReaderErrAgain(t *testing.T) {
 				}
 			}
 		}
+
 		if k != n {
 			t.Errorf("Read %d bytes; want %d", k, n)
 		}
@@ -315,22 +372,28 @@ func TestReaderErrAgain(t *testing.T) {
 
 func TestMinDictSize(t *testing.T) {
 	const file = "examples/a.txt"
+
 	uncompressed, err := os.ReadFile(file)
 	if err != nil {
 		t.Fatalf("os.ReadFile(%q) error %s", file, err)
 	}
+
 	f := bytes.NewReader(uncompressed)
 
 	buf := new(bytes.Buffer)
 	cfg := WriterConfig{DictCap: 4096}
+
 	w, err := cfg.NewWriter(buf)
 	if err != nil {
 		t.Fatalf("WriterConfig(%+v).NewWriter(buf) error %s", cfg, err)
 	}
+
 	defer func() { _ = w.Close() }()
+
 	if _, err = io.Copy(w, f); err != nil {
 		t.Fatalf("io.Copy(w, f) error %s", err)
 	}
+
 	if err = w.Close(); err != nil {
 		t.Fatalf("w.Close() error %s", err)
 	}
@@ -339,10 +402,12 @@ func TestMinDictSize(t *testing.T) {
 	putUint32LE(compressed[1:5], 0)
 
 	z := bytes.NewReader(compressed)
+
 	r, err := NewReader(z)
 	if err != nil {
 		t.Fatalf("NewReader(z) error %s", err)
 	}
+
 	u, err := io.ReadAll(r)
 	if err != nil {
 		t.Fatalf("io.ReadAll(r) error %s", err)
@@ -371,27 +436,34 @@ func TestZeroPrefixIssue(t *testing.T) {
 				t.Fatalf("Open(%q) error %s", tc, err)
 			}
 			defer func() { _ = f.Close() }()
+
 			zp := bytes.NewReader(zeroPrefix)
 			z := io.MultiReader(zp, f)
+
 			l, err := rcfg.NewReader(z)
 			if err != nil {
 				t.Logf("NewReader(z) for %s error %s", tc, err)
 				return
 			}
+
 			h, ok := l.Header()
 			t.Logf("Header %+v ok %v", h, ok)
+
 			actualDictSize := len(l.d.Dict.buf.data) - 1
 			t.Logf("Actual dictionary size: %d", actualDictSize)
+
 			if actualDictSize > MinDictCap && h.Size >= 0 &&
 				h.Size < int64(actualDictSize) {
 				t.Errorf("actualDictSize %d smaller than file size %d",
 					actualDictSize, h.Size)
 			}
+
 			_, err = io.ReadAll(l)
 			if err == nil {
 				t.Errorf("ReadAll for %q: no error", tc)
 				return
 			}
+
 			t.Logf("%q: error %s", tc, err)
 		})
 	}

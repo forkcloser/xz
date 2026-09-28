@@ -56,6 +56,7 @@ func (c chunkType) String() string {
 	if !(cEOS <= c && c <= cLRND) {
 		return "unknown"
 	}
+
 	return chunkTypeStrings[c]
 }
 
@@ -91,8 +92,10 @@ func headerChunkType(h byte) (c chunkType, err error) {
 		default:
 			return 0, errHeaderByte
 		}
+
 		return
 	}
+
 	switch h & hLRND {
 	case hL:
 		c = cL
@@ -105,6 +108,7 @@ func headerChunkType(h byte) (c chunkType, err error) {
 	default:
 		return 0, errHeaderByte
 	}
+
 	return
 }
 
@@ -124,6 +128,7 @@ func headerLen(c chunkType) int {
 	case cLRN, cLRND:
 		return 6
 	}
+
 	panic(fmt.Errorf("unsupported chunk type %d", c))
 }
 
@@ -147,6 +152,7 @@ func (h *chunkHeader) UnmarshalBinary(data []byte) error {
 	if len(data) == 0 {
 		return corruptf("lzma: empty chunk header")
 	}
+
 	c, err := headerChunkType(data[0])
 	if err != nil {
 		return err
@@ -156,6 +162,7 @@ func (h *chunkHeader) UnmarshalBinary(data []byte) error {
 	if len(data) < n {
 		return corruptf("lzma: incomplete chunk header")
 	}
+
 	if len(data) > n {
 		return corruptf("lzma: chunk header data has wrong length")
 	}
@@ -166,17 +173,21 @@ func (h *chunkHeader) UnmarshalBinary(data []byte) error {
 	}
 
 	h.uncompressed = uint32(uint16BE(data[1:3]))
+
 	if c <= cU {
 		return nil
 	}
+
 	h.uncompressed |= uint32(data[0]&^hLRND) << 16
 
 	h.compressed = uint16BE(data[3:5])
+
 	if c <= cLR {
 		return nil
 	}
 
 	h.props, err = PropertiesForCode(data[5])
+
 	return err
 }
 
@@ -186,6 +197,7 @@ func (h *chunkHeader) MarshalBinary() (data []byte, err error) {
 	if h.ctype > cLRND {
 		return nil, errors.New("invalid chunk type")
 	}
+
 	if err = h.props.verify(); err != nil {
 		return nil, err
 	}
@@ -210,17 +222,21 @@ func (h *chunkHeader) MarshalBinary() (data []byte, err error) {
 	}
 
 	putUint16BE(data[1:3], uint16(h.uncompressed))
+
 	if h.ctype <= cU {
 		return data, nil
 	}
+
 	data[0] |= byte(h.uncompressed>>16) &^ hLRND
 
 	putUint16BE(data[3:5], h.compressed)
+
 	if h.ctype <= cLR {
 		return data, nil
 	}
 
 	data[5] = h.props.Code()
+
 	return data, nil
 }
 
@@ -232,14 +248,17 @@ func readChunkHeader(r io.Reader, p []byte, h *chunkHeader) (err error) {
 	if _, err = io.ReadFull(r, p); err != nil {
 		return err
 	}
+
 	c, err := headerChunkType(p[0])
 	if err != nil {
 		return err
 	}
+
 	p = p[:headerLen(c)]
 	if _, err = io.ReadFull(r, p[1:]); err != nil {
 		return err
 	}
+
 	return h.UnmarshalBinary(p)
 }
 
@@ -333,6 +352,7 @@ func (c *chunkState) next(ctype chunkType) error {
 	default:
 		return errState
 	}
+
 	return nil
 }
 
@@ -371,8 +391,10 @@ func DecodeDictCap(c byte) (n int64, err error) {
 		if c == maxDictCapCode {
 			return maxDictCap, nil
 		}
+
 		return 0, corruptf("lzma: invalid dictionary size code")
 	}
+
 	return decodeDictCap(c), nil
 }
 
@@ -383,15 +405,18 @@ func EncodeDictCap(n int64) byte {
 	a, b := byte(0), byte(40)
 	for a < b {
 		c := a + (b-a)>>1
+
 		m := decodeDictCap(c)
 		if n <= m {
 			if n == m {
 				return c
 			}
+
 			b = c
 		} else {
 			a = c + 1
 		}
 	}
+
 	return a
 }

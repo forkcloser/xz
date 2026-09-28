@@ -26,27 +26,35 @@ import (
 // the container.
 func singleBlockFile(tb testing.TB) ([]byte, []byte) {
 	tb.Helper()
+
 	want := parallelTestData(4096)
+
 	var buf bytes.Buffer
+
 	w, err := NewWriter(&buf)
 	if err != nil {
 		tb.Fatal(err)
 	}
+
 	if _, err = w.Write(want); err != nil {
 		tb.Fatal(err)
 	}
+
 	if err = w.Close(); err != nil {
 		tb.Fatal(err)
 	}
+
 	return buf.Bytes(), want
 }
 
 // checkClassified fails unless err is nil or one of the documented kinds.
 func checkClassified(t *testing.T, reader string, i int, mask byte, err error) {
 	t.Helper()
+
 	if err == nil || errors.Is(err, ErrCorrupt) || errors.Is(err, io.ErrUnexpectedEOF) {
 		return
 	}
+
 	t.Errorf("%s: byte %d ^ %#x gave %q, which matches neither ErrCorrupt nor io.ErrUnexpectedEOF",
 		reader, i, mask, err)
 }
@@ -73,11 +81,14 @@ func TestCorruptionIsClassified(t *testing.T) {
 				bad[i] ^= mask
 
 				r, err := NewReader(bytes.NewReader(bad))
+
 				var got []byte
 				if err == nil {
 					got, err = io.ReadAll(r)
 				}
+
 				checkClassified(t, tc.name+" sequential", i, mask, err)
+
 				if err == nil && !bytes.Equal(got, tc.want) {
 					t.Errorf("%s sequential: byte %d ^ %#x returned different data with no error",
 						tc.name, i, mask)
@@ -88,7 +99,9 @@ func TestCorruptionIsClassified(t *testing.T) {
 					got, err = io.ReadAll(pr)
 					_ = pr.Close()
 				}
+
 				checkClassified(t, tc.name+" parallel", i, mask, err)
+
 				if err == nil && !bytes.Equal(got, tc.want) {
 					t.Errorf("%s parallel: byte %d ^ %#x returned different data with no error",
 						tc.name, i, mask)
@@ -108,19 +121,24 @@ func TestPayloadErrorsKeepTheirChain(t *testing.T) {
 	// sizes; 0x03 is a chunk header byte no encoder produces.
 	bad := append([]byte{}, file...)
 	bad[24] = 0x03
+
 	r, err := NewReader(bytes.NewReader(bad))
 	if err == nil {
 		_, err = io.ReadAll(r)
 	}
+
 	if err == nil {
 		t.Fatal("an invalid chunk header byte was accepted")
 	}
+
 	if !errors.Is(err, ErrCorrupt) {
 		t.Errorf("got %v; want a match for xz.ErrCorrupt", err)
 	}
+
 	if !errors.Is(err, lzma.ErrCorrupt) {
 		t.Errorf("got %v; want the lzma.ErrCorrupt chain to survive classification", err)
 	}
+
 	if err.Error() != "lzma: invalid chunk header byte" {
 		t.Errorf("message %q; want the decoder's own", err)
 	}
@@ -138,6 +156,7 @@ func (e *errAfterReader) Read(p []byte) (int, error) {
 	if errors.Is(err, io.EOF) {
 		return n, e.err
 	}
+
 	return n, err
 }
 
@@ -155,13 +174,16 @@ func TestSingleStreamReportsIOErrorAsIs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	got, err := io.ReadAll(r)
 	if !errors.Is(err, ioErr) {
 		t.Errorf("got %v; want the reader's own error", err)
 	}
+
 	if errors.Is(err, ErrCorrupt) {
 		t.Errorf("an I/O error after the stream matched ErrCorrupt: %v", err)
 	}
+
 	if !bytes.Equal(got, want) {
 		t.Error("the data before the failure was not delivered")
 	}
@@ -172,14 +194,17 @@ func TestSingleStreamReportsIOErrorAsIs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err = io.ReadAll(r); err != nil {
 		t.Errorf("clean single stream: %v", err)
 	}
+
 	r, err = ReaderConfig{SingleStream: true}.NewReader(
 		bytes.NewReader(append(append([]byte{}, file...), 0)))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err = io.ReadAll(r); !errors.Is(err, ErrCorrupt) {
 		t.Errorf("trailing byte gave %v; want a match for ErrCorrupt", err)
 	}

@@ -32,7 +32,9 @@ const fuzzOutputLimit = 8 << 20
 // streams built here, so the fuzzer starts from inputs that already parse.
 func fuzzSeeds(tb testing.TB) [][]byte {
 	tb.Helper()
+
 	var seeds [][]byte
+
 	for _, name := range []string{"testdata/fox.xz", "testdata/fox-check-none.xz"} {
 		if data, err := os.ReadFile(name); err == nil {
 			seeds = append(seeds, data)
@@ -45,20 +47,26 @@ func fuzzSeeds(tb testing.TB) [][]byte {
 	seeds = append(seeds, multi)
 	seeds = append(seeds, append(append(append([]byte{}, multi...),
 		0, 0, 0, 0), multi...))
+
 	for _, check := range []byte{None, CRC32, CRC64, SHA256} {
 		var buf bytes.Buffer
+
 		w, err := WriterConfig{CheckSum: check}.NewWriter(&buf)
 		if err != nil {
 			continue
 		}
+
 		if _, err = w.Write([]byte("the quick brown fox")); err != nil {
 			continue
 		}
+
 		if err = w.Close(); err != nil {
 			continue
 		}
+
 		seeds = append(seeds, buf.Bytes())
 	}
+
 	return seeds
 }
 
@@ -67,6 +75,7 @@ func FuzzReader(f *testing.F) {
 	for _, seed := range fuzzSeeds(f) {
 		f.Add(seed)
 	}
+
 	f.Fuzz(func(t *testing.T, data []byte) {
 		r, err := NewReader(bytes.NewReader(data))
 		if err != nil {
@@ -84,11 +93,13 @@ func FuzzSingleStreamReader(f *testing.F) {
 	for _, seed := range fuzzSeeds(f) {
 		f.Add(seed)
 	}
+
 	f.Fuzz(func(t *testing.T, data []byte) {
 		r, err := ReaderConfig{SingleStream: true}.NewReader(bytes.NewReader(data))
 		if err != nil {
 			return
 		}
+
 		_, _ = io.Copy(io.Discard, io.LimitReader(r, fuzzOutputLimit))
 	})
 }
@@ -100,6 +111,7 @@ func FuzzParallelReader(f *testing.F) {
 	for _, seed := range fuzzSeeds(f) {
 		f.Add(seed)
 	}
+
 	f.Fuzz(func(t *testing.T, data []byte) {
 		r, err := ParallelReaderConfig{Workers: 2}.NewParallelReader(
 			bytes.NewReader(data), int64(len(data)))
@@ -107,9 +119,11 @@ func FuzzParallelReader(f *testing.F) {
 			return
 		}
 		defer func() { _ = r.Close() }()
+
 		if n := r.Size(); n < 0 {
 			t.Fatalf("Size() is negative: %d", n)
 		}
+
 		_, _ = io.Copy(io.Discard, io.LimitReader(r, fuzzOutputLimit))
 	})
 }
@@ -122,17 +136,22 @@ func FuzzReadersAgree(f *testing.F) {
 	for _, seed := range fuzzSeeds(f) {
 		f.Add(seed)
 	}
+
 	f.Fuzz(func(t *testing.T, data []byte) {
 		sr, serr := NewReader(bytes.NewReader(data))
+
 		var serial []byte
 		if serr == nil {
 			serial, serr = io.ReadAll(io.LimitReader(sr, fuzzOutputLimit))
 		}
 
 		pr, perr := NewParallelReader(bytes.NewReader(data), int64(len(data)))
+
 		var parallel []byte
+
 		if perr == nil {
 			defer func() { _ = pr.Close() }()
+
 			parallel, perr = io.ReadAll(io.LimitReader(pr, fuzzOutputLimit))
 		}
 
@@ -141,9 +160,11 @@ func FuzzReadersAgree(f *testing.F) {
 		if serr != nil || perr != nil {
 			return
 		}
+
 		if len(serial) == fuzzOutputLimit || len(parallel) == fuzzOutputLimit {
 			return // truncated by the limit, not comparable
 		}
+
 		if !bytes.Equal(serial, parallel) {
 			t.Fatalf("readers disagree: sequential produced %d bytes, "+
 				"parallel produced %d", len(serial), len(parallel))
@@ -163,38 +184,46 @@ func FuzzRoundTrip(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, data []byte, check uint8, blockSize uint16) {
 		cfg := WriterConfig{}
+
 		switch check {
 		case None, CRC32, CRC64, SHA256:
 			cfg.CheckSum = check
 		default:
 			return // not a check type the format defines
 		}
+
 		if blockSize > 0 {
 			cfg.BlockSize = int64(blockSize)
 		}
 
 		var buf bytes.Buffer
+
 		w, err := cfg.NewWriter(&buf)
 		if err != nil {
 			t.Fatalf("NewWriter with check %d, block size %d: %s",
 				check, blockSize, err)
 		}
+
 		if _, err = w.Write(data); err != nil {
 			t.Fatalf("Write: %s", err)
 		}
+
 		if err = w.Close(); err != nil {
 			t.Fatalf("Close: %s", err)
 		}
 
 		compressed := buf.Bytes()
+
 		r, err := NewReader(bytes.NewReader(compressed))
 		if err != nil {
 			t.Fatalf("NewReader on our own output: %s", err)
 		}
+
 		got, err := io.ReadAll(r)
 		if err != nil {
 			t.Fatalf("reading back our own output: %s", err)
 		}
+
 		if !bytes.Equal(got, data) {
 			t.Fatalf("round trip changed the data: got %d bytes, want %d",
 				len(got), len(data))
@@ -209,13 +238,16 @@ func FuzzRoundTrip(f *testing.F) {
 			t.Fatalf("NewParallelReader on our own output: %s", err)
 		}
 		defer func() { _ = pr.Close() }()
+
 		if pr.Size() != int64(len(data)) {
 			t.Fatalf("Size() is %d; want %d", pr.Size(), len(data))
 		}
+
 		got, err = io.ReadAll(pr)
 		if err != nil {
 			t.Fatalf("parallel read of our own output: %s", err)
 		}
+
 		if !bytes.Equal(got, data) {
 			t.Fatal("parallel round trip changed the data")
 		}

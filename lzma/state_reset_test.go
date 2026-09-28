@@ -14,6 +14,7 @@ import (
 // moved away from its initial values, so a Reset that misses a field shows up.
 func dirtyState(s *state, seed int64) {
 	rng := rand.New(rand.NewSource(seed))
+
 	touch := func(p *prob) {
 		if rng.Intn(2) == 0 {
 			p.inc()
@@ -24,46 +25,57 @@ func dirtyState(s *state, seed int64) {
 	for i := range s.isMatch {
 		touch(&s.isMatch[i])
 	}
+
 	for i := range s.isRepG0Long {
 		touch(&s.isRepG0Long[i])
 	}
+
 	for i := range s.isRep {
 		touch(&s.isRep[i])
 		touch(&s.isRepG0[i])
 		touch(&s.isRepG1[i])
 		touch(&s.isRepG2[i])
 	}
+
 	for i := range s.litCodec.probs {
 		touch(&s.litCodec.probs[i])
 	}
+
 	for _, lc := range []*lengthCodec{&s.lenCodec, &s.repLenCodec} {
 		touch(&lc.choice[0])
 		touch(&lc.choice[1])
+
 		for i := range lc.low {
 			for j := range lc.low[i].probs {
 				touch(&lc.low[i].probs[j])
 			}
+
 			for j := range lc.mid[i].probs {
 				touch(&lc.mid[i].probs[j])
 			}
 		}
+
 		for j := range lc.high.probs {
 			touch(&lc.high.probs[j])
 		}
 	}
+
 	for i := range s.distCodec.posSlotCodecs {
 		for j := range s.distCodec.posSlotCodecs[i].probs {
 			touch(&s.distCodec.posSlotCodecs[i].probs[j])
 		}
 	}
+
 	for i := range s.distCodec.posModel {
 		for j := range s.distCodec.posModel[i].probs {
 			touch(&s.distCodec.posModel[i].probs[j])
 		}
 	}
+
 	for j := range s.distCodec.alignCodec.probs {
 		touch(&s.distCodec.alignCodec.probs[j])
 	}
+
 	s.state = uint32(rng.Intn(states))
 	for i := range s.rep {
 		s.rep[i] = rng.Uint32()
@@ -108,6 +120,7 @@ func TestStateResetAcrossProperties(t *testing.T) {
 		{LC: 4, LP: 0, PB: 2},
 		{LC: 3, LP: 0, PB: 2},
 	}
+
 	s := newState(seq[0])
 	for i, p := range seq {
 		dirtyState(s, int64(i))
@@ -119,6 +132,7 @@ func TestStateResetAcrossProperties(t *testing.T) {
 			t.Fatalf("step %d (%v): reset-in-place state differs from a fresh one",
 				i, &p)
 		}
+
 		if got, want := len(s.litCodec.probs), 0x300<<uint(p.LC+p.LP); got != want {
 			t.Fatalf("step %d: literal codec has %d probabilities; want %d",
 				i, got, want)
@@ -133,9 +147,11 @@ func TestStateResetKeepsBackingArrays(t *testing.T) {
 	before := &s.litCodec.probs[0]
 	beforeHigh := &s.lenCodec.high.probs[0]
 	s.Reset()
+
 	if &s.litCodec.probs[0] != before {
 		t.Error("Reset reallocated the literal codec probabilities")
 	}
+
 	if &s.lenCodec.high.probs[0] != beforeHigh {
 		t.Error("Reset reallocated a length codec tree")
 	}

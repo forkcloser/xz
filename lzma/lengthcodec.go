@@ -32,13 +32,16 @@ func (lc *lengthCodec) deepcopy(src *lengthCodec) {
 	if lc == src {
 		return
 	}
+
 	lc.choice = src.choice
 	for i := range lc.low {
 		lc.low[i].deepcopy(&src.low[i])
 	}
+
 	for i := range lc.mid {
 		lc.mid[i].deepcopy(&src.mid[i])
 	}
+
 	lc.high.deepcopy(&src.high)
 }
 
@@ -47,12 +50,15 @@ func (lc *lengthCodec) init() {
 	for i := range lc.choice {
 		lc.choice[i] = probInit
 	}
+
 	for i := range lc.low {
 		lc.low[i].init(3)
 	}
+
 	for i := range lc.mid {
 		lc.mid[i].init(3)
 	}
+
 	lc.high.init(8)
 }
 
@@ -65,27 +71,35 @@ func (lc *lengthCodec) Encode(e *rangeEncoder, l uint32, posState uint32,
 	if l > maxMatchLen-minMatchLen {
 		return errors.New("lengthCodec.Encode: l out of range")
 	}
+
 	if l < 8 {
 		if err = lc.choice[0].Encode(e, 0); err != nil {
 			return
 		}
+
 		return lc.low[posState].Encode(e, l)
 	}
+
 	if err = lc.choice[0].Encode(e, 1); err != nil {
 		return
 	}
+
 	if l < 16 {
 		if err = lc.choice[1].Encode(e, 0); err != nil {
 			return
 		}
+
 		return lc.mid[posState].Encode(e, l-8)
 	}
+
 	if err = lc.choice[1].Encode(e, 1); err != nil {
 		return
 	}
+
 	if err = lc.high.Encode(e, l-16); err != nil {
 		return
 	}
+
 	return nil
 }
 
@@ -96,15 +110,19 @@ func (lc *lengthCodec) Encode(e *rangeEncoder, l uint32, posState uint32,
 func (lc *lengthCodec) decode(d *rangeDecoder, posState, rng, code uint32,
 ) (l, nrng, ncode uint32) {
 	var b uint32
+
 	b, rng, code = d.decodeBit(&lc.choice[0], rng, code)
 	if b == 0 {
 		return lc.low[posState].decode(d, rng, code)
 	}
+
 	b, rng, code = d.decodeBit(&lc.choice[1], rng, code)
 	if b == 0 {
 		l, rng, code = lc.mid[posState].decode(d, rng, code)
 		return l + 8, rng, code
 	}
+
 	l, rng, code = lc.high.decode(d, rng, code)
+
 	return l + 16, rng, code
 }
