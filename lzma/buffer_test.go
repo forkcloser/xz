@@ -135,11 +135,11 @@ func TestBuffer_Read(t *testing.T) {
 		t.Fatalf("buf.Read(q) put %s into q; want %s", q, c)
 	}
 
-	if _, err := buf.Write(b[7:]); err != nil {
+	if _, err = buf.Write(b[7:]); err != nil {
 		t.Fatalf("buf.Write(b[7:]) error %s", err)
 	}
 
-	if _, err := buf.Write(b[:2]); err != nil {
+	if _, err = buf.Write(b[:2]); err != nil {
 		t.Fatalf("buf.Write(b[:2]) error %s", err)
 	}
 
@@ -180,7 +180,7 @@ func TestBuffer_Discard(t *testing.T) {
 		t.Fatalf("buf.Discard(11) returned %d; want %d", n, 10)
 	}
 
-	if _, err := buf.Write(b); err != nil {
+	if _, err = buf.Write(b); err != nil {
 		t.Fatalf("buf.Write(b) #2 error %s", err)
 	}
 
@@ -193,7 +193,7 @@ func TestBuffer_Discard(t *testing.T) {
 		t.Fatalf("buf.Discard(11) returned %d; want %d", n, 10)
 	}
 
-	if _, err := buf.Write(b[:4]); err != nil {
+	if _, err = buf.Write(b[:4]); err != nil {
 		t.Fatalf("buf.Write(b[:4]) error %s", err)
 	}
 

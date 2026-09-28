@@ -136,8 +136,11 @@ func TestWriter_Size(t *testing.T) {
 	}
 
 	q := []byte{'a'}
+
 	for range 9 {
-		n, err := w.Write(q)
+		var n int
+
+		n, err = w.Write(q)
 		if err != nil {
 			t.Fatalf("w.Write error %s", err)
 		}
@@ -149,7 +152,7 @@ func TestWriter_Size(t *testing.T) {
 		q[0]++
 	}
 
-	if err := w.Close(); !errors.Is(err, errSize) {
+	if err = w.Close(); !errors.Is(err, errSize) {
 		t.Fatalf("expected errSize, but got %v", err)
 	}
 

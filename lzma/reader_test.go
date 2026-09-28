@@ -100,7 +100,7 @@ func TestReaderAll(t *testing.T) {
 	}
 
 	defer func() {
-		if err := dir.Close(); err != nil {
+		if err = dir.Close(); err != nil {
 			t.Fatalf("dir.Close() error %s", err)
 		}
 	}()
@@ -169,7 +169,7 @@ func (w *wrapTest) testFile(t *testing.T, filename string, orig []byte) {
 	}
 
 	defer func() {
-		if err := f.Close(); err != nil {
+		if err = f.Close(); err != nil {
 			log.Fatal(err)
 		}
 	}()
@@ -221,7 +221,7 @@ func TestReaderBadFiles(t *testing.T) {
 	}
 
 	defer func() {
-		if err := dir.Close(); err != nil {
+		if err = dir.Close(); err != nil {
 			t.Fatalf("dir.Close() error %s", err)
 		}
 	}()
@@ -253,7 +253,7 @@ func TestReaderBadFiles(t *testing.T) {
 			t.Fatalf("Open(\"%s\"): %s", pathname, err)
 		}
 		defer func(f *os.File) {
-			if err := f.Close(); err != nil {
+			if err = f.Close(); err != nil {
 				t.Fatalf("f.Close() error %s", err)
 			}
 		}(f)

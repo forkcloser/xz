@@ -263,7 +263,7 @@ func TestHeaderAndFooterValidation(t *testing.T) {
 			mutate(bad)
 
 			var h header
-			if err := h.UnmarshalBinary(bad); err == nil {
+			if err = h.UnmarshalBinary(bad); err == nil {
 				t.Error("accepted a corrupted header")
 			} else if !errors.Is(err, ErrCorrupt) {
 				t.Errorf("got %v; want a match for ErrCorrupt", err)
