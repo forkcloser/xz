@@ -144,7 +144,7 @@ func (c ReaderConfig) NewReader(lzma io.Reader) (r *Reader, err error) {
 	}
 
 	data := make([]byte, HeaderLen)
-	if _, err := io.ReadFull(lzma, data); err != nil {
+	if _, err = io.ReadFull(lzma, data); err != nil {
 		if errors.Is(err, io.EOF) {
 			return nil, io.ErrUnexpectedEOF
 		}

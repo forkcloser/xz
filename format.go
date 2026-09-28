@@ -700,12 +700,14 @@ func writeIndex(w io.Writer, index []record) (n int64, err error) {
 
 	// list of records
 	for _, rec := range index {
-		p, err := rec.MarshalBinary()
+		var encoded []byte
+
+		encoded, err = rec.MarshalBinary()
 		if err != nil {
 			return n, err
 		}
 
-		k, err = mw.Write(p)
+		k, err = mw.Write(encoded)
 
 		n += int64(k)
 		if err != nil {

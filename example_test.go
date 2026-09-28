@@ -27,7 +27,7 @@ func ExampleReader() {
 		log.Fatalf("os.Open(%q) error %s", "testdata/fox.xz", err)
 	}
 	defer func() {
-		if err := f.Close(); err != nil {
+		if err = f.Close(); err != nil {
 			log.Printf("f.Close() error %s", err)
 		}
 	}()
@@ -58,7 +58,7 @@ func ExampleWriter() {
 	}
 	defer func() { _ = os.Remove(name) }()
 	defer func() {
-		if err := f.Close(); err != nil {
+		if err = f.Close(); err != nil {
 			log.Printf("f.Close() error %s", err)
 		}
 	}()

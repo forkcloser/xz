@@ -40,7 +40,7 @@ func TestHashTable(t *testing.T) {
 
 	distances := make([]int64, 20)
 	for _, c := range tests {
-		distances := distances[:20]
+		distances = distances[:20]
 		k := ht.Matches([]byte(c.s), distances)
 		distances = distances[:k]
 

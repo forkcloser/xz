@@ -290,7 +290,7 @@ func (e *encoder) Close() error {
 	}
 
 	if e.marker {
-		if err := e.writeMatch(eosMatch); err != nil {
+		if err = e.writeMatch(eosMatch); err != nil {
 			return err
 		}
 	}
