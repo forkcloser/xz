@@ -133,7 +133,9 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 				// reader's error goes back as it came.
 				data := make([]byte, 1)
 
-				k, err := r.xz.Read(data)
+				var k int
+
+				k, err = r.xz.Read(data)
 				switch {
 				case k > 0:
 					return n, errUnexpectedData
@@ -187,7 +189,7 @@ func (c ReaderConfig) newStreamReader(xz io.Reader, cache *lzma2Cache) (r *strea
 	}
 
 	data := make([]byte, HeaderLen)
-	if _, err := io.ReadFull(xz, data[:4]); err != nil {
+	if _, err = io.ReadFull(xz, data[:4]); err != nil {
 		return nil, err
 	}
 

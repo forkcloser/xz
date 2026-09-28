@@ -374,7 +374,7 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 				return nil, 0, corruptf("xz: invalid unpadded size in index")
 			}
 
-			if err := checkUncompressedSize(rec); err != nil {
+			if err = checkUncompressedSize(rec); err != nil {
 				return nil, 0, err
 			}
 			// remaining is in [0, indexStart], so neither comparison can
@@ -697,8 +697,11 @@ func (d *parallelDecoder) decodeBlock(bd *blockDesc, bufp *[]byte, s *workerScra
 	buf := d.getBuf(min(total, initialBlockBufSize))
 
 	*bufp = buf
+
 	for n := 0; ; {
-		k, err := io.ReadFull(br, buf[n:])
+		var k int
+
+		k, err = io.ReadFull(br, buf[n:])
 		n += k
 
 		if err != nil {

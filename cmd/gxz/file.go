@@ -235,7 +235,9 @@ func newWriter(path string, perm os.FileMode, opts *options,
 		w.f = os.Stdout
 		w.name = "-"
 	} else {
-		name, err := targetName(path, opts)
+		var name string
+
+		name, err = targetName(path, opts)
 		if err != nil {
 			return nil, err
 		}
