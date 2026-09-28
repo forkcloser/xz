@@ -39,6 +39,7 @@ func newDecoder(br io.ByteReader, state *state, dict *decoderDict, size int64) (
 	if err != nil {
 		return nil, err
 	}
+
 	d = &decoder{
 		State: state,
 		Dict:  dict,
@@ -46,6 +47,7 @@ func newDecoder(br io.ByteReader, state *state, dict *decoderDict, size int64) (
 		size:  size,
 		start: dict.pos(),
 	}
+
 	return d, nil
 }
 
@@ -56,9 +58,11 @@ func (d *decoder) Reopen(br io.ByteReader, size int64) error {
 	if err := d.rd.init(br); err != nil {
 		return err
 	}
+
 	d.start = d.Dict.pos()
 	d.size = size
 	d.eos = false
+
 	return nil
 }
 
@@ -68,6 +72,7 @@ func (d *decoder) decodeLiteral(rng, code uint32) (op operation, nrng, ncode uin
 	litState := d.State.litState(d.Dict.byteAt(1), d.Dict.head)
 	match := d.Dict.byteAt(int(d.State.rep[0]) + 1)
 	s, rng, code := d.State.litCodec.decode(d.rd, d.State.state, match, litState, rng, code)
+
 	return litOp(s), rng, code
 }
 
@@ -92,10 +97,13 @@ func (d *decoder) readOp() (op operation, err error) {
 
 	rd := d.rd
 	rng, code := rd.nrange, rd.code
+
 	var b uint32
+
 	b, rng, code = decodeBitArith(&d.State.isMatch[state2], rng, code)
 	if rng < rcTop {
 		rng <<= 8
+
 		code <<= 8
 		if pos := rd.pos; pos < len(rd.buf) {
 			code |= uint32(rd.buf[pos])
@@ -104,16 +112,21 @@ func (d *decoder) readOp() (op operation, err error) {
 			code |= uint32(rd.readByteSlow())
 		}
 	}
+
 	if b == 0 {
 		// literal
 		op, rng, code = d.decodeLiteral(rng, code)
 		rd.nrange, rd.code = rng, code
+
 		d.State.updateStateLiteral()
+
 		return op, nil
 	}
+
 	b, rng, code = decodeBitArith(&d.State.isRep[state], rng, code)
 	if rng < rcTop {
 		rng <<= 8
+
 		code <<= 8
 		if pos := rd.pos; pos < len(rd.buf) {
 			code |= uint32(rd.buf[pos])
@@ -122,6 +135,7 @@ func (d *decoder) readOp() (op operation, err error) {
 			code |= uint32(rd.readByteSlow())
 		}
 	}
+
 	if b == 0 {
 		// simple match
 		d.State.rep[3], d.State.rep[2], d.State.rep[1] =
@@ -130,21 +144,27 @@ func (d *decoder) readOp() (op operation, err error) {
 		d.State.updateStateMatch()
 		// The length decoder returns the length offset.
 		var n uint32
+
 		n, rng, code = d.State.lenCodec.decode(rd, posState, rng, code)
 		// The dist decoder returns the distance offset. The actual
 		// distance is 1 higher.
 		d.State.rep[0], rng, code = d.State.distCodec.decode(rd, n, rng, code)
 		rd.nrange, rd.code = rng, code
+
 		if d.State.rep[0] == eosDist {
 			d.eosMarker = true
 			return operation{}, errEOS
 		}
+
 		op = matchOp(int64(d.State.rep[0])+minDistance, int(n)+minMatchLen)
+
 		return op, nil
 	}
+
 	b, rng, code = decodeBitArith(&d.State.isRepG0[state], rng, code)
 	if rng < rcTop {
 		rng <<= 8
+
 		code <<= 8
 		if pos := rd.pos; pos < len(rd.buf) {
 			code |= uint32(rd.buf[pos])
@@ -153,12 +173,14 @@ func (d *decoder) readOp() (op operation, err error) {
 			code |= uint32(rd.readByteSlow())
 		}
 	}
+
 	dist := d.State.rep[0]
 	if b == 0 {
 		// rep match 0
 		b, rng, code = decodeBitArith(&d.State.isRepG0Long[state2], rng, code)
 		if rng < rcTop {
 			rng <<= 8
+
 			code <<= 8
 			if pos := rd.pos; pos < len(rd.buf) {
 				code |= uint32(rd.buf[pos])
@@ -167,16 +189,21 @@ func (d *decoder) readOp() (op operation, err error) {
 				code |= uint32(rd.readByteSlow())
 			}
 		}
+
 		if b == 0 {
 			rd.nrange, rd.code = rng, code
+
 			d.State.updateStateShortRep()
+
 			op = matchOp(int64(dist)+minDistance, 1)
+
 			return op, nil
 		}
 	} else {
 		b, rng, code = decodeBitArith(&d.State.isRepG1[state], rng, code)
 		if rng < rcTop {
 			rng <<= 8
+
 			code <<= 8
 			if pos := rd.pos; pos < len(rd.buf) {
 				code |= uint32(rd.buf[pos])
@@ -185,12 +212,14 @@ func (d *decoder) readOp() (op operation, err error) {
 				code |= uint32(rd.readByteSlow())
 			}
 		}
+
 		if b == 0 {
 			dist = d.State.rep[1]
 		} else {
 			b, rng, code = decodeBitArith(&d.State.isRepG2[state], rng, code)
 			if rng < rcTop {
 				rng <<= 8
+
 				code <<= 8
 				if pos := rd.pos; pos < len(rd.buf) {
 					code |= uint32(rd.buf[pos])
@@ -199,22 +228,30 @@ func (d *decoder) readOp() (op operation, err error) {
 					code |= uint32(rd.readByteSlow())
 				}
 			}
+
 			if b == 0 {
 				dist = d.State.rep[2]
 			} else {
 				dist = d.State.rep[3]
 				d.State.rep[3] = d.State.rep[2]
 			}
+
 			d.State.rep[2] = d.State.rep[1]
 		}
+
 		d.State.rep[1] = d.State.rep[0]
 		d.State.rep[0] = dist
 	}
+
 	var n uint32
+
 	n, rng, code = d.State.repLenCodec.decode(rd, posState, rng, code)
 	rd.nrange, rd.code = rng, code
+
 	d.State.updateStateRep()
+
 	op = matchOp(int64(dist)+minDistance, int(n)+minMatchLen)
+
 	return op, nil
 }
 
@@ -223,6 +260,7 @@ func (d *decoder) apply(op operation) error {
 	if op.literal {
 		return d.Dict.WriteByte(op.b)
 	}
+
 	return d.Dict.writeMatch(op.distance, op.n)
 }
 
@@ -233,6 +271,7 @@ func (d *decoder) decompress() error {
 	if d.eos {
 		return io.EOF
 	}
+
 	for d.Dict.Available() >= maxMatchLen {
 		op, err := d.readOp()
 		// The range decoder records input failures as a sticky error
@@ -243,6 +282,7 @@ func (d *decoder) decompress() error {
 		if d.rd.err != nil {
 			err = d.rd.err
 		}
+
 		switch {
 		case err == nil:
 		case errors.Is(err, errEOS):
@@ -250,9 +290,11 @@ func (d *decoder) decompress() error {
 			if !d.rd.possiblyAtEnd() {
 				return errDataAfterEOS
 			}
+
 			if d.size >= 0 && d.size != d.Decompressed() {
 				return errSize
 			}
+
 			return io.EOF
 		case errors.Is(err, io.EOF):
 			d.eos = true
@@ -260,19 +302,23 @@ func (d *decoder) decompress() error {
 		default:
 			return err
 		}
+
 		if err = d.apply(op); err != nil {
 			return err
 		}
+
 		if d.size >= 0 && d.Decompressed() >= d.size {
 			d.eos = true
 			if d.Decompressed() > d.size {
 				return errSize
 			}
+
 			if !d.rd.possiblyAtEnd() {
 				_, err = d.readOp()
 				if d.rd.err != nil {
 					err = d.rd.err
 				}
+
 				switch {
 				case err == nil:
 					return errSize
@@ -284,9 +330,11 @@ func (d *decoder) decompress() error {
 					return err
 				}
 			}
+
 			return io.EOF
 		}
 	}
+
 	return nil
 }
 
@@ -306,13 +354,16 @@ func (d *decoder) Read(p []byte) (n int, err error) {
 		if err != nil {
 			panic(fmt.Errorf("dictionary read error %w", err))
 		}
+
 		if k == 0 && d.eos {
 			return n, io.EOF
 		}
+
 		n += k
 		if n >= len(p) {
 			return n, nil
 		}
+
 		if err = d.decompress(); err != nil && !errors.Is(err, io.EOF) {
 			return n, err
 		}

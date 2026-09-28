@@ -73,24 +73,30 @@ func hashTableExponent(n uint32) int {
 	case e > maxTableExponent:
 		e = maxTableExponent
 	}
+
 	return e
 }
 
 // newHashTable creates a new hash table for words of length wordLen
-func newHashTable(capacity int, wordLen int) (t *hashTable, err error) {
+func newHashTable(capacity, wordLen int) (t *hashTable, err error) {
 	if !(0 < capacity) {
 		return nil, errors.New(
-			"newHashTable: capacity must not be negative")
+			"newHashTable: capacity must not be negative",
+		)
 	}
+
 	exp := hashTableExponent(uint32(capacity))
+
 	if !(1 <= wordLen && wordLen <= 4) {
 		return nil, errors.New("newHashTable: " +
 			"argument wordLen out of range")
 	}
+
 	n := 1 << uint(exp)
 	if n <= 0 {
 		panic("newHashTable: exponent is too large")
 	}
+
 	t = &hashTable{
 		t:       make([]int64, n),
 		data:    make([]uint32, capacity),
@@ -100,6 +106,7 @@ func newHashTable(capacity int, wordLen int) (t *hashTable, err error) {
 		wr:      newRoller(wordLen),
 		hr:      newRoller(wordLen),
 	}
+
 	return t, nil
 }
 
@@ -114,6 +121,7 @@ func (t *hashTable) buffered() int {
 	case n >= int64(len(t.data)):
 		return len(t.data)
 	}
+
 	return int(n)
 }
 
@@ -124,6 +132,7 @@ func (t *hashTable) addIndex(i, n int) int {
 	if i < 0 {
 		i += len(t.data)
 	}
+
 	return i
 }
 
@@ -140,9 +149,11 @@ func (t *hashTable) putEntry(h uint64, pos int64) {
 	if pos < 0 {
 		return
 	}
+
 	i := h & t.mask
 	old := t.t[i] - 1
 	t.t[i] = pos + 1
+
 	var delta int64
 	if old >= 0 {
 		delta = pos - old
@@ -150,6 +161,7 @@ func (t *hashTable) putEntry(h uint64, pos int64) {
 			delta = 0
 		}
 	}
+
 	t.putDelta(uint32(delta))
 }
 
@@ -159,6 +171,7 @@ func (t *hashTable) WriteByte(b byte) error {
 	h := t.wr.RollByte(b)
 	t.hoff++
 	t.putEntry(h, t.hoff)
+
 	return nil
 }
 
@@ -170,6 +183,7 @@ func (t *hashTable) Write(p []byte) (n int, err error) {
 		// hashTable.WriteByte never returns an error.
 		_ = t.WriteByte(b)
 	}
+
 	return len(p), nil
 }
 
@@ -181,32 +195,40 @@ func (t *hashTable) getMatches(h uint64, positions []int64) (n int) {
 	if t.hoff < 0 || len(positions) == 0 {
 		return 0
 	}
+
 	buffered := t.buffered()
 	tailPos := t.hoff + 1 - int64(buffered)
+
 	rear := t.front - buffered
 	if rear >= 0 {
 		rear -= len(t.data)
 	}
 	// get the slot for the hash
 	pos := t.t[h&t.mask] - 1
+
 	delta := pos - tailPos
 	for {
 		if delta < 0 {
 			return n
 		}
+
 		positions[n] = tailPos + delta
+
 		n++
 		if n >= len(positions) {
 			return n
 		}
+
 		i := rear + int(delta)
 		if i < 0 {
 			i += len(t.data)
 		}
+
 		u := t.data[i]
 		if u == 0 {
 			return n
 		}
+
 		delta -= int64(u)
 	}
 }
@@ -218,6 +240,7 @@ func (t *hashTable) hash(p []byte) uint64 {
 	for _, b := range p {
 		h = t.hr.RollByte(b)
 	}
+
 	return h
 }
 
@@ -227,9 +250,12 @@ func (t *hashTable) hash(p []byte) uint64 {
 func (t *hashTable) Matches(p []byte, positions []int64) int {
 	if len(p) != t.wordLen {
 		panic(fmt.Errorf(
-			"byte slice must have length %d", t.wordLen))
+			"byte slice must have length %d", t.wordLen,
+		))
 	}
+
 	h := t.hash(p)
+
 	return t.getMatches(h, positions)
 }
 
@@ -241,6 +267,7 @@ func (t *hashTable) NextOp(rep [4]uint32) operation {
 	data := t.dict.data[:maxMatchLen]
 	n, _ := t.dict.buf.Peek(data)
 	data = data[:n]
+
 	var p []int64
 	if n < t.wordLen {
 		p = t.p[:0]
@@ -253,6 +280,7 @@ func (t *hashTable) NextOp(rep [4]uint32) operation {
 	// convert positions in potential distances
 	head := t.dict.head
 	dists := append(t.distances[:0], 1, 2, 3, 4, 5, 6, 7, 8)
+
 	for _, pos := range p {
 		dis := int(head - pos)
 		if dis > shortDists {
@@ -262,6 +290,7 @@ func (t *hashTable) NextOp(rep [4]uint32) operation {
 
 	// check distances
 	var m operation
+
 	dictLen := t.dict.DictLen()
 	for _, dist := range dists {
 		if dist > dictLen {
@@ -278,6 +307,7 @@ func (t *hashTable) NextOp(rep [4]uint32) operation {
 		if i < 0 {
 			i += len(t.dict.buf.data)
 		}
+
 		if t.dict.buf.data[i] != data[m.n] {
 			// We can't get a longer match. Jump to the next
 			// distance.
@@ -293,6 +323,7 @@ func (t *hashTable) NextOp(rep [4]uint32) operation {
 				continue
 			}
 		}
+
 		if n > m.n {
 			m = matchOp(int64(dist), n)
 			if n == len(data) {
@@ -305,5 +336,6 @@ func (t *hashTable) NextOp(rep [4]uint32) operation {
 	if m.n == 0 {
 		return litOp(data[0])
 	}
+
 	return m
 }

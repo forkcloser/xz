@@ -47,15 +47,19 @@ func (c *WriterConfig) fill() {
 	if c.Properties == nil {
 		c.Properties = &Properties{LC: 3, LP: 0, PB: 2}
 	}
+
 	if c.DictCap == 0 {
 		c.DictCap = 8 * 1024 * 1024
 	}
+
 	if c.BufSize == 0 {
 		c.BufSize = 4096
 	}
+
 	if c.Size > 0 {
 		c.SizeInHeader = true
 	}
+
 	if !c.SizeInHeader {
 		c.EOSMarker = true
 	}
@@ -65,22 +69,29 @@ func (c *WriterConfig) fill() {
 // values with default values.
 func (c *WriterConfig) Verify() error {
 	c.fill()
+
 	var err error
+
 	if c == nil {
 		return errors.New("lzma: WriterConfig is nil")
 	}
+
 	if c.Properties == nil {
 		return errors.New("lzma: WriterConfig has no Properties set")
 	}
+
 	if err = c.Properties.verify(); err != nil {
 		return err
 	}
+
 	if !(MinDictCap <= c.DictCap && int64(c.DictCap) <= MaxDictCap) {
 		return errors.New("lzma: dictionary capacity is out of range")
 	}
+
 	if !(maxMatchLen <= c.BufSize) {
 		return errors.New("lzma: lookahead buffer size too small")
 	}
+
 	if c.SizeInHeader {
 		if c.Size < 0 {
 			return errors.New("lzma: negative size not supported")
@@ -88,6 +99,7 @@ func (c *WriterConfig) Verify() error {
 	} else if !c.EOSMarker {
 		return errors.New("lzma: EOS marker is required")
 	}
+
 	if err = c.Matcher.verify(); err != nil {
 		return err
 	}
@@ -105,6 +117,7 @@ func (c *WriterConfig) header() Header {
 	if c.SizeInHeader {
 		h.Size = c.Size
 	}
+
 	return h
 }
 
@@ -126,27 +139,34 @@ func (c WriterConfig) NewWriter(lzma io.Writer) (w *Writer, err error) {
 	if err = c.Verify(); err != nil {
 		return nil, err
 	}
+
 	w = &Writer{h: c.header()}
 
 	var ok bool
+
 	w.bw, ok = lzma.(io.ByteWriter)
 	if !ok {
 		w.buf = bufio.NewWriter(lzma)
 		w.bw = w.buf
 	}
+
 	state := newState(w.h.Properties)
+
 	m, err := c.Matcher.new(int(w.h.DictSize))
 	if err != nil {
 		return nil, err
 	}
+
 	dict, err := newEncoderDict(int(w.h.DictSize), c.BufSize, m)
 	if err != nil {
 		return nil, err
 	}
+
 	var flags encoderFlags
 	if c.EOSMarker {
 		flags = eosMarker
 	}
+
 	if w.e, err = newEncoder(w.bw, state, dict, flags); err != nil {
 		return nil, err
 	}
@@ -154,6 +174,7 @@ func (c WriterConfig) NewWriter(lzma io.Writer) (w *Writer, err error) {
 	if err = w.writeHeader(); err != nil {
 		return nil, err
 	}
+
 	return w, nil
 }
 
@@ -169,7 +190,9 @@ func (w *Writer) writeHeader() error {
 	if err != nil {
 		return err
 	}
+
 	_, err = w.bw.(io.Writer).Write(data)
+
 	return err
 }
 
@@ -180,22 +203,27 @@ func (w *Writer) Write(p []byte) (n int, err error) {
 	if w.err != nil {
 		return 0, w.err
 	}
+
 	if w.h.Size >= 0 {
 		m := w.h.Size
+
 		m -= w.e.Compressed() + int64(w.e.dict.Buffered())
 		if m < 0 {
 			m = 0
 		}
+
 		if m < int64(len(p)) {
 			p = p[:m]
 			err = ErrNoSpace
 		}
 	}
+
 	var werr error
 	if n, werr = w.e.Write(p); werr != nil {
 		w.err = werr
 		err = werr
 	}
+
 	return n, err
 }
 
@@ -206,12 +234,14 @@ func (w *Writer) Close() error {
 	if w.err != nil {
 		return w.err
 	}
+
 	if w.h.Size >= 0 {
 		n := w.e.Compressed() + int64(w.e.dict.Buffered())
 		if n != w.h.Size {
 			return errSize
 		}
 	}
+
 	err := w.e.Close()
 	if w.buf != nil {
 		ferr := w.buf.Flush()
@@ -219,6 +249,8 @@ func (w *Writer) Close() error {
 			err = ferr
 		}
 	}
+
 	w.err = err
+
 	return err
 }

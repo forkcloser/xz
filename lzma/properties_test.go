@@ -17,25 +17,31 @@ import "testing"
 // missing the check.
 func TestPropertiesForCodeRejectsLargeLCLP(t *testing.T) {
 	var accepted, rejected int
+
 	for code := 0; code <= 0xff; code++ {
 		p, err := PropertiesForCode(byte(code))
 		if err != nil {
 			rejected++
 			continue
 		}
+
 		accepted++
+
 		if p.LC+p.LP > maxLCLP {
 			t.Errorf("code %d accepted with lc=%d lp=%d, sum %d > %d",
 				code, p.LC, p.LP, p.LC+p.LP, maxLCLP)
 		}
+
 		if n := 0x300 << uint(p.LC+p.LP); n > 0x300<<maxLCLP {
 			t.Errorf("code %d sizes the literal codec at %d probabilities",
 				code, n)
 		}
 	}
+
 	if accepted == 0 {
 		t.Fatal("every properties code was rejected")
 	}
+
 	t.Logf("%d codes accepted, %d rejected", accepted, rejected)
 }
 
@@ -55,6 +61,7 @@ func TestPropertiesForCodeAcceptsRealWorldValues(t *testing.T) {
 			t.Errorf("%v rejected: %s", &want, err)
 			continue
 		}
+
 		if got != want {
 			t.Errorf("code %d decoded to %v; want %v",
 				want.Code(), &got, &want)

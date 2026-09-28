@@ -74,10 +74,12 @@ contain code from those packages.
 {{.go}}
 `
 	out = strings.TrimLeft(out, " \n")
+
 	tmpl, err := template.New("licenses").Parse(out)
 	if err != nil {
 		xlog.Panicf("error %s parsing licenses template", err)
 	}
+
 	lmap := map[string]string{
 		"xz": strings.TrimSpace(xzLicense),
 		"go": strings.TrimSpace(goLicense),
@@ -106,6 +108,7 @@ func (o *options) Init() {
 	if o.preset != 0 {
 		xlog.Panicf("options are already initialized")
 	}
+
 	gflag.BoolVarP(&o.help, "help", "h", false, "")
 	gflag.BoolVarP(&o.stdout, "stdout", "c", false, "")
 	gflag.BoolVarP(&o.decompress, "decompress", "d", false, "")
@@ -135,6 +138,7 @@ func normalizeFormat(o *options) error {
 	default:
 		return fmt.Errorf("format %q unsupported", o.format)
 	}
+
 	return nil
 }
 
@@ -165,28 +169,33 @@ func main() {
 	case "unxz", "ungxz":
 		opts.decompress = true
 	}
+
 	gflag.Parse()
 
 	if opts.help {
 		usage(os.Stdout)
 		os.Exit(0)
 	}
+
 	if opts.license {
 		licenses(os.Stdout)
 		os.Exit(0)
 	}
+
 	if opts.version {
 		xlog.Printf("version %s\n", version())
 		os.Exit(0)
 	}
 
 	flags := xlog.Flags()
+
 	switch {
 	case opts.verbose <= 0:
 		flags |= xlog.Lnoprint | xlog.Lnodebug
 	case opts.verbose == 1:
 		flags |= xlog.Lnodebug
 	}
+
 	switch {
 	case opts.quiet >= 2:
 		flags |= xlog.Lnoprint | xlog.Lnowarn | xlog.Lnodebug
@@ -194,6 +203,7 @@ func main() {
 	case opts.quiet == 1:
 		flags |= xlog.Lnoprint | xlog.Lnowarn | xlog.Lnodebug
 	}
+
 	xlog.SetFlags(flags)
 
 	if opts.cpuprofile != "" {
@@ -201,6 +211,7 @@ func main() {
 		if err != nil {
 			xlog.Fatal(err)
 		}
+
 		if err = pprof.StartCPUProfile(f); err != nil {
 			xlog.Fatal(err)
 		}
@@ -212,6 +223,7 @@ func main() {
 	}
 
 	var args []string
+
 	if gflag.NArg() == 0 {
 		opts.stdout = true
 		args = []string{"-"}
@@ -227,6 +239,7 @@ Use -f to force compression. For help type gxz -h.`)
 	}
 
 	exit := 0
+
 	for _, arg := range args {
 		if err := processFile(arg, &opts); err != nil {
 			exit = 1

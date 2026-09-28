@@ -91,23 +91,29 @@ type line struct {
 // lineFlags computes the flags string for a usage line.
 func lineFlags(name, shorthands, defaultValue string) string {
 	buf := new(bytes.Buffer)
+
 	if shorthands != "" {
 		for i, r := range shorthands {
 			if i > 0 {
 				fmt.Fprint(buf, ", ")
 			}
+
 			fmt.Fprintf(buf, "-%c", r)
 		}
 	}
+
 	if name != "" {
 		if buf.Len() > 0 {
 			fmt.Fprintf(buf, ", ")
 		}
+
 		fmt.Fprint(buf, "--", name)
+
 		if defaultValue != "" {
 			fmt.Fprintf(buf, "=%s", defaultValue)
 		}
 	}
+
 	return buf.String()
 }
 
@@ -119,23 +125,30 @@ func writeLines(w io.Writer, ls lines) (n int, err error) {
 	l := make(lines, len(ls))
 	copy(l, ls)
 	sort.Sort(l)
+
 	maxLenFlags := 0
+
 	for _, line := range l {
 		k := len(line.flags)
 		if k > maxLenFlags {
 			maxLenFlags = k
 		}
 	}
+
 	for _, line := range l {
 		format := fmt.Sprintf("  %%-%ds  %%s\n", maxLenFlags)
+
 		var k int
+
 		k, err = fmt.Fprintf(w, format, line.flags, line.usage)
 		n += k
+
 		if err != nil {
-			return
+			return n, err
 		}
 	}
-	return
+
+	return n, err
 }
 
 func (l lines) Len() int           { return len(l) }
@@ -167,6 +180,7 @@ func (f *FlagSet) Init(name string, errorHandling ErrorHandling) {
 func NewFlagSet(name string, errorHandling ErrorHandling) *FlagSet {
 	f := new(FlagSet)
 	f.Init(name, errorHandling)
+
 	return f
 }
 
@@ -175,6 +189,7 @@ func (f *FlagSet) Arg(i int) string {
 	if !(0 <= i && i < len(f.args)) {
 		return ""
 	}
+
 	return f.args[i]
 }
 
@@ -204,27 +219,33 @@ func (f *FlagSet) lookupLongOption(name string) (flag *Flag, err error) {
 	if len(name) < 2 {
 		f.panicf("%s is not a long option", name)
 	}
+
 	var ok bool
 	if flag, ok = f.formal[name]; !ok {
 		return nil, fmt.Errorf("long option %s is unsupported", name)
 	}
+
 	if flag.Name != name {
 		f.panicf("got %s flag; want %s flag", flag.Name, name)
 	}
+
 	return flag, nil
 }
 
 // lookupShortOption looks a short option up.
 func (f *FlagSet) lookupShortOption(r rune) (flag *Flag, err error) {
 	var ok bool
+
 	name := string([]rune{r})
 	if flag, ok = f.formal[name]; !ok {
 		return nil, fmt.Errorf("short option %s is unsupported", name)
 	}
+
 	if !strings.ContainsRune(flag.Shorthands, r) {
 		f.panicf("flag supports shorthands %q; but doesn't contain %s",
 			flag.Shorthands, name)
 	}
+
 	return flag, nil
 }
 
@@ -236,6 +257,7 @@ func (f *FlagSet) processExtraFlagArg(flag *Flag, i int) error {
 		flag.Value.Update()
 		return nil
 	}
+
 	if i < len(f.args) {
 		arg := f.args[i]
 		if len(arg) == 0 || arg[0] != '-' {
@@ -253,7 +275,9 @@ func (f *FlagSet) processExtraFlagArg(flag *Flag, i int) error {
 					//nolint:nilerr // not an error: the argument is simply not ours
 					return nil
 				}
+
 				f.removeArg(i)
+
 				return nil
 			}
 		}
@@ -264,6 +288,7 @@ func (f *FlagSet) processExtraFlagArg(flag *Flag, i int) error {
 	}
 	// flag.HasArg == OptionalArg
 	flag.Value.Update()
+
 	return nil
 }
 
@@ -280,16 +305,20 @@ func (f *FlagSet) parseArg(i int) (next int, err error) {
 	if len(arg) < 2 || arg[0] != '-' {
 		return i + 1, nil
 	}
+
 	if arg[1] == '-' {
 		// argument starts with --
 		f.removeArg(i)
+
 		if len(arg) == 2 {
 			// argument is --; remove it and ignore all
 			// following arguments
 			return len(f.args), nil
 		}
+
 		arg = arg[2:]
 		flagArg := strings.SplitN(arg, "=", 2)
+
 		flag, err := f.lookupLongOption(flagArg[0])
 		if err != nil {
 			return i, err
@@ -306,20 +335,24 @@ func (f *FlagSet) parseArg(i int) (next int, err error) {
 		} else {
 			err = flag.Value.Set(flagArg[1])
 		}
+
 		return i, err
 	}
 	// short options
 	f.removeArg(i)
+
 	arg = arg[1:]
 	for _, r := range arg {
 		flag, err := f.lookupShortOption(r)
 		if err != nil {
 			return i, err
 		}
+
 		if err = f.processExtraFlagArg(flag, i); err != nil {
 			return i, err
 		}
 	}
+
 	return i, nil
 }
 
@@ -330,6 +363,7 @@ func defaultUsage(f *FlagSet) {
 	} else {
 		fmt.Fprintf(f.out(), "Usage of %s:\n", f.name)
 	}
+
 	f.PrintDefaults()
 }
 
@@ -356,15 +390,19 @@ func (f *FlagSet) usage() {
 // as well as the usage information.
 func (f *FlagSet) Parse(arguments []string) error {
 	f.parsed = true
+
 	f.args = arguments
 	for i := 0; i < len(f.args); {
 		var err error
+
 		i, err = f.parseArg(i)
 		if err == nil {
 			continue
 		}
+
 		fmt.Fprintf(f.out(), "%s: %s\n", f.name, err)
 		f.usage()
+
 		switch f.errorHandling {
 		case ContinueOnError:
 			return err
@@ -374,6 +412,7 @@ func (f *FlagSet) Parse(arguments []string) error {
 			panic(err)
 		}
 	}
+
 	return nil
 }
 
@@ -396,6 +435,7 @@ func (f *FlagSet) out() io.Writer {
 	if f.output == nil {
 		return os.Stderr
 	}
+
 	return f.output
 }
 
@@ -415,6 +455,7 @@ func (f *FlagSet) panicf(format string, values ...any) {
 		copy(v[1:], values)
 		msg = fmt.Sprintf("%s "+format, v...)
 	}
+
 	fmt.Fprintln(f.out(), msg)
 	panic(msg)
 }
@@ -424,12 +465,15 @@ func (f *FlagSet) setFormal(name string, flag *Flag) {
 	if name == "" {
 		f.panicf("no support for empty name strings")
 	}
+
 	if _, alreadythere := f.formal[name]; alreadythere {
 		f.panicf("flag redefined: %s", flag.Name)
 	}
+
 	if f.formal == nil {
 		f.formal = make(map[string]*Flag)
 	}
+
 	f.formal[name] = flag
 }
 
@@ -445,13 +489,16 @@ func (f *FlagSet) VarP(value Value, name, shorthands string, hasArg HasArg) {
 	if flag.Name == "" && flag.Shorthands == "" {
 		f.panicf("flag with no name or shorthands")
 	}
+
 	if len(flag.Name) == 1 {
 		f.panicf("flag has single character name %q; use shorthands",
 			flag.Name)
 	}
+
 	if flag.Name != "" {
 		f.setFormal(flag.Name, flag)
 	}
+
 	if flag.Shorthands != "" {
 		for _, r := range flag.Shorthands {
 			name := string([]rune{r})
@@ -467,6 +514,7 @@ func (f *FlagSet) Var(value Value, name string, hasArg HasArg) {
 		shorthands = name
 		name = ""
 	}
+
 	f.VarP(value, name, shorthands, hasArg)
 }
 
@@ -475,6 +523,7 @@ func (f *FlagSet) addLine(l line) {
 	if l.flags == "" {
 		f.panicf("no flags for %q", l.usage)
 	}
+
 	f.lines = append(f.lines, l)
 }
 
@@ -496,6 +545,7 @@ func (b *boolValue) Get() any {
 func (b *boolValue) Set(s string) error {
 	v, err := strconv.ParseBool(s)
 	*b = boolValue(v)
+
 	return err
 }
 
@@ -515,6 +565,7 @@ func boolLine(name, shorthands string, value bool, usage string) line {
 	if value {
 		defaultValue = "true"
 	}
+
 	return line{lineFlags(name, shorthands, defaultValue), usage}
 }
 
@@ -532,6 +583,7 @@ func (f *FlagSet) BoolVarP(p *bool, name, shorthands string, value bool, usage s
 func (f *FlagSet) BoolP(name, shorthands string, value bool, usage string) *bool {
 	p := new(bool)
 	f.BoolVarP(p, name, shorthands, value, usage)
+
 	return p
 }
 
@@ -556,6 +608,7 @@ func (f *FlagSet) BoolVar(p *bool, name string, value bool, usage string) {
 func (f *FlagSet) Bool(name string, value bool, usage string) *bool {
 	p := new(bool)
 	f.BoolVar(p, name, value, usage)
+
 	return p
 }
 
@@ -579,7 +632,9 @@ func (n *intValue) Set(s string) error {
 	if err != nil {
 		return err
 	}
+
 	*n = intValue(v)
+
 	return nil
 }
 
@@ -619,6 +674,7 @@ func CounterVarP(p *int, name, shorthands string, value int, usage string) {
 func (f *FlagSet) CounterP(name, shorthands string, value int, usage string) *int {
 	p := new(int)
 	f.CounterVarP(p, name, shorthands, value, usage)
+
 	return p
 }
 
@@ -636,6 +692,7 @@ func (f *FlagSet) CounterVar(p *int, name string, value int, usage string) {
 func (f *FlagSet) Counter(name string, value int, usage string) *int {
 	p := new(int)
 	f.CounterVar(p, name, value, usage)
+
 	return p
 }
 
@@ -645,6 +702,7 @@ func intLine(name, shorthands string, value int, usage string) line {
 	if value != 0 {
 		defaultValue = strconv.Itoa(value)
 	}
+
 	return line{lineFlags(name, shorthands, defaultValue), usage}
 }
 
@@ -662,6 +720,7 @@ func (f *FlagSet) IntVarP(p *int, name, shorthands string, value int, usage stri
 func (f *FlagSet) IntP(name, shorthands string, value int, usage string) *int {
 	p := new(int)
 	f.IntVarP(p, name, shorthands, value, usage)
+
 	return p
 }
 
@@ -679,6 +738,7 @@ func (f *FlagSet) IntVar(p *int, name string, value int, usage string) {
 func (f *FlagSet) Int(name string, value int, usage string) *int {
 	p := new(int)
 	f.IntVar(p, name, value, usage)
+
 	return p
 }
 
@@ -741,6 +801,7 @@ func StringVarP(p *string, name, shorthands, value, usage string) {
 func (f *FlagSet) StringP(name, shorthands, value, usage string) *string {
 	p := new(string)
 	f.StringVarP(p, name, shorthands, value, usage)
+
 	return p
 }
 
@@ -765,6 +826,7 @@ func (p *presetValue) Get() any {
 func (p *presetValue) Set(s string) error {
 	val, err := strconv.ParseInt(s, 0, 0)
 	*p.p = int(val)
+
 	return err
 }
 
@@ -792,7 +854,9 @@ func (f *FlagSet) PresetVar(p *int, start, end, value int, usage string) {
 	if f.preset {
 		f.panicf("flagset %s has already a preset", f.name)
 	}
+
 	f.addLine(presetLine(start, end, usage))
+
 	*p = value
 	for i := start; i <= end; i++ {
 		f.Var(newPresetValue(p, i), strconv.Itoa(i), NoArg)
@@ -816,5 +880,6 @@ func PresetVar(p *int, start, end, value int, usage string) {
 func (f *FlagSet) Preset(start, end, value int, usage string) *int {
 	p := new(int)
 	f.PresetVar(p, start, end, value, usage)
+
 	return p
 }

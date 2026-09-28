@@ -15,17 +15,22 @@ import (
 // lzma2Stream compresses data into an LZMA2 chunk sequence.
 func lzma2Stream(tb testing.TB, data []byte) []byte {
 	tb.Helper()
+
 	var buf bytes.Buffer
+
 	w, err := NewWriter2(&buf)
 	if err != nil {
 		tb.Fatal(err)
 	}
+
 	if _, err = w.Write(data); err != nil {
 		tb.Fatal(err)
 	}
+
 	if err = w.Close(); err != nil {
 		tb.Fatal(err)
 	}
+
 	return buf.Bytes()
 }
 
@@ -38,6 +43,7 @@ func TestReader2CorruptionMatchesErrCorrupt(t *testing.T) {
 	for src.Len() < 4096 {
 		src.WriteString("the quick brown fox jumps over the lazy dog 0123456789\n")
 	}
+
 	want := src.Bytes()
 	stream := lzma2Stream(t, want)
 
@@ -45,10 +51,12 @@ func TestReader2CorruptionMatchesErrCorrupt(t *testing.T) {
 		for i := range stream {
 			bad := append([]byte{}, stream...)
 			bad[i] ^= mask
+
 			r, err := NewReader2(bytes.NewReader(bad))
 			if err != nil {
 				t.Fatalf("NewReader2 failed on byte %d: %v (errors are deferred to Read)", i, err)
 			}
+
 			got, err := io.ReadAll(r)
 			switch {
 			case err == nil:
@@ -79,18 +87,23 @@ func TestReader2ShortChunkIsCorruptNotTruncated(t *testing.T) {
 	if bad[1] != 0x0f || bad[2] != 0xff {
 		t.Fatalf("first chunk declares uncompressed size-1 %#x; the fixture assumes 0x0fff", int(bad[1])<<8|int(bad[2]))
 	}
+
 	bad[1] ^= 0x10
+
 	r, err := NewReader2(bytes.NewReader(bad))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	_, err = io.ReadAll(r)
 	if err == nil {
 		t.Fatal("a chunk promising more data than it holds was accepted")
 	}
+
 	if !errors.Is(err, ErrCorrupt) {
 		t.Errorf("got %v; want a match for ErrCorrupt", err)
 	}
+
 	if errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Errorf("got %v; a short chunk in a complete stream is not truncation", err)
 	}
@@ -100,6 +113,7 @@ func TestReader2ShortChunkIsCorruptNotTruncated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err = io.ReadAll(r); !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Errorf("truncated stream gave %v; want io.ErrUnexpectedEOF", err)
 	}
@@ -109,30 +123,38 @@ func TestReader2ShortChunkIsCorruptNotTruncated(t *testing.T) {
 // header, whose errors were plain strings too.
 func TestReaderClassicHeaderErrorsAreClassified(t *testing.T) {
 	var buf bytes.Buffer
+
 	w, err := NewWriter(&buf)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err = w.Write([]byte("the quick brown fox")); err != nil {
 		t.Fatal(err)
 	}
+
 	if err = w.Close(); err != nil {
 		t.Fatal(err)
 	}
+
 	stream := buf.Bytes()
 
 	bad := append([]byte{}, stream...)
+
 	bad[0] = 0xff // properties code out of range
 	if _, err = NewReader(bytes.NewReader(bad)); !errors.Is(err, ErrCorrupt) {
 		t.Errorf("invalid properties code gave %v; want a match for ErrCorrupt", err)
 	}
+
 	if _, err = NewReader(bytes.NewReader(stream[:5])); !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Errorf("short header gave %v; want io.ErrUnexpectedEOF", err)
 	}
+
 	bad = append([]byte{}, stream...)
 	// Uncompressed size of 2^60: valid encoding, larger than this package
 	// decodes.
 	copy(bad[5:13], []byte{0, 0, 0, 0, 0, 0, 0, 0x10})
+
 	if _, err = NewReader(bytes.NewReader(bad)); !errors.Is(err, ErrUnsupported) {
 		t.Errorf("pebibyte stream gave %v; want a match for ErrUnsupported", err)
 	}
@@ -152,6 +174,7 @@ func (f *countingFailingWriter) Write(p []byte) (int, error) {
 	if f.calls > f.allow {
 		return 0, f.err
 	}
+
 	return len(p), nil
 }
 
@@ -162,28 +185,36 @@ func (f *countingFailingWriter) Write(p []byte) (int, error) {
 func TestWriter2ErrorIsSticky(t *testing.T) {
 	ioErr := errors.New("transient")
 	fw := &countingFailingWriter{allow: 0, err: ioErr}
+
 	w, err := NewWriter2(fw)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	rnd := make([]byte, 3<<20)
 	for i := range rnd {
 		rnd[i] = byte(i*7919 ^ i>>3)
 	}
+
 	if _, err = w.Write(rnd); !errors.Is(err, ioErr) {
 		t.Fatalf("Write gave %v; want the writer's error", err)
 	}
+
 	calls := fw.calls
 	fw.allow = 1 << 30
+
 	if _, err = w.Write(rnd[:1024]); !errors.Is(err, ioErr) {
 		t.Errorf("Write after a failure gave %v; want the original error", err)
 	}
+
 	if err = w.Flush(); !errors.Is(err, ioErr) {
 		t.Errorf("Flush after a failure gave %v; want the original error", err)
 	}
+
 	if err = w.Close(); !errors.Is(err, ioErr) {
 		t.Errorf("Close after a failure gave %v; want the original error", err)
 	}
+
 	if fw.calls != calls {
 		t.Errorf("%d writes were attempted after the failure", fw.calls-calls)
 	}
@@ -203,13 +234,17 @@ func TestWriterErrorIsSticky(t *testing.T) {
 	// front of the writer during Write.
 	rnd := make([]byte, 1<<20)
 	rand.New(rand.NewSource(1)).Read(rnd)
+
 	if _, err = w.Write(rnd); !errors.Is(err, ioErr) {
 		t.Fatalf("Write gave %v; want the writer's error", err)
 	}
+
 	fw.allow = 1 << 30
+
 	if _, err = w.Write(rnd[:16]); !errors.Is(err, ioErr) {
 		t.Errorf("Write after a failure gave %v; want the original error", err)
 	}
+
 	if err = w.Close(); !errors.Is(err, ioErr) {
 		t.Errorf("Close after a failure gave %v; want the original error", err)
 	}

@@ -34,18 +34,23 @@ type encoderDict struct {
 func newEncoderDict(dictCap, bufSize int, m matcher) (d *encoderDict, err error) {
 	if !(1 <= dictCap && int64(dictCap) <= MaxDictCap) {
 		return nil, errors.New(
-			"lzma: dictionary capacity out of range")
+			"lzma: dictionary capacity out of range",
+		)
 	}
+
 	if bufSize < 1 {
 		return nil, errors.New(
-			"lzma: buffer size must be larger than zero")
+			"lzma: buffer size must be larger than zero",
+		)
 	}
+
 	d = &encoderDict{
 		buf:      *newBuffer(dictCap + bufSize),
 		capacity: dictCap,
 		m:        m,
 	}
 	m.SetDict(d)
+
 	return d, nil
 }
 
@@ -53,10 +58,12 @@ func newEncoderDict(dictCap, bufSize int, m matcher) (d *encoderDict, err error)
 // MaxMatchLen.
 func (d *encoderDict) Discard(n int) {
 	p := d.data[:n]
+
 	k, _ := d.buf.Read(p)
 	if k < n {
 		panic(fmt.Errorf("lzma: can't discard %d bytes", n))
 	}
+
 	d.head += int64(n)
 	// The matcher's Write never returns an error.
 	_, _ = d.m.Write(p)
@@ -68,6 +75,7 @@ func (d *encoderDict) Len() int {
 	if int64(n) > d.head {
 		return int(d.head)
 	}
+
 	return n
 }
 
@@ -76,6 +84,7 @@ func (d *encoderDict) DictLen() int {
 	if d.head < int64(d.capacity) {
 		return int(d.head)
 	}
+
 	return d.capacity
 }
 
@@ -94,10 +103,12 @@ func (d *encoderDict) Write(p []byte) (n int, err error) {
 		p = p[:m]
 		err = ErrNoSpace
 	}
+
 	var e error
 	if n, e = d.buf.Write(p); e != nil {
 		err = e
 	}
+
 	return n, err
 }
 
@@ -109,10 +120,12 @@ func (d *encoderDict) ByteAt(distance int) byte {
 	if !(0 < distance && distance <= d.Len()) {
 		return 0
 	}
+
 	i := d.buf.rear - distance
 	if i < 0 {
 		i += len(d.buf.data)
 	}
+
 	return d.buf.data[i]
 }
 
@@ -123,26 +136,35 @@ func (d *encoderDict) CopyN(w io.Writer, n int) (written int, err error) {
 	if n <= 0 {
 		return 0, nil
 	}
+
 	m := d.Len()
 	if n > m {
 		n = m
 		err = ErrNoSpace
 	}
+
 	i := d.buf.rear - n
+
 	var e error
+
 	if i < 0 {
 		i += len(d.buf.data)
 		if written, e = w.Write(d.buf.data[i:]); e != nil {
 			return written, e
 		}
+
 		i = 0
 	}
+
 	var k int
+
 	k, e = w.Write(d.buf.data[i:d.buf.rear])
 	written += k
+
 	if e != nil {
 		err = e
 	}
+
 	return written, err
 }
 

@@ -24,6 +24,7 @@ func NewCyclicPoly(n int) *CyclicPoly {
 	if n < 1 {
 		panic("argument n must be positive")
 	}
+
 	return &CyclicPoly{p: make([]uint64, 0, n)}
 }
 
@@ -51,6 +52,7 @@ func (r *CyclicPoly) RollByte(x byte) uint64 {
 			r.i = 0
 		}
 	}
+
 	return r.h
 }
 

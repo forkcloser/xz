@@ -62,6 +62,7 @@ func (s *state) Reset() {
 func newState(p Properties) *state {
 	s := &state{Properties: p}
 	s.Reset()
+
 	return s
 }
 
@@ -70,6 +71,7 @@ func (s *state) deepcopy(src *state) {
 	if s == src {
 		return
 	}
+
 	s.rep = src.rep
 	s.isMatch = src.isMatch
 	s.isRepG0Long = src.isRepG0Long
@@ -90,6 +92,7 @@ func (s *state) deepcopy(src *state) {
 func cloneState(src *state) *state {
 	s := new(state)
 	s.deepcopy(src)
+
 	return s
 }
 
@@ -103,6 +106,7 @@ func (s *state) updateStateLiteral() {
 		s.state -= 3
 		return
 	}
+
 	s.state -= 6
 }
 
@@ -138,7 +142,8 @@ func (s *state) states(dictHead int64) (state1, state2, posState uint32) {
 	state1 = s.state
 	posState = uint32(dictHead) & s.posBitMask
 	state2 = (s.state << maxPosBits) | posState
-	return
+
+	return state1, state2, posState
 }
 
 // litState computes the literal state.
@@ -146,5 +151,6 @@ func (s *state) litState(prev byte, dictHead int64) uint32 {
 	lp, lc := uint(s.Properties.LP), uint(s.Properties.LC)
 	litState := ((uint32(dictHead) & ((1 << lp) - 1)) << lc) |
 		(uint32(prev) >> (8 - lc))
+
 	return litState
 }

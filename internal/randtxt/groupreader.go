@@ -32,28 +32,35 @@ func (r *GroupReader) Read(p []byte) (n int, err error) {
 	if r.eof {
 		return 0, io.EOF
 	}
+
 	groupsPerLine := r.GroupsPerLine
 	if groupsPerLine < 1 {
 		groupsPerLine = 8
 	}
+
 	lineLen := int64(groupsPerLine * 6)
+
 	var c byte
+
 	for i := range p {
 		switch {
 		case r.off%lineLen == lineLen-1:
 			if i+1 == len(p) && len(p) > 1 {
 				return i, nil
 			}
+
 			c = '\n'
 		case r.off%6 == 5:
 			if i+1 == len(p) && len(p) > 1 {
 				return i, nil
 			}
+
 			c = ' '
 		default:
 			c, err = r.R.ReadByte()
 			if errors.Is(err, io.EOF) {
 				r.eof = true
+
 				if i > 0 {
 					switch p[i-1] {
 					case ' ':
@@ -63,12 +70,16 @@ func (r *GroupReader) Read(p []byte) (n int, err error) {
 						return i, io.EOF
 					}
 				}
+
 				p[i] = '\n'
+
 				return i + 1, io.EOF
 			}
+
 			if err != nil {
 				return i, err
 			}
+
 			switch {
 			case c == ' ':
 				c = '_'
@@ -76,8 +87,10 @@ func (r *GroupReader) Read(p []byte) (n int, err error) {
 				c = '-'
 			}
 		}
+
 		p[i] = c
 		r.off++
 	}
+
 	return len(p), nil
 }

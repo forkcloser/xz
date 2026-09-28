@@ -26,12 +26,14 @@ func uvarintBytes(x uint64) []byte {
 		p = append(p, byte(x)|0x80)
 		x >>= 7
 	}
+
 	return append(p, byte(x))
 }
 
 func le32Bytes(x uint32) []byte {
 	p := make([]byte, 4)
 	putUint32LE(p, x)
+
 	return p
 }
 
@@ -56,18 +58,23 @@ func hostileStream(blockArea []byte, recs []hostileRecord, recCount int64) []byt
 
 	var idx bytes.Buffer
 	idx.WriteByte(0) // index indicator
+
 	n := int64(len(recs))
 	if recCount >= 0 {
 		n = recCount
 	}
+
 	idx.Write(uvarintBytes(uint64(n)))
+
 	for _, rec := range recs {
 		idx.Write(uvarintBytes(rec.unpaddedSize))
 		idx.Write(uvarintBytes(rec.uncompressedSize))
 	}
+
 	for idx.Len()%4 != 0 {
 		idx.WriteByte(0)
 	}
+
 	indexSize := int64(idx.Len()) + 4
 	idx.Write(le32Bytes(crc32.ChecksumIEEE(idx.Bytes())))
 	out.Write(idx.Bytes())
@@ -96,26 +103,33 @@ const hostileAllocBudget = 8 << 20
 // because such a panic aborts the whole test binary.
 func readAllParallel(t *testing.T, file []byte, workers int) error {
 	t.Helper()
+
 	var before, after runtime.MemStats
+
 	runtime.GC()
 	runtime.ReadMemStats(&before)
 
 	err := func() error {
 		r, err := ParallelReaderConfig{Workers: workers}.NewParallelReader(
-			bytes.NewReader(file), int64(len(file)))
+			bytes.NewReader(file), int64(len(file)),
+		)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = r.Close() }()
+
 		_, err = io.Copy(io.Discard, r)
+
 		return err
 	}()
 
 	runtime.ReadMemStats(&after)
+
 	if used := after.TotalAlloc - before.TotalAlloc; used > hostileAllocBudget {
 		t.Errorf("a %d byte file allocated %d bytes; budget is %d",
 			len(file), used, hostileAllocBudget)
 	}
+
 	return err
 }
 
@@ -133,11 +147,13 @@ func TestParallelReaderHostileUncompressedSize(t *testing.T) {
 			t.Fatalf("fixture grew to %d bytes; it must stay tiny to make "+
 				"the amplification obvious", len(file))
 		}
+
 		err := readAllParallel(t, file, 4)
 		if err == nil {
 			t.Errorf("uncompressed size %d: no error", size)
 			continue
 		}
+
 		t.Logf("uncompressed size %d (%d byte file): %s", size, len(file), err)
 	}
 }
@@ -154,11 +170,13 @@ func TestParallelReaderHostileRecordCount(t *testing.T) {
 			t.Fatalf("fixture grew to %d bytes; it must stay tiny to make "+
 				"the amplification obvious", len(file))
 		}
+
 		err := readAllParallel(t, file, 4)
 		if err == nil {
 			t.Errorf("record count %d: no error", count)
 			continue
 		}
+
 		t.Logf("record count %d (%d byte file): %s", count, len(file), err)
 	}
 }
@@ -172,10 +190,12 @@ func TestParallelReaderIndexSizeOverflow(t *testing.T) {
 		{unpaddedSize: 1<<63 - 1, uncompressedSize: 0},
 		{unpaddedSize: 1<<63 - 52, uncompressedSize: 0},
 	}, -1)
+
 	err := readAllParallel(t, file, 4)
 	if err == nil {
 		t.Fatal("overflowing index sizes accepted")
 	}
+
 	t.Logf("%d byte file: %s", len(file), err)
 }
 
@@ -200,15 +220,18 @@ var loopFile = []byte{
 // rather than re-deriving them.
 func TestParallelReaderNoHangOnLoopFile(t *testing.T) {
 	done := make(chan error, 1)
+
 	go func() {
 		_, err := NewParallelReader(bytes.NewReader(loopFile), int64(len(loopFile)))
 		done <- err
 	}()
+
 	select {
 	case err := <-done:
 		if err == nil {
 			t.Fatal("hostile two-stream file accepted")
 		}
+
 		t.Logf("%d byte file: %s", len(loopFile), err)
 	case <-time.After(10 * time.Second):
 		// The goroutine is stuck in an uninterruptible loop; it will keep
@@ -236,10 +259,12 @@ func TestParallelReaderHostileSizeWithinBound(t *testing.T) {
 	blockArea := make([]byte, 8192)
 	file := hostileStream(blockArea,
 		[]hostileRecord{{unpaddedSize: 8192, uncompressedSize: 300 << 20}}, -1)
+
 	err := readAllParallel(t, file, 4)
 	if err == nil {
 		t.Fatal("index claiming 300 MiB for an 8 KiB block: no error")
 	}
+
 	t.Logf("%d byte file: %s", len(file), err)
 }
 
@@ -249,26 +274,33 @@ func TestParallelReaderHostileSizeWithinBound(t *testing.T) {
 // rather than with the declaration, and the mismatch must surface as an error.
 func TestParallelReaderHostileSizeRealBlock(t *testing.T) {
 	data := parallelTestData(32 << 10)
+
 	var out bytes.Buffer
 	// CRC32, matching the stream flags hostileStream writes.
 	w, err := WriterConfig{CheckSum: CRC32}.NewWriter(&out)
 	if err != nil {
 		t.Fatalf("NewWriter error %s", err)
 	}
+
 	if _, err = w.Write(data); err != nil {
 		t.Fatalf("Write error %s", err)
 	}
+
 	if err = w.Close(); err != nil {
 		t.Fatalf("Close error %s", err)
 	}
+
 	genuine := out.Bytes() // single block
+
 	blocks, _, err := parseBlocks(bytes.NewReader(genuine), int64(len(genuine)))
 	if err != nil {
 		t.Fatalf("parseBlocks error %s", err)
 	}
+
 	if len(blocks) != 1 {
 		t.Fatalf("got %d blocks; want 1", len(blocks))
 	}
+
 	bd := blocks[0]
 	blockArea := genuine[bd.offset : bd.offset+bd.paddedSize()]
 	file := hostileStream(blockArea,
@@ -276,10 +308,12 @@ func TestParallelReaderHostileSizeRealBlock(t *testing.T) {
 			unpaddedSize:     uint64(bd.unpaddedSize),
 			uncompressedSize: 300 << 20,
 		}}, -1)
+
 	err = readAllParallel(t, file, 4)
 	if err == nil {
 		t.Fatal("index claiming 300 MiB for a 32 KiB block: no error")
 	}
+
 	t.Logf("%d byte file: %s", len(file), err)
 }
 
@@ -297,17 +331,22 @@ func TestParallelReaderHostileRecordCountIsBoundedEarly(t *testing.T) {
 	for i := range recs {
 		recs[i] = hostileRecord{unpaddedSize: 1, uncompressedSize: 1}
 	}
+
 	file := hostileStream([]byte{0, 0, 0, 0}, recs, -1)
 
 	var before, after runtime.MemStats
+
 	runtime.GC()
 	runtime.ReadMemStats(&before)
+
 	_, err := NewParallelReader(bytes.NewReader(file), int64(len(file)))
+
 	runtime.ReadMemStats(&after)
 
 	if err == nil {
 		t.Fatal("an index of 100000 records for a 4-byte block area was accepted")
 	}
+
 	if !errors.Is(err, ErrCorrupt) {
 		t.Errorf("got %v; want a match for ErrCorrupt", err)
 	}
@@ -316,5 +355,6 @@ func TestParallelReaderHostileRecordCountIsBoundedEarly(t *testing.T) {
 	if used := after.TotalAlloc - before.TotalAlloc; used > uint64(len(file)) {
 		t.Errorf("rejecting a %d byte file allocated %d bytes", len(file), used)
 	}
+
 	t.Logf("%d byte file: %s", len(file), err)
 }

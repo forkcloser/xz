@@ -30,9 +30,12 @@ func (l *limitedByteWriter) WriteByte(c byte) error {
 	if l.N <= 0 {
 		return errLimit
 	}
+
 	if err := l.BW.WriteByte(c); err != nil {
 		return err
 	}
+
 	l.N--
+
 	return nil
 }

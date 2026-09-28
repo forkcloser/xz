@@ -21,13 +21,16 @@ func (tc *treeCodec) deepcopy(src *treeCodec) {
 // Encode uses the range encoder to encode a fixed-bit-size value.
 func (tc *treeCodec) Encode(e *rangeEncoder, v uint32) (err error) {
 	m := uint32(1)
+
 	for i := int(tc.bits) - 1; i >= 0; i-- {
 		b := (v >> uint(i)) & 1
 		if err := e.EncodeBit(b, &tc.probs[m]); err != nil {
 			return err
 		}
+
 		m = (m << 1) | b
 	}
+
 	return nil
 }
 
@@ -41,12 +44,16 @@ func (tc *treeCodec) Encode(e *rangeEncoder, v uint32) (err error) {
 func (tc *treeCodec) decode(d *rangeDecoder, rng, code uint32) (v, nrng, ncode uint32) {
 	probs := tc.probs
 	m := uint32(1)
+
 	for j := 0; j < int(tc.bits); j++ {
 		var b uint32
+
 		b, rng, code = decodeBitArith(&probs[m], rng, code)
 		m = (m << 1) | b
+
 		if rng < rcTop {
 			rng <<= 8
+
 			code <<= 8
 			if pos := d.pos; pos < len(d.buf) {
 				code |= uint32(d.buf[pos])
@@ -56,6 +63,7 @@ func (tc *treeCodec) decode(d *rangeDecoder, rng, code uint32) (v, nrng, ncode u
 			}
 		}
 	}
+
 	return m - (1 << uint(tc.bits)), rng, code
 }
 
@@ -79,13 +87,16 @@ func (tc *treeReverseCodec) init(bits int) { tc.probTree.init(bits) }
 // encoder may cause errors.
 func (tc *treeReverseCodec) Encode(v uint32, e *rangeEncoder) (err error) {
 	m := uint32(1)
+
 	for i := uint(0); i < uint(tc.bits); i++ {
 		b := (v >> i) & 1
 		if err := e.EncodeBit(b, &tc.probs[m]); err != nil {
 			return err
 		}
+
 		m = (m << 1) | b
 	}
+
 	return nil
 }
 
@@ -95,13 +106,17 @@ func (tc *treeReverseCodec) Encode(v uint32, e *rangeEncoder) (err error) {
 func (tc *treeReverseCodec) decode(d *rangeDecoder, rng, code uint32) (v, nrng, ncode uint32) {
 	probs := tc.probs
 	m := uint32(1)
+
 	for j := uint(0); j < uint(tc.bits); j++ {
 		var b uint32
+
 		b, rng, code = decodeBitArith(&probs[m], rng, code)
 		m = (m << 1) | b
 		v |= b << j
+
 		if rng < rcTop {
 			rng <<= 8
+
 			code <<= 8
 			if pos := d.pos; pos < len(d.buf) {
 				code |= uint32(d.buf[pos])
@@ -111,6 +126,7 @@ func (tc *treeReverseCodec) decode(d *rangeDecoder, rng, code uint32) (v, nrng, 
 			}
 		}
 	}
+
 	return v, rng, code
 }
 
@@ -130,9 +146,11 @@ func (t *probTree) deepcopy(src *probTree) {
 	if t == src {
 		return
 	}
+
 	if cap(t.probs) < len(src.probs) {
 		t.probs = make([]prob, len(src.probs))
 	}
+
 	t.probs = t.probs[:len(src.probs)]
 	copy(t.probs, src.probs)
 	t.bits = src.bits
@@ -147,10 +165,12 @@ func (t *probTree) init(bits int) {
 	if !(1 <= bits && bits <= 32) {
 		panic("bits outside of range [1,32]")
 	}
+
 	n := 1 << uint(bits)
 	if cap(t.probs) < n {
 		t.probs = make([]prob, n)
 	}
+
 	t.probs = t.probs[:n]
 	t.bits = byte(bits)
 	initProbSlice(t.probs)

@@ -31,14 +31,17 @@ func (c *ParallelReaderConfig) Verify() error {
 	if c == nil {
 		return errors.New("xz: parallel reader parameters are nil")
 	}
+
 	rc := ReaderConfig{DictCap: c.DictCap}
 	if err := rc.Verify(); err != nil {
 		return err
 	}
+
 	c.DictCap = rc.DictCap
 	if c.Workers < 1 {
 		c.Workers = runtime.GOMAXPROCS(0)
 	}
+
 	return nil
 }
 
@@ -75,18 +78,23 @@ func checkUncompressedSize(rec record) error {
 	if rec.uncompressedSize > math.MaxInt {
 		return corruptf(
 			"xz: uncompressed size %d in index exceeds the address space",
-			rec.uncompressedSize)
+			rec.uncompressedSize,
+		)
 	}
+
 	limit := int64(math.MaxInt64)
 	if rec.unpaddedSize <= math.MaxInt64/maxLZMA2Expansion {
 		limit = rec.unpaddedSize * maxLZMA2Expansion
 	}
+
 	if rec.uncompressedSize > limit {
 		return corruptf(
 			"xz: uncompressed size %d in index exceeds the maximum %d "+
 				"for a block of %d bytes",
-			rec.uncompressedSize, limit, rec.unpaddedSize)
+			rec.uncompressedSize, limit, rec.unpaddedSize,
+		)
 	}
+
 	return nil
 }
 
@@ -160,9 +168,11 @@ type parallelDecoder struct {
 func (r *ParallelReader) setErr(err error) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if r.err == nil {
 		r.err = err
 	}
+
 	return r.err
 }
 
@@ -170,6 +180,7 @@ func (r *ParallelReader) setErr(err error) error {
 func (r *ParallelReader) getErr() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	return r.err
 }
 
@@ -200,10 +211,12 @@ func (c ParallelReaderConfig) NewParallelReader(xz io.ReaderAt, size int64) (r *
 	if err = c.Verify(); err != nil {
 		return nil, err
 	}
+
 	blocks, total, err := parseBlocks(xz, size)
 	if err != nil {
 		return nil, err
 	}
+
 	r = &ParallelReader{
 		ParallelReaderConfig: c,
 		dec: &parallelDecoder{
@@ -220,6 +233,7 @@ func (c ParallelReaderConfig) NewParallelReader(xz io.ReaderAt, size int64) (r *
 	// documented way to release a reader early; this only keeps forgetting it
 	// from leaking for the life of the process.
 	runtime.AddCleanup(r, func(d *parallelDecoder) { d.stop() }, r.dec)
+
 	return r, nil
 }
 
@@ -242,19 +256,23 @@ func skipStreamPadding(xz io.ReaderAt, pos int64) (int64, error) {
 	for pos >= 4 {
 		n := min(int64(len(buf)), pos)
 		n -= n % 4 // only whole groups, so the scan stays aligned
+
 		p := buf[:n]
 		if _, err := xz.ReadAt(p, pos-n); err != nil {
 			return 0, err
 		}
+
 		i := len(p)
 		for i >= 4 && allZeros(p[i-4:i]) {
 			i -= 4
 		}
+
 		pos -= int64(len(p) - i)
 		if i != 0 {
 			return pos, nil
 		}
 	}
+
 	return pos, nil
 }
 
@@ -272,6 +290,7 @@ func readFullAt(xz io.ReaderAt, p []byte, off int64) error {
 	case err == nil:
 		return io.ErrShortBuffer
 	}
+
 	return err
 }
 
@@ -280,14 +299,17 @@ func readFullAt(xz io.ReaderAt, p []byte, off int64) error {
 // The header, footer and index checksums of every stream are verified.
 func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, err error) {
 	streams := make([][]blockDesc, 0, 1)
+
 	pos := size
 	for pos > 0 {
 		if pos%4 != 0 {
 			return nil, 0, corruptf("xz: file size not a multiple of four bytes")
 		}
+
 		if pos, err = skipStreamPadding(xz, pos); err != nil {
 			return nil, 0, err
 		}
+
 		if pos == 0 {
 			break
 		}
@@ -296,10 +318,12 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 		if pos < HeaderLen+footerLen {
 			return nil, 0, corruptf("xz: stream truncated")
 		}
+
 		fdata := make([]byte, footerLen)
 		if err = readFullAt(xz, fdata, pos-footerLen); err != nil {
 			return nil, 0, err
 		}
+
 		var f footer
 		if err = f.UnmarshalBinary(fdata); err != nil {
 			return nil, 0, err
@@ -310,11 +334,14 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 		if indexStart < HeaderLen {
 			return nil, 0, corruptf("xz: index size exceeds stream")
 		}
+
 		ir := bufio.NewReader(io.NewSectionReader(xz, indexStart, f.indexSize))
+
 		c, err := ir.ReadByte()
 		if err != nil {
 			return nil, 0, indexEOF(err)
 		}
+
 		if c != 0 {
 			return nil, 0, corruptf("xz: index indicator missing")
 		}
@@ -328,6 +355,7 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 		if err != nil {
 			return nil, 0, indexEOF(err)
 		}
+
 		if n+1 != f.indexSize {
 			return nil, 0, corruptf("xz: index size does not match footer")
 		}
@@ -340,10 +368,12 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 		// headerPos at or above pos and makes the enclosing loop re-parse the
 		// same footer forever.
 		var blocksLen int64
+
 		for _, rec := range records {
 			if rec.unpaddedSize <= 0 {
 				return nil, 0, corruptf("xz: invalid unpadded size in index")
 			}
+
 			if err := checkUncompressedSize(rec); err != nil {
 				return nil, 0, err
 			}
@@ -353,33 +383,41 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 			if rec.unpaddedSize > remaining {
 				return nil, 0, corruptf("xz: blocks exceed stream size")
 			}
+
 			padded := rec.unpaddedSize + int64(padLen(rec.unpaddedSize))
 			if padded > remaining {
 				return nil, 0, corruptf("xz: blocks exceed stream size")
 			}
+
 			blocksLen += padded
 		}
+
 		headerPos := indexStart - blocksLen - HeaderLen
 		if headerPos < 0 {
 			return nil, 0, corruptf("xz: blocks exceed stream size")
 		}
+
 		hdata := make([]byte, HeaderLen)
 		if err = readFullAt(xz, hdata, headerPos); err != nil {
 			return nil, 0, err
 		}
+
 		var h header
 		if err = h.UnmarshalBinary(hdata); err != nil {
 			return nil, 0, err
 		}
+
 		if h.flags != f.flags {
 			return nil, 0, corruptf("xz: stream header and footer flags differ")
 		}
+
 		newHash, err := newHashFunc(h.flags)
 		if err != nil {
 			return nil, 0, err
 		}
 
 		descs := make([]blockDesc, len(records))
+
 		off := headerPos + HeaderLen
 		for i, rec := range records {
 			descs[i] = blockDesc{
@@ -390,6 +428,7 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 			}
 			off += descs[i].paddedSize()
 		}
+
 		streams = append(streams, descs)
 		// The walk is backwards, so pos must strictly decrease for the loop to
 		// terminate. That follows from the bounds above, but state it here so
@@ -397,8 +436,10 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 		if headerPos >= pos {
 			return nil, 0, corruptf("xz: stream does not precede its index")
 		}
+
 		pos = headerPos
 	}
+
 	if len(streams) == 0 {
 		return nil, 0, corruptf("xz: no streams found")
 	}
@@ -411,12 +452,15 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 			// enormous stream.
 			if d.uncompressedSize > math.MaxInt64-total {
 				return nil, 0, corruptf(
-					"xz: total uncompressed size overflows int64")
+					"xz: total uncompressed size overflows int64",
+				)
 			}
+
 			total += d.uncompressedSize
 			blocks = append(blocks, d)
 		}
 	}
+
 	return blocks, total, nil
 }
 
@@ -428,6 +472,7 @@ func indexEOF(err error) error {
 	if errors.Is(err, io.EOF) {
 		return corruptf("xz: index ends before its records do")
 	}
+
 	return err
 }
 
@@ -447,6 +492,7 @@ func (r *ParallelReader) start() {
 	if r.Workers < 1 {
 		r.Workers = runtime.GOMAXPROCS(0)
 	}
+
 	r.dec.start(r.Workers, r.DictCap)
 }
 
@@ -468,12 +514,15 @@ func (d *parallelDecoder) start(workers, dictCap int) {
 			}
 		}
 	}
+
 	d.queue = make(chan *blockWork, workers+2)
 	d.jobs = make(chan *blockWork)
+
 	d.bufPool = make(chan []byte, cap(d.queue)+1)
 	for range workers {
 		go d.worker()
 	}
+
 	go d.dispatch()
 }
 
@@ -487,6 +536,7 @@ func (d *parallelDecoder) dispatch() {
 	// never be dispatched.
 	defer close(d.queue)
 	defer close(d.jobs)
+
 	for i := range d.blocks {
 		w := &blockWork{
 			d:      d.blocks[i],
@@ -497,6 +547,7 @@ func (d *parallelDecoder) dispatch() {
 		case <-d.done:
 			return
 		}
+
 		select {
 		case d.jobs <- w:
 		case <-d.done:
@@ -524,6 +575,7 @@ func (d *parallelDecoder) worker() {
 		if s == nil {
 			s = &workerScratch{xr: bufio.NewReaderSize(nil, d.readBufSize)}
 		}
+
 		w.result <- d.decodeOne(&w.d, s)
 	}
 }
@@ -534,15 +586,19 @@ func (d *parallelDecoder) worker() {
 // would abort the process with no way for the caller to recover.
 func (d *parallelDecoder) decodeOne(bd *blockDesc, s *workerScratch) (res blockResult) {
 	var buf []byte
+
 	defer func() {
 		if v := recover(); v != nil {
 			d.putBuf(buf)
+
 			s.lz.r = nil
 			res = blockResult{err: fmt.Errorf(
 				"xz: panic while decoding block at offset %d: %v",
-				bd.offset, v)}
+				bd.offset, v,
+			)}
 		}
 	}()
+
 	data, err := d.decodeBlock(bd, &buf, s)
 	if err != nil {
 		d.putBuf(buf)
@@ -550,8 +606,10 @@ func (d *parallelDecoder) decodeOne(bd *blockDesc, s *workerScratch) (res blockR
 		// went wrong in is not worth reasoning about; drop it rather than
 		// reuse it.
 		s.lz.r = nil
+
 		return blockResult{err: err}
 	}
+
 	return blockResult{data: data}
 }
 
@@ -565,6 +623,7 @@ func (d *parallelDecoder) getBuf(n int) []byte {
 		}
 	default:
 	}
+
 	return make([]byte, n)
 }
 
@@ -573,6 +632,7 @@ func (d *parallelDecoder) putBuf(b []byte) {
 	if b == nil {
 		return
 	}
+
 	select {
 	case d.bufPool <- b:
 	default:
@@ -622,28 +682,37 @@ func (d *parallelDecoder) decodeBlock(bd *blockDesc, bufp *[]byte, s *workerScra
 		if errors.Is(err, io.EOF) {
 			return nil, corruptf("xz: block header at offset %d runs past the end of the block", bd.offset)
 		}
+
 		return nil, err
 	}
+
 	c := ReaderConfig{DictCap: d.dictCap}
+
 	br, err := c.newBlockReader(s.xr, h, hlen, bd.newHash(), &s.lz)
 	if err != nil {
 		return nil, err
 	}
+
 	total := int(bd.uncompressedSize)
 	buf := d.getBuf(min(total, initialBlockBufSize))
+
 	*bufp = buf
 	for n := 0; ; {
 		k, err := io.ReadFull(br, buf[n:])
 		n += k
+
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				err = io.ErrUnexpectedEOF
 			}
+
 			return nil, err
 		}
+
 		if n == total {
 			break
 		}
+
 		if next := min(total, 2*len(buf)); cap(buf) >= next {
 			buf = buf[:next]
 		} else {
@@ -651,21 +720,26 @@ func (d *parallelDecoder) decodeBlock(bd *blockDesc, bufp *[]byte, s *workerScra
 			copy(b, buf)
 			buf = b
 		}
+
 		*bufp = buf
 	}
 	// The block must end exactly here; the final Read triggers the
 	// padding and check verification in the block reader.
 	var tmp [1]byte
+
 	n, err := br.Read(tmp[:])
 	if n != 0 || err == nil {
 		return nil, corruptf("xz: block longer than index record")
 	}
+
 	if !errors.Is(err, io.EOF) {
 		return nil, err
 	}
+
 	if br.record() != (record{bd.unpaddedSize, bd.uncompressedSize}) {
 		return nil, corruptf("xz: block sizes do not match index record")
 	}
+
 	return buf, nil
 }
 
@@ -678,16 +752,20 @@ func (r *ParallelReader) nextBlock() error {
 	r.dec.putBuf(r.cur)
 	r.cur = nil
 	r.curPos = 0
+
 	var w *blockWork
+
 	select {
 	case queued, ok := <-r.dec.queue:
 		if !ok {
 			return io.EOF
 		}
+
 		w = queued
 	case <-r.dec.done:
 		return errReaderClosed
 	}
+
 	select {
 	case res := <-w.result:
 		if res.err != nil {
@@ -697,9 +775,12 @@ func (r *ParallelReader) nextBlock() error {
 			if errors.Is(res.err, io.EOF) && !errors.Is(res.err, io.ErrUnexpectedEOF) {
 				return io.ErrUnexpectedEOF
 			}
+
 			return res.err
 		}
+
 		r.cur = res.data
+
 		return nil
 	case <-r.dec.done:
 		return errReaderClosed
@@ -712,23 +793,29 @@ func (r *ParallelReader) Read(p []byte) (n int, err error) {
 	if err = r.getErr(); err != nil {
 		return 0, err
 	}
+
 	if !r.started {
 		r.start()
 	}
+
 	for n < len(p) {
 		if r.curPos == len(r.cur) {
 			if err = r.nextBlock(); err != nil {
 				if !errors.Is(err, io.EOF) {
 					r.dec.stop()
 				}
+
 				return n, r.setErr(err)
 			}
+
 			continue
 		}
+
 		k := copy(p[n:], r.cur[r.curPos:])
 		n += k
 		r.curPos += k
 	}
+
 	return n, nil
 }
 
@@ -744,11 +831,14 @@ func (r *ParallelReader) WriteTo(w io.Writer) (n int64, err error) {
 		if errors.Is(err, io.EOF) {
 			return 0, nil
 		}
+
 		return 0, err
 	}
+
 	if !r.started {
 		r.start()
 	}
+
 	for {
 		if r.curPos == len(r.cur) {
 			if err = r.nextBlock(); err != nil {
@@ -759,13 +849,18 @@ func (r *ParallelReader) WriteTo(w io.Writer) (n int64, err error) {
 					_ = r.setErr(err)
 					return n, nil
 				}
+
 				r.dec.stop()
+
 				return n, r.setErr(err)
 			}
+
 			continue
 		}
+
 		k, err := w.Write(r.cur[r.curPos:])
 		n += int64(k)
+
 		r.curPos += k
 		if err != nil {
 			r.dec.stop()
@@ -799,5 +894,6 @@ func (r *ParallelReader) Close() error {
 	r.dec.stop()
 	// Only takes effect if the reader was not already finished or failed.
 	_ = r.setErr(errReaderClosed)
+
 	return nil
 }

@@ -40,9 +40,11 @@ func (c *ReaderConfig) fill() {
 // be replaced by default values.
 func (c *ReaderConfig) Verify() error {
 	c.fill()
+
 	if !(MinDictCap <= c.DictCap && int64(c.DictCap) <= MaxDictCap) {
 		return errors.New("lzma: dictionary capacity is out of range")
 	}
+
 	return nil
 }
 
@@ -108,11 +110,13 @@ func (e *ErrDictSize) Error() string {
 
 func newErrDictSize(messageformat string,
 	configDictCap int, headerDictSize uint32,
-	args ...any) *ErrDictSize {
+	args ...any,
+) *ErrDictSize {
 	newArgs := make([]any, len(args)+2)
 	newArgs[0] = configDictCap
 	newArgs[1] = headerDictSize
 	copy(newArgs[2:], args)
+
 	return &ErrDictSize{
 		ConfigDictCap:  configDictCap,
 		HeaderDictSize: headerDictSize,
@@ -138,18 +142,23 @@ func (c ReaderConfig) NewReader(lzma io.Reader) (r *Reader, err error) {
 	if _, ok := lzma.(io.ByteReader); !ok {
 		lzma = bufio.NewReader(lzma)
 	}
+
 	data := make([]byte, HeaderLen)
 	if _, err := io.ReadFull(lzma, data); err != nil {
 		if errors.Is(err, io.EOF) {
 			return nil, io.ErrUnexpectedEOF
 		}
+
 		return nil, err
 	}
+
 	r = &Reader{lzma: lzma}
 	if err = r.header.unmarshalBinary(data); err != nil {
 		return nil, err
 	}
+
 	r.headerOrig = r.header
+
 	dictSize := int64(r.header.DictSize)
 	if int64(c.DictCap) < dictSize {
 		return nil, newErrDictSize(
@@ -157,6 +166,7 @@ func (c ReaderConfig) NewReader(lzma io.Reader) (r *Reader, err error) {
 			c.DictCap, uint32(dictSize),
 		)
 	}
+
 	if dictSize < MinDictCap {
 		dictSize = MinDictCap
 	}
@@ -175,8 +185,10 @@ func (c ReaderConfig) NewReader(lzma io.Reader) (r *Reader, err error) {
 	if size > maxStreamSize {
 		return nil, unsupportedf(
 			"lzma: stream size %d exceeds a pebibyte (1024^5)",
-			size)
+			size,
+		)
 	}
+
 	if dictSize < MinDictCap {
 		dictSize = MinDictCap
 	}
@@ -184,14 +196,17 @@ func (c ReaderConfig) NewReader(lzma io.Reader) (r *Reader, err error) {
 	r.header.DictSize = uint32(dictSize)
 
 	state := newState(r.header.Properties)
+
 	dict, err := newDecoderDict(int(dictSize))
 	if err != nil {
 		return nil, err
 	}
+
 	r.d, err = newDecoder(ByteReader(lzma), state, dict, r.header.Size)
 	if err != nil {
 		return nil, err
 	}
+
 	return r, nil
 }
 

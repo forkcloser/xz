@@ -23,6 +23,7 @@ func allZeros(p []byte) bool {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -33,6 +34,7 @@ func padLen(n int64) int {
 	if k > 0 {
 		k = 4 - k
 	}
+
 	return k
 }
 
@@ -80,6 +82,7 @@ func flagString(flags byte) string {
 	if !ok {
 		return "invalid"
 	}
+
 	return s
 }
 
@@ -98,7 +101,8 @@ func newHashFunc(flags byte) (newHash func() hash.Hash, err error) {
 	default:
 		err = errInvalidFlags
 	}
-	return
+
+	return newHash, err
 }
 
 // header provides the actual content of the xz file header: the flags.
@@ -113,7 +117,9 @@ var errHeaderMagic = corruptf("xz: invalid header magic bytes")
 // length of data must be HeaderLen.
 func ValidHeader(data []byte) bool {
 	var h header
+
 	err := h.UnmarshalBinary(data)
+
 	return err == nil
 }
 
@@ -137,6 +143,7 @@ func (h *header) UnmarshalBinary(data []byte) error {
 	// checksum
 	crc := crc32.NewIEEE()
 	crc.Write(data[6:8])
+
 	if uint32LE(data[8:]) != crc.Sum32() {
 		return corruptf("xz: invalid checksum for file header")
 	}
@@ -145,12 +152,14 @@ func (h *header) UnmarshalBinary(data []byte) error {
 	if data[6] != 0 {
 		return errInvalidFlags
 	}
+
 	flags := data[7]
 	if err := verifyFlags(flags); err != nil {
 		return err
 	}
 
 	h.flags = flags
+
 	return nil
 }
 
@@ -202,12 +211,15 @@ func (f *footer) MarshalBinary() (data []byte, err error) {
 	if err = verifyFlags(f.flags); err != nil {
 		return nil, err
 	}
+
 	if !(minIndexSize <= f.indexSize && f.indexSize <= maxIndexSize) {
 		return nil, errors.New("xz: index size out of range")
 	}
+
 	if f.indexSize%4 != 0 {
 		return nil, errors.New(
-			"xz: index size not aligned to four bytes")
+			"xz: index size not aligned to four bytes",
+		)
 	}
 
 	data = make([]byte, footerLen)
@@ -243,6 +255,7 @@ func (f *footer) UnmarshalBinary(data []byte) error {
 	// CRC-32
 	crc := crc32.NewIEEE()
 	crc.Write(data[4:10])
+
 	if uint32LE(data) != crc.Sum32() {
 		return corruptf("xz: footer checksum error")
 	}
@@ -255,12 +268,14 @@ func (f *footer) UnmarshalBinary(data []byte) error {
 	if data[8] != 0 {
 		return errInvalidFlags
 	}
+
 	g.flags = data[9]
 	if err := verifyFlags(g.flags); err != nil {
 		return err
 	}
 
 	*f = g
+
 	return nil
 }
 
@@ -276,25 +291,35 @@ type blockHeader struct {
 // String converts the block header into a string.
 func (h blockHeader) String() string {
 	var buf bytes.Buffer
+
 	first := true
+
 	if h.compressedSize >= 0 {
 		fmt.Fprintf(&buf, "compressed size %d", h.compressedSize)
+
 		first = false
 	}
+
 	if h.uncompressedSize >= 0 {
 		if !first {
 			buf.WriteString(" ")
 		}
+
 		fmt.Fprintf(&buf, "uncompressed size %d", h.uncompressedSize)
+
 		first = false
 	}
+
 	for _, f := range h.filters {
 		if !first {
 			buf.WriteString(" ")
 		}
+
 		fmt.Fprintf(&buf, "filter %s", f)
+
 		first = false
 	}
+
 	return buf.String()
 }
 
@@ -317,10 +342,12 @@ func readBlockHeader(r io.Reader) (h *blockHeader, n int, err error) {
 
 	// block header size
 	z, err := io.CopyN(&buf, r, 1)
+
 	n = int(z)
 	if err != nil {
 		return nil, n, err
 	}
+
 	s := buf.Bytes()[0]
 	if s == 0 {
 		return nil, n, errIndexIndicator
@@ -330,6 +357,7 @@ func readBlockHeader(r io.Reader) (h *blockHeader, n int, err error) {
 	headerLen := (int(s) + 1) * 4
 	buf.Grow(headerLen - 1)
 	z, err = io.CopyN(&buf, r, int64(headerLen-1))
+
 	n += int(z)
 	if err != nil {
 		return nil, n, err
@@ -351,13 +379,16 @@ func readSizeInBlockHeader(r io.ByteReader, present bool) (n int64, err error) {
 	if !present {
 		return -1, nil
 	}
+
 	x, _, err := readUvarint(r)
 	if err != nil {
 		return 0, err
 	}
+
 	if x >= 1<<63 {
 		return 0, corruptf("xz: size overflow in block header")
 	}
+
 	return int64(x), nil
 }
 
@@ -367,20 +398,24 @@ func (h *blockHeader) UnmarshalBinary(data []byte) error {
 	if len(data) == 0 {
 		return corruptf("xz: empty block header")
 	}
+
 	s := data[0]
 	if s == 0 {
 		return errIndexIndicator
 	}
+
 	headerLen := (int(s) + 1) * 4
 	if len(data) != headerLen {
 		return corruptf("xz: data length %d; want %d", len(data),
 			headerLen)
 	}
+
 	n := headerLen - 4
 
 	// Check CRC-32
 	crc := crc32.NewIEEE()
 	crc.Write(data[:n])
+
 	if crc.Sum32() != uint32LE(data[n:]) {
 		return corruptf("xz: checksum error for block header")
 	}
@@ -395,15 +430,18 @@ func (h *blockHeader) UnmarshalBinary(data []byte) error {
 
 	// Compressed size
 	var err error
+
 	h.compressedSize, err = readSizeInBlockHeader(
-		r, flags&compressedSizePresent != 0)
+		r, flags&compressedSizePresent != 0,
+	)
 	if err != nil {
 		return err
 	}
 
 	// Uncompressed size
 	h.uncompressedSize, err = readSizeInBlockHeader(
-		r, flags&uncompressedSizePresent != 0)
+		r, flags&uncompressedSizePresent != 0,
+	)
 	if err != nil {
 		return err
 	}
@@ -427,6 +465,7 @@ func (h *blockHeader) UnmarshalBinary(data []byte) error {
 	if !allZeros(data[n-k : n]) {
 		return corruptf("xz: non-zero block header padding")
 	}
+
 	return nil
 }
 
@@ -435,11 +474,13 @@ func (h *blockHeader) MarshalBinary() (data []byte, err error) {
 	if !(minFilters <= len(h.filters) && len(h.filters) <= maxFilters) {
 		return nil, errors.New("xz: filter count wrong")
 	}
+
 	for i, f := range h.filters {
 		if i < len(h.filters)-1 {
 			if f.id() == lzmaFilterID {
 				return nil, errors.New(
-					"xz: LZMA2 filter is not the last")
+					"xz: LZMA2 filter is not the last",
+				)
 			}
 		} else {
 			// last filter
@@ -459,9 +500,11 @@ func (h *blockHeader) MarshalBinary() (data []byte, err error) {
 	if h.compressedSize >= 0 {
 		flags |= compressedSizePresent
 	}
+
 	if h.uncompressedSize >= 0 {
 		flags |= uncompressedSizePresent
 	}
+
 	buf.WriteByte(flags)
 
 	p := make([]byte, 10)
@@ -469,6 +512,7 @@ func (h *blockHeader) MarshalBinary() (data []byte, err error) {
 		k := putUvarint(p, uint64(h.compressedSize))
 		buf.Write(p[:k])
 	}
+
 	if h.uncompressedSize >= 0 {
 		k := putUvarint(p, uint64(h.uncompressedSize))
 		buf.Write(p[:k])
@@ -479,6 +523,7 @@ func (h *blockHeader) MarshalBinary() (data []byte, err error) {
 		if err != nil {
 			return nil, err
 		}
+
 		buf.Write(fp)
 	}
 
@@ -494,10 +539,12 @@ func (h *blockHeader) MarshalBinary() (data []byte, err error) {
 	if len(data)%4 != 0 {
 		panic("data length not aligned")
 	}
+
 	s := len(data)/4 - 1
 	if !(1 < s && s <= 255) {
 		panic("wrong block header size")
 	}
+
 	data[0] = byte(s)
 
 	crc := crc32.NewIEEE()
@@ -538,24 +585,31 @@ func readFilter(r io.Reader) (f filter, err error) {
 	}
 
 	var data []byte
+
 	switch id {
 	case lzmaFilterID:
 		data = make([]byte, lzmaFilterLen)
+
 		data[0] = lzmaFilterID
 		if _, err = io.ReadFull(r, data[1:]); err != nil {
 			return nil, err
 		}
+
 		f = new(lzmaFilter)
 	default:
 		if id >= minReservedID {
 			return nil, corruptf(
-				"xz: reserved filter id in block stream header")
+				"xz: reserved filter id in block stream header",
+			)
 		}
+
 		return nil, unsupportedf("xz: invalid filter id")
 	}
+
 	if err = f.UnmarshalBinary(data); err != nil {
 		return nil, err
 	}
+
 	return f, err
 }
 
@@ -565,10 +619,12 @@ func readFilters(r io.Reader, count int) (filters []filter, err error) {
 	if count != 1 {
 		return nil, unsupportedf("xz: unsupported filter count")
 	}
+
 	f, err := readFilter(r)
 	if err != nil {
 		return nil, err
 	}
+
 	return []filter{f}, err
 }
 
@@ -583,20 +639,24 @@ type record struct {
 // readRecord reads an index record.
 func readRecord(r io.ByteReader) (rec record, n int, err error) {
 	u, k, err := readUvarint(r)
+
 	n += k
 	if err != nil {
 		return rec, n, err
 	}
+
 	rec.unpaddedSize = int64(u)
 	if rec.unpaddedSize < 0 {
 		return rec, n, corruptf("xz: unpadded size negative")
 	}
 
 	u, k, err = readUvarint(r)
+
 	n += k
 	if err != nil {
 		return rec, n, err
 	}
+
 	rec.uncompressedSize = int64(u)
 	if rec.uncompressedSize < 0 {
 		return rec, n, corruptf("xz: uncompressed size negative")
@@ -611,6 +671,7 @@ func (rec *record) MarshalBinary() (data []byte, err error) {
 	p := make([]byte, 20)
 	n := putUvarint(p, uint64(rec.unpaddedSize))
 	n += putUvarint(p[n:], uint64(rec.uncompressedSize))
+
 	return p[:n], nil
 }
 
@@ -621,6 +682,7 @@ func writeIndex(w io.Writer, index []record) (n int64, err error) {
 
 	// index indicator
 	k, err := mw.Write([]byte{0})
+
 	n += int64(k)
 	if err != nil {
 		return n, err
@@ -630,6 +692,7 @@ func writeIndex(w io.Writer, index []record) (n int64, err error) {
 	p := make([]byte, 10)
 	k = putUvarint(p, uint64(len(index)))
 	k, err = mw.Write(p[:k])
+
 	n += int64(k)
 	if err != nil {
 		return n, err
@@ -641,7 +704,9 @@ func writeIndex(w io.Writer, index []record) (n int64, err error) {
 		if err != nil {
 			return n, err
 		}
+
 		k, err = mw.Write(p)
+
 		n += int64(k)
 		if err != nil {
 			return n, err
@@ -650,6 +715,7 @@ func writeIndex(w io.Writer, index []record) (n int64, err error) {
 
 	// index padding
 	k, err = mw.Write(make([]byte, padLen(n)))
+
 	n += int64(k)
 	if err != nil {
 		return n, err
@@ -686,23 +752,29 @@ func readIndexBody(r io.Reader, expectedRecordLen, maxRecords int) (records []re
 
 	// number of records
 	u, k, err := readUvarint(br)
+
 	n += int64(k)
 	if err != nil {
 		return nil, n, err
 	}
+
 	recLen := int(u)
 	if recLen < 0 || uint64(recLen) != u {
 		return nil, n, corruptf("xz: record number overflow")
 	}
+
 	if expectedRecordLen >= 0 && recLen != expectedRecordLen {
 		return nil, n, corruptf(
 			"xz: index length is %d; want %d",
-			recLen, expectedRecordLen)
+			recLen, expectedRecordLen,
+		)
 	}
+
 	if maxRecords >= 0 && recLen > maxRecords {
 		return nil, n, corruptf(
 			"xz: index declares %d records but the stream has room for at most %d blocks",
-			recLen, maxRecords)
+			recLen, maxRecords,
+		)
 	}
 
 	// List of records. The count is attacker controlled and the parallel
@@ -712,22 +784,28 @@ func readIndexBody(r io.Reader, expectedRecordLen, maxRecords int) (records []re
 	// index; it never reaches an allocator.
 	initialCap := min(recLen, 64)
 	records = make([]record, 0, initialCap)
+
 	for range recLen {
 		var rec record
+
 		rec, k, err = readRecord(br)
+
 		n += int64(k)
 		if err != nil {
 			return nil, n, err
 		}
+
 		records = append(records, rec)
 	}
 
 	p := make([]byte, padLen(n+1), 4)
 	k, err = io.ReadFull(br.(io.Reader), p)
+
 	n += int64(k)
 	if err != nil {
 		return nil, n, err
 	}
+
 	if !allZeros(p) {
 		return nil, n, corruptf("xz: non-zero byte in index padding")
 	}
@@ -736,10 +814,12 @@ func readIndexBody(r io.Reader, expectedRecordLen, maxRecords int) (records []re
 	s := crc.Sum32()
 	p = p[:4]
 	k, err = io.ReadFull(br.(io.Reader), p)
+
 	n += int64(k)
 	if err != nil {
 		return records, n, err
 	}
+
 	if uint32LE(p) != s {
 		return nil, n, corruptf("xz: wrong checksum for index")
 	}

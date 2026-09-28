@@ -35,17 +35,20 @@ func (a MatchAlgorithm) String() string {
 	if s, ok := maStrings[a]; ok {
 		return s
 	}
+
 	return "unknown"
 }
 
 var errUnsupportedMatchAlgorithm = errors.New(
-	"lzma: unsupported match algorithm value")
+	"lzma: unsupported match algorithm value",
+)
 
 // verify checks whether the matcher value is supported.
 func (a MatchAlgorithm) verify() error {
 	if _, ok := maStrings[a]; !ok {
 		return errUnsupportedMatchAlgorithm
 	}
+
 	return nil
 }
 
@@ -53,5 +56,6 @@ func (a MatchAlgorithm) new(dictCap int) (m matcher, err error) {
 	if a == HashTable4 {
 		return newHashTable(dictCap, 4)
 	}
+
 	return nil, errUnsupportedMatchAlgorithm
 }

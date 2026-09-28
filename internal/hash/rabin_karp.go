@@ -32,12 +32,14 @@ func NewRabinKarpConst(n int, a uint64) *RabinKarp {
 	if n <= 0 {
 		panic("number of bytes n must be positive")
 	}
+
 	aOldest := uint64(1)
 	// There are faster methods. For the small n required by the LZMA
 	// compressor O(n) is sufficient.
 	for range n {
 		aOldest *= a
 	}
+
 	return &RabinKarp{
 		A: a, aOldest: aOldest,
 		p: make([]byte, 0, n),
@@ -66,5 +68,6 @@ func (r *RabinKarp) RollByte(x byte) uint64 {
 			r.i = 0
 		}
 	}
+
 	return r.h
 }

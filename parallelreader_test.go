@@ -19,12 +19,16 @@ import (
 // and runs.
 func parallelTestData(n int) []byte {
 	rng := rand.New(rand.NewSource(7))
-	words := []string{"the ", "quick ", "brown ", "fox ", "jumps ",
-		"over ", "lazy ", "dog ", "0000000000000000", "\n"}
+	words := []string{
+		"the ", "quick ", "brown ", "fox ", "jumps ",
+		"over ", "lazy ", "dog ", "0000000000000000", "\n",
+	}
+
 	var buf bytes.Buffer
 	for buf.Len() < n {
 		buf.WriteString(words[rng.Intn(len(words))])
 	}
+
 	return buf.Bytes()[:n]
 }
 
@@ -32,34 +36,44 @@ func parallelTestData(n int) []byte {
 // block size.
 func compressMultiBlock(tb testing.TB, data []byte, blockSize int64) []byte {
 	tb.Helper()
+
 	var buf bytes.Buffer
+
 	w, err := WriterConfig{BlockSize: blockSize}.NewWriter(&buf)
 	if err != nil {
 		tb.Fatalf("NewWriter error %s", err)
 	}
+
 	if _, err = w.Write(data); err != nil {
 		tb.Fatalf("Write error %s", err)
 	}
+
 	if err = w.Close(); err != nil {
 		tb.Fatalf("Close error %s", err)
 	}
+
 	return buf.Bytes()
 }
 
-func testParallelRead(t *testing.T, xz []byte, want []byte, workers int) {
+func testParallelRead(t *testing.T, xz, want []byte, workers int) {
 	t.Helper()
+
 	c := ParallelReaderConfig{Workers: workers}
+
 	r, err := c.NewParallelReader(bytes.NewReader(xz), int64(len(xz)))
 	if err != nil {
 		t.Fatalf("NewParallelReader error %s", err)
 	}
+
 	if r.Size() != int64(len(want)) {
 		t.Fatalf("Size() is %d; want %d", r.Size(), len(want))
 	}
+
 	got, err := io.ReadAll(r)
 	if err != nil {
 		t.Fatalf("ReadAll error %s", err)
 	}
+
 	if !bytes.Equal(got, want) {
 		t.Fatalf("decoded data differs from original")
 	}
@@ -67,6 +81,7 @@ func testParallelRead(t *testing.T, xz []byte, want []byte, workers int) {
 
 func TestParallelReaderMultiBlock(t *testing.T) {
 	data := parallelTestData(1 << 20)
+
 	xz := compressMultiBlock(t, data, 64<<10)
 	for _, workers := range []int{0, 1, 4} {
 		testParallelRead(t, xz, data, workers)
@@ -98,15 +113,19 @@ func TestParallelReaderEmpty(t *testing.T) {
 func TestParallelReaderWriteTo(t *testing.T) {
 	data := parallelTestData(1 << 20)
 	xz := compressMultiBlock(t, data, 64<<10)
+
 	r, err := NewParallelReader(bytes.NewReader(xz), int64(len(xz)))
 	if err != nil {
 		t.Fatalf("NewParallelReader error %s", err)
 	}
+
 	var buf bytes.Buffer
+
 	n, err := r.WriteTo(&buf)
 	if err != nil {
 		t.Fatalf("WriteTo error %s", err)
 	}
+
 	if n != int64(len(data)) || !bytes.Equal(buf.Bytes(), data) {
 		t.Fatalf("WriteTo result differs from original")
 	}
@@ -115,14 +134,17 @@ func TestParallelReaderWriteTo(t *testing.T) {
 func TestParallelReaderAgainstReader(t *testing.T) {
 	data := parallelTestData(1 << 20)
 	xz := compressMultiBlock(t, data, 128<<10)
+
 	sr, err := NewReader(bytes.NewReader(xz))
 	if err != nil {
 		t.Fatalf("NewReader error %s", err)
 	}
+
 	want, err := io.ReadAll(sr)
 	if err != nil {
 		t.Fatalf("streaming ReadAll error %s", err)
 	}
+
 	testParallelRead(t, xz, want, 4)
 }
 
@@ -137,14 +159,17 @@ func TestParallelReaderTruncated(t *testing.T) {
 	// corrupt a byte in the middle of some block
 	bad := append([]byte{}, xz...)
 	bad[len(bad)/2] ^= 0xff
+
 	r, err := NewParallelReader(bytes.NewReader(bad), int64(len(bad)))
 	if err != nil {
 		// corruption may already be detected during parsing
 		return
 	}
+
 	if _, err = io.ReadAll(r); err == nil {
 		t.Fatalf("ReadAll on corrupted file: no error")
 	}
+
 	_ = r.Close()
 }
 
@@ -177,6 +202,7 @@ func TestParallelReaderCloseUnblocksRead(t *testing.T) {
 	}
 
 	copyDone := make(chan error, 1)
+
 	go func() {
 		_, err := io.Copy(io.Discard, r)
 		copyDone <- err
@@ -184,6 +210,7 @@ func TestParallelReaderCloseUnblocksRead(t *testing.T) {
 
 	// Let the copy get properly under way before pulling the rug.
 	time.Sleep(50 * time.Millisecond)
+
 	if err := r.Close(); err != nil {
 		t.Fatalf("Close error %s", err)
 	}
@@ -200,15 +227,18 @@ func TestParallelReaderCloseUnblocksRead(t *testing.T) {
 	// Releasing the reader is only half the job; the workers and the
 	// dispatcher have to wind up too, or Close just moves the leak.
 	deadline := time.Now().Add(5 * time.Second)
+
 	for {
 		n := runtime.NumGoroutine()
 		if n <= before+2 {
 			break
 		}
+
 		if time.Now().After(deadline) {
 			t.Fatalf("%d goroutines still running after Close; started from %d",
 				n, before)
 		}
+
 		time.Sleep(10 * time.Millisecond)
 	}
 }
@@ -218,16 +248,20 @@ func TestParallelReaderCloseUnblocksRead(t *testing.T) {
 func TestParallelReaderCloseAfterEOFKeepsEOF(t *testing.T) {
 	data := parallelTestData(1 << 16)
 	xz := compressMultiBlock(t, data, 8<<10)
+
 	r, err := NewParallelReader(bytes.NewReader(xz), int64(len(xz)))
 	if err != nil {
 		t.Fatalf("NewParallelReader error %s", err)
 	}
+
 	if _, err = io.Copy(io.Discard, r); err != nil {
 		t.Fatalf("io.Copy error %s", err)
 	}
+
 	if err = r.Close(); err != nil {
 		t.Fatalf("Close error %s", err)
 	}
+
 	if _, err = r.Read(make([]byte, 8)); !errors.Is(err, io.EOF) {
 		t.Fatalf("Read after EOF then Close returned %v; want io.EOF", err)
 	}
@@ -236,17 +270,21 @@ func TestParallelReaderCloseAfterEOFKeepsEOF(t *testing.T) {
 func TestParallelReaderClose(t *testing.T) {
 	data := parallelTestData(1 << 20)
 	xz := compressMultiBlock(t, data, 16<<10)
+
 	r, err := NewParallelReader(bytes.NewReader(xz), int64(len(xz)))
 	if err != nil {
 		t.Fatalf("NewParallelReader error %s", err)
 	}
+
 	p := make([]byte, 100)
 	if _, err = io.ReadFull(r, p); err != nil {
 		t.Fatalf("Read error %s", err)
 	}
+
 	if err = r.Close(); err != nil {
 		t.Fatalf("Close error %s", err)
 	}
+
 	if _, err = r.Read(p); !errors.Is(err, errReaderClosed) {
 		t.Fatalf("Read after Close returned %v; want %v",
 			err, errReaderClosed)
@@ -256,6 +294,7 @@ func TestParallelReaderClose(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewParallelReader error %s", err)
 	}
+
 	if err = r2.Close(); err != nil {
 		t.Fatalf("Close error %s", err)
 	}
@@ -275,10 +314,12 @@ func TestParallelReaderAbandonedReleasesGoroutines(t *testing.T) {
 	// dispatcher is parked on a full queue when the reader becomes garbage.
 	func() {
 		r, err := ParallelReaderConfig{Workers: 4}.NewParallelReader(
-			bytes.NewReader(xz), int64(len(xz)))
+			bytes.NewReader(xz), int64(len(xz)),
+		)
 		if err != nil {
 			t.Fatalf("NewParallelReader error %s", err)
 		}
+
 		p := make([]byte, 100)
 		if _, err = io.ReadFull(r, p); err != nil {
 			t.Fatalf("Read error %s", err)
@@ -286,16 +327,20 @@ func TestParallelReaderAbandonedReleasesGoroutines(t *testing.T) {
 	}()
 
 	deadline := time.Now().Add(5 * time.Second)
+
 	for {
 		runtime.GC()
+
 		n := runtime.NumGoroutine()
 		if n <= before+2 {
 			break
 		}
+
 		if time.Now().After(deadline) {
 			t.Fatalf("%d goroutines still running after the reader was "+
 				"abandoned; started from %d", n, before)
 		}
+
 		time.Sleep(10 * time.Millisecond)
 	}
 }
@@ -306,23 +351,29 @@ func benchmarkBlocks(b *testing.B, blockSize int64,
 	newReader func(xz []byte) (io.Reader, func()),
 ) {
 	b.Helper()
+
 	data, err := os.ReadFile("testdata/enwik7")
 	if err != nil {
 		b.Fatalf("os.ReadFile error %s", err)
 	}
+
 	xz := compressMultiBlock(b, data, blockSize)
 	b.SetBytes(int64(len(data)))
 	b.ReportAllocs()
 	b.ResetTimer()
+
 	for range b.N {
 		r, done := newReader(xz)
+
 		n, err := io.Copy(io.Discard, r)
 		if err != nil {
 			b.Fatalf("io.Copy error %s", err)
 		}
+
 		if n != int64(len(data)) {
 			b.Fatalf("decoded %d bytes; want %d", n, len(data))
 		}
+
 		done()
 	}
 }
@@ -335,6 +386,7 @@ func BenchmarkReaderMultiBlock(b *testing.B) {
 		if err != nil {
 			b.Fatalf("NewReader error %s", err)
 		}
+
 		return r, func() {}
 	})
 }
@@ -346,6 +398,7 @@ func BenchmarkParallelReader(b *testing.B) {
 		if err != nil {
 			b.Fatalf("NewParallelReader error %s", err)
 		}
+
 		return r, func() { _ = r.Close() }
 	})
 }

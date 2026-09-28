@@ -31,11 +31,13 @@ func ExampleReader() {
 			log.Printf("f.Close() error %s", err)
 		}
 	}()
+
 	r, err := xz.NewReader(bufio.NewReader(f))
 	if err != nil {
 		log.Printf("xz.NewReader(f) error %s", err)
 		return
 	}
+
 	if _, err = io.Copy(os.Stdout, r); err != nil {
 		log.Printf("io.Copy error %s", err)
 		return
@@ -49,6 +51,7 @@ func ExampleWriter() {
 	// directory it is run from — which, when it runs as a test, is the
 	// package source directory.
 	name := filepath.Join(os.TempDir(), "example.xz")
+
 	f, err := os.Create(name)
 	if err != nil {
 		log.Fatalf("os.Create(%q) error %s", name, err)
@@ -59,11 +62,13 @@ func ExampleWriter() {
 			log.Printf("f.Close() error %s", err)
 		}
 	}()
+
 	w, err := xz.NewWriter(f)
 	if err != nil {
 		log.Printf("xz.NewWriter(f) error %s", err)
 		return
 	}
+
 	if _, err = fmt.Fprintln(w, "The brown fox jumps over the lazy dog."); err != nil {
 		log.Printf("fmt.Fprintln error %s", err)
 		return

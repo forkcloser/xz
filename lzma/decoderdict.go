@@ -47,14 +47,18 @@ func newDecoderDictSize(dictCap, initial int) (d *decoderDict, err error) {
 	if !(1 <= dictCap && int64(dictCap) <= MaxDictCap) {
 		return nil, errors.New("lzma: dictCap out of range")
 	}
+
 	if initial > dictCap {
 		initial = dictCap
 	}
+
 	if initial < 1 {
 		initial = 1
 	}
+
 	d = &decoderDict{buf: *newBuffer(initial), dictCap: dictCap}
 	d.setGrowAt()
+
 	return d, nil
 }
 
@@ -64,6 +68,7 @@ func (d *decoderDict) setGrowAt() {
 		d.growAt = maxInt
 		return
 	}
+
 	d.growAt = d.buf.Cap()
 }
 
@@ -87,9 +92,11 @@ func (d *decoderDict) grow(n int) {
 	if need := d.buf.front + n; newCap < need {
 		newCap = need
 	}
+
 	if newCap > d.dictCap {
 		newCap = d.dictCap
 	}
+
 	d.buf.grow(newCap)
 	d.setGrowAt()
 }
@@ -106,10 +113,13 @@ func (d *decoderDict) WriteByte(c byte) error {
 	if d.buf.front >= d.growAt {
 		d.grow(1)
 	}
+
 	if err := d.buf.WriteByte(c); err != nil {
 		return err
 	}
+
 	d.head++
+
 	return nil
 }
 
@@ -122,6 +132,7 @@ func (d *decoderDict) dictLen() int {
 	if d.head >= int64(capacity) {
 		return capacity
 	}
+
 	return int(d.head)
 }
 
@@ -132,10 +143,12 @@ func (d *decoderDict) byteAt(dist int) byte {
 	if !(0 < dist && dist <= d.dictLen()) {
 		return 0
 	}
+
 	i := d.buf.front - dist
 	if i < 0 {
 		i += len(d.buf.data)
 	}
+
 	return d.buf.data[i]
 }
 
@@ -156,12 +169,15 @@ func (d *decoderDict) writeMatch(dist int64, length int) error {
 	if d.buf.front+length > d.growAt {
 		d.grow(length)
 	}
+
 	if !(0 < dist && dist <= int64(d.dictLen())) {
 		return corruptf("lzma: match distance %d reaches before the start of the dictionary", dist)
 	}
+
 	if length > d.buf.Available() {
 		return ErrNoSpace
 	}
+
 	d.head += int64(length)
 
 	data := d.buf.data
@@ -181,16 +197,20 @@ func (d *decoderDict) writeMatch(dist int64, length int) error {
 			// then double it from the freshly written destination
 			// (source and destination of each copy never overlap).
 			end := front + length
+
 			k := copy(data[front:end], data[i:front])
 			for k < length {
 				k += copy(data[front+k:end], data[front:front+k])
 			}
 		}
+
 		front += length
 		if front == len(data) {
 			front = 0
 		}
+
 		d.buf.front = front
+
 		return nil
 	}
 	// Slow path: the source or destination wraps around the end of the
@@ -198,9 +218,11 @@ func (d *decoderDict) writeMatch(dist int64, length int) error {
 	// dictionary).
 	for length > 0 {
 		var p []byte
+
 		if i < 0 {
 			i += len(data)
 		}
+
 		if i >= d.buf.front {
 			p = data[i:]
 			i = 0
@@ -208,14 +230,18 @@ func (d *decoderDict) writeMatch(dist int64, length int) error {
 			p = data[i:d.buf.front]
 			i = d.buf.front
 		}
+
 		if len(p) > length {
 			p = p[:length]
 		}
+
 		if _, err := d.buf.Write(p); err != nil {
 			panic(fmt.Errorf("d.buf.Write returned error %w", err))
 		}
+
 		length -= len(p)
 	}
+
 	return nil
 }
 
@@ -225,8 +251,10 @@ func (d *decoderDict) Write(p []byte) (n int, err error) {
 	if d.buf.front+len(p) > d.growAt {
 		d.grow(len(p))
 	}
+
 	n, err = d.buf.Write(p)
 	d.head += int64(n)
+
 	return n, err
 }
 

@@ -27,9 +27,11 @@ func (c *Reader2Config) fill() {
 // will be replaced by default values.
 func (c *Reader2Config) Verify() error {
 	c.fill()
+
 	if !(MinDictCap <= c.DictCap && int64(c.DictCap) <= MaxDictCap) {
 		return errors.New("lzma: dictionary capacity is out of range")
 	}
+
 	return nil
 }
 
@@ -71,14 +73,18 @@ func (c Reader2Config) NewReader2(lzma2 io.Reader) (r *Reader2, err error) {
 	if err = c.Verify(); err != nil {
 		return nil, err
 	}
+
 	r = &Reader2{r: lzma2, cstate: start}
+
 	r.dict, err = newDecoderDict(c.DictCap)
 	if err != nil {
 		return nil, err
 	}
+
 	if err = r.startChunk(); err != nil {
 		r.err = err
 	}
+
 	return r, nil
 }
 
@@ -101,6 +107,7 @@ func (r *Reader2) Reset(z io.Reader) {
 	r.err = nil
 	r.cstate = start
 	r.dict.Reset()
+
 	if err := r.startChunk(); err != nil {
 		r.err = err
 	}
@@ -116,25 +123,32 @@ func uncompressed(ctype chunkType) bool {
 func (r *Reader2) startChunk() error {
 	r.chunkReader = nil
 	header := &r.hdr
+
 	err := readChunkHeader(r.r, r.hdrBuf[:], header)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
 		}
+
 		return err
 	}
+
 	if xlog.DebugEnabled() {
 		xlog.Debugf("chunk header %v", header)
 	}
+
 	if err = r.cstate.next(header.ctype); err != nil {
 		return err
 	}
+
 	if r.cstate == stop {
 		return io.EOF
 	}
+
 	if header.ctype == cUD || header.ctype == cLRND {
 		r.dict.Reset()
 	}
+
 	size := int64(header.uncompressed) + 1
 	if uncompressed(header.ctype) {
 		if r.ur != nil {
@@ -142,7 +156,9 @@ func (r *Reader2) startChunk() error {
 		} else {
 			r.ur = newUncompressedReader(r.r, r.dict, size)
 		}
+
 		r.chunkReader = r.ur
+
 		return nil
 	}
 	// Buffer the whole compressed chunk. The stored size field is the
@@ -155,24 +171,32 @@ func (r *Reader2) startChunk() error {
 	if cap(r.compBuf) < n {
 		r.compBuf = make([]byte, n)
 	}
+
 	r.compBuf = r.compBuf[:n]
 	if _, err = io.ReadFull(r.r, r.compBuf); err != nil {
 		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
 		}
+
 		return err
 	}
+
 	r.compRd = byteSliceReader{buf: r.compBuf}
+
 	br := &r.compRd
 	if r.decoder == nil {
 		state := newState(header.props)
+
 		r.decoder, err = newDecoder(br, state, r.dict, size)
 		if err != nil {
 			return err
 		}
+
 		r.chunkReader = r.decoder
+
 		return nil
 	}
+
 	switch header.ctype {
 	case cLR:
 		r.decoder.State.Reset()
@@ -183,11 +207,14 @@ func (r *Reader2) startChunk() error {
 		r.decoder.State.Properties = header.props
 		r.decoder.State.Reset()
 	}
+
 	err = r.decoder.Reopen(br, size)
 	if err != nil {
 		return err
 	}
+
 	r.chunkReader = r.decoder
+
 	return nil
 }
 
@@ -196,10 +223,13 @@ func (r *Reader2) Read(p []byte) (n int, err error) {
 	if r.err != nil {
 		return 0, r.err
 	}
+
 	for n < len(p) {
 		var k int
+
 		k, err = r.chunkReader.Read(p[n:])
 		n += k
+
 		if err != nil {
 			switch {
 			case errors.Is(err, io.EOF):
@@ -214,14 +244,18 @@ func (r *Reader2) Read(p []byte) (n int, err error) {
 				// header promised a chunk its bytes do not contain.
 				err = corruptf("lzma: compressed chunk ends before its data does")
 			}
+
 			r.err = err
+
 			return n, err
 		}
+
 		if k == 0 {
 			r.err = errors.New("lzma: Reader2 doesn't get data")
 			return n, r.err
 		}
 	}
+
 	return n, nil
 }
 
@@ -245,6 +279,7 @@ func newUncompressedReader(r io.Reader, dict *decoderDict, size int64) *uncompre
 		lr:   io.LimitedReader{R: r, N: size},
 		Dict: dict,
 	}
+
 	return ur
 }
 
@@ -262,14 +297,18 @@ func (ur *uncompressedReader) fill() error {
 		if !errors.Is(err, io.EOF) {
 			return err
 		}
+
 		ur.eof = true
+
 		if n > 0 {
 			return nil
 		}
 	}
+
 	if ur.lr.N != 0 {
 		return io.ErrUnexpectedEOF
 	}
+
 	return io.EOF
 }
 
@@ -278,21 +317,28 @@ func (ur *uncompressedReader) Read(p []byte) (n int, err error) {
 	if ur.err != nil {
 		return 0, ur.err
 	}
+
 	for {
 		var k int
+
 		k, err = ur.Dict.Read(p[n:])
+
 		n += k
 		if n >= len(p) {
 			return n, nil
 		}
+
 		if err != nil {
 			break
 		}
+
 		err = ur.fill()
 		if err != nil {
 			break
 		}
 	}
+
 	ur.err = err
+
 	return n, err
 }

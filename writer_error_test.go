@@ -25,6 +25,7 @@ func (f *failingWriter) Write(p []byte) (int, error) {
 	if f.calls > f.allow {
 		return 0, f.err
 	}
+
 	return f.buf.Write(p)
 }
 
@@ -38,20 +39,26 @@ func TestWriterErrorIsSticky(t *testing.T) {
 	// Stream header and first block header are the first two writes; the
 	// first block's data is the third.
 	fw := &failingWriter{allow: 2, err: ioErr}
+
 	w, err := WriterConfig{BlockSize: 1024}.NewWriter(fw)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err = w.Write(parallelTestData(4096)); !errors.Is(err, ioErr) {
 		t.Fatalf("first Write gave %v; want the writer's error", err)
 	}
+
 	calls := fw.calls
+
 	if _, err = w.Write(parallelTestData(4096)); !errors.Is(err, ioErr) {
 		t.Errorf("Write after a failure gave %v; want the original error", err)
 	}
+
 	if err = w.Close(); !errors.Is(err, ioErr) {
 		t.Errorf("Close after a failure gave %v; want the original error", err)
 	}
+
 	if fw.calls != calls {
 		t.Errorf("%d writes were attempted after the failure", fw.calls-calls)
 	}
@@ -67,6 +74,7 @@ func TestWriterTransientErrorDoesNotPanic(t *testing.T) {
 	// Header, block header, then the first chunk flush fails; everything
 	// after would succeed if attempted.
 	fw := &failingWriter{allow: 2, err: ioErr}
+
 	w, err := NewWriter(fw)
 	if err != nil {
 		t.Fatal(err)
@@ -77,14 +85,18 @@ func TestWriterTransientErrorDoesNotPanic(t *testing.T) {
 	for i := range rnd {
 		rnd[i] = byte(i*7919 ^ i>>3)
 	}
+
 	fw.err = ioErr
 	if _, err = w.Write(rnd); !errors.Is(err, ioErr) {
 		t.Fatalf("Write gave %v; want the writer's error", err)
 	}
+
 	fw.allow = 1 << 30 // the transport recovers
+
 	if _, err = w.Write(rnd[:1024]); !errors.Is(err, ioErr) {
 		t.Errorf("Write after a transient failure gave %v; want the original error", err)
 	}
+
 	if err = w.Close(); !errors.Is(err, ioErr) {
 		t.Errorf("Close after a transient failure gave %v; want the original error", err)
 	}

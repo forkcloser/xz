@@ -33,6 +33,7 @@ func eagerDecoderDict(dictCap int) *decoderDict {
 // the end.
 func dictState(d *decoderDict, maxDist int) []byte {
 	var b bytes.Buffer
+
 	fmtInt := func(x int64) {
 		for i := range 8 {
 			b.WriteByte(byte(x >> (8 * i)))
@@ -41,13 +42,16 @@ func dictState(d *decoderDict, maxDist int) []byte {
 	fmtInt(d.head)
 	fmtInt(int64(d.dictLen()))
 	fmtInt(int64(d.buf.Buffered()))
+
 	n := d.dictLen()
 	if maxDist > 0 && n > maxDist {
 		n = maxDist
 	}
+
 	for dist := 1; dist <= n; dist++ {
 		b.WriteByte(d.byteAt(dist))
 	}
+
 	return b.Bytes()
 }
 
@@ -57,9 +61,11 @@ func dictState(d *decoderDict, maxDist int) []byte {
 // through byteAt, and the bytes read out — stays identical. Growth must be
 // invisible to the decoder; only the allocation differs.
 func TestDecoderDictGrowMatchesEager(t *testing.T) {
-	caps := []int{1, 2, 3, 7, 273, 274, 1000, 4096,
+	caps := []int{
+		1, 2, 3, 7, 273, 274, 1000, 4096,
 		initialDictCap - 1, initialDictCap, initialDictCap + 1,
-		3 * initialDictCap}
+		3 * initialDictCap,
+	}
 	// Starting from one byte forces a growth step on nearly every write, so
 	// the small capacities exercise growth and wrapping together instead of
 	// being allocated whole up front.
@@ -76,15 +82,19 @@ func TestDecoderDictGrowMatchesEager(t *testing.T) {
 
 func testGrowMatchesEager(t *testing.T, dictCap, initial int) {
 	t.Helper()
+
 	for seed := range int64(16) {
 		grow, err := newDecoderDictSize(dictCap, initial)
 		if err != nil {
 			t.Fatalf("dictCap %d: newDecoderDict error %s", dictCap, err)
 		}
+
 		eager := eagerDecoderDict(dictCap)
 
 		rng := rand.New(rand.NewSource(seed))
+
 		var gotOut, wantOut bytes.Buffer
+
 		drain := make([]byte, 4096)
 
 		for step := range 400 {
@@ -92,6 +102,7 @@ func testGrowMatchesEager(t *testing.T, dictCap, initial int) {
 			case 0, 1, 2, 3, 4: // literal
 				c := byte(rng.Intn(256))
 				gErr := grow.WriteByte(c)
+
 				eErr := eager.WriteByte(c)
 				if (gErr == nil) != (eErr == nil) {
 					t.Fatalf("dictCap %d seed %d step %d: WriteByte error %v vs %v",
@@ -102,9 +113,11 @@ func testGrowMatchesEager(t *testing.T, dictCap, initial int) {
 				if dl == 0 {
 					continue
 				}
+
 				dist := int64(1 + rng.Intn(dl))
 				length := 1 + rng.Intn(maxMatchLen)
 				gErr := grow.writeMatch(dist, length)
+
 				eErr := eager.writeMatch(dist, length)
 				if (gErr == nil) != (eErr == nil) {
 					t.Fatalf("dictCap %d seed %d step %d: writeMatch(%d,%d) error %v vs %v",
@@ -114,6 +127,7 @@ func testGrowMatchesEager(t *testing.T, dictCap, initial int) {
 				p := make([]byte, rng.Intn(500))
 				rng.Read(p)
 				gn, _ := grow.Write(p)
+
 				en, _ := eager.Write(p)
 				if gn != en {
 					t.Fatalf("dictCap %d seed %d step %d: Write wrote %d vs %d",
@@ -125,6 +139,7 @@ func testGrowMatchesEager(t *testing.T, dictCap, initial int) {
 				gotOut.Write(drain[:gn])
 				en, _ := eager.Read(drain[:n])
 				wantOut.Write(drain[:en])
+
 				if gn != en {
 					t.Fatalf("dictCap %d seed %d step %d: Read returned %d vs %d",
 						dictCap, seed, step, gn, en)
@@ -142,9 +157,11 @@ func testGrowMatchesEager(t *testing.T, dictCap, initial int) {
 			t.Fatalf("dictCap %d seed %d: dictionary history diverged",
 				dictCap, seed)
 		}
+
 		if !bytes.Equal(gotOut.Bytes(), wantOut.Bytes()) {
 			t.Fatalf("dictCap %d seed %d: output differs", dictCap, seed)
 		}
+
 		if grow.buf.Cap() > dictCap {
 			t.Fatalf("dictCap %d seed %d: grew to %d, past the declared capacity",
 				dictCap, seed, grow.buf.Cap())
@@ -161,6 +178,7 @@ func TestDecoderDictGrowWithReset(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		eager := eagerDecoderDict(dictCap)
 		rng := rand.New(rand.NewSource(99))
 		drain := make([]byte, 1024)
@@ -170,6 +188,7 @@ func TestDecoderDictGrowWithReset(t *testing.T) {
 				grow.Reset()
 				eager.Reset()
 			}
+
 			c := byte(rng.Intn(256))
 			if err := grow.WriteByte(c); err == nil {
 				if err := eager.WriteByte(c); err != nil {
@@ -179,12 +198,14 @@ func TestDecoderDictGrowWithReset(t *testing.T) {
 			} else {
 				n := rng.Intn(len(drain))
 				gn, _ := grow.Read(drain[:n])
+
 				en, _ := eager.Read(drain[:n])
 				if gn != en {
 					t.Fatalf("dictCap %d step %d: Read %d vs %d",
 						dictCap, step, gn, en)
 				}
 			}
+
 			if !bytes.Equal(dictState(grow, 256), dictState(eager, 256)) {
 				t.Fatalf("dictCap %d step %d: state diverged after reset",
 					dictCap, step)
@@ -198,22 +219,27 @@ func TestDecoderDictGrowWithReset(t *testing.T) {
 // claims.
 func TestDecoderDictGrowsOnlyAsFarAsNeeded(t *testing.T) {
 	const huge = 1 << 30
+
 	d, err := newDecoderDict(huge)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if got := d.buf.Cap(); got > initialDictCap {
 		t.Fatalf("fresh dictionary for a %d byte capacity allocated %d bytes",
 			huge, got)
 	}
+
 	for range 45 {
 		if err := d.WriteByte('x'); err != nil {
 			t.Fatal(err)
 		}
 	}
+
 	if got := d.buf.Cap(); got > initialDictCap {
 		t.Fatalf("after 45 bytes the dictionary holds %d bytes", got)
 	}
+
 	if d.dictLen() != 45 {
 		t.Fatalf("dictLen is %d; want 45", d.dictLen())
 	}
@@ -224,25 +250,32 @@ func TestDecoderDictGrowsOnlyAsFarAsNeeded(t *testing.T) {
 // distance matches keep resolving.
 func TestDecoderDictGrowReachesDeclaredCap(t *testing.T) {
 	const dictCap = 4 * initialDictCap
+
 	d, err := newDecoderDict(dictCap)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	drain := make([]byte, 8192)
+
 	for written := 0; written < dictCap; {
 		if err := d.WriteByte(byte(written)); err != nil {
 			n, _ := d.Read(drain)
 			if n == 0 {
 				t.Fatal("dictionary is full but yields no data")
 			}
+
 			continue
 		}
+
 		written++
 	}
+
 	if got := d.buf.Cap(); got != dictCap {
 		t.Fatalf("after writing %d bytes the capacity is %d; want %d",
 			dictCap, got, dictCap)
 	}
+
 	if got := d.dictLen(); got != dictCap {
 		t.Fatalf("dictLen is %d; want %d", got, dictCap)
 	}

@@ -82,23 +82,29 @@ func (s byProb) Less(i, j int) bool {
 func cdf(n int, p func(i int) prob) probs {
 	prs := make(probs, n)
 	sum := 0.0
+
 	for i := range prs {
 		pr := p(i)
 		sum += pr.p
 		prs[i] = pr
 	}
+
 	q := 1.0 / sum
+
 	x := 0.0
 	for i, pr := range prs {
 		x += pr.p * q
 		if x > 1.0 {
 			x = 1.0
 		}
+
 		prs[i].p = x
 	}
+
 	if !sort.IsSorted(byProb{prs}) {
 		panic("cdf not sorted")
 	}
+
 	return prs
 }
 
@@ -128,19 +134,24 @@ func comapOfLM(lm ngrams) comap {
 	if !sort.IsSorted(lm) {
 		panic("lm is not sorted")
 	}
+
 	m := make(comap, 26*26)
+
 	for i := 0; i < len(lm); {
 		j := i
 		g := lm[i].s
 		g2 := g[:2]
 		z := g2 + "Z"
+
 		i = lm.Search(z)
 		if i >= len(lm) || lm[i].s != z {
 			panic("unexpected search result")
 		}
+
 		i++
 		m[g2] = cCDF(lm[j:i])
 	}
+
 	return m
 }
 
@@ -149,6 +160,7 @@ func comapOfLM(lm ngrams) comap {
 func (c comap) trigram(g2 string, p float64) string {
 	prs := c[g2]
 	i := prs.SearchProb(p)
+
 	return prs[i].s
 }
 
@@ -171,6 +183,7 @@ type Reader struct {
 func NewReader(src rand.Source) *Reader {
 	rnd := rand.New(src)
 	i := pcdf.SearchProb(rnd.Float64())
+
 	return &Reader{rnd, pcdf[i].s}
 }
 
@@ -181,5 +194,6 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 		r.g3 = cmap.trigram(r.g3[1:], r.rnd.Float64())
 		p[i] = r.g3[2]
 	}
+
 	return len(p), nil
 }

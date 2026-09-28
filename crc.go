@@ -20,6 +20,7 @@ type crc32Hash struct {
 func (h crc32Hash) Sum(b []byte) []byte {
 	var p [4]byte
 	putUint32LE(p[:], h.Sum32())
+
 	return append(b, p[:]...)
 }
 
@@ -39,6 +40,7 @@ type crc64Hash struct {
 func (h crc64Hash) Sum(b []byte) []byte {
 	var p [8]byte
 	putUint64LE(p[:], h.Sum64())
+
 	return append(b, p[:]...)
 }
 

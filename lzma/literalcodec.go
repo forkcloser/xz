@@ -17,9 +17,11 @@ func (c *literalCodec) deepcopy(src *literalCodec) {
 	if c == src {
 		return
 	}
+
 	if cap(c.probs) < len(src.probs) {
 		c.probs = make([]prob, len(src.probs))
 	}
+
 	c.probs = c.probs[:len(src.probs)]
 	copy(c.probs, src.probs)
 }
@@ -32,10 +34,12 @@ func (c *literalCodec) init(lc, lp int) {
 	case !(minLP <= lp && lp <= maxLP):
 		panic("lp out of range")
 	}
+
 	n := 0x300 << uint(lc+lp)
 	if cap(c.probs) < n {
 		c.probs = make([]prob, n)
 	}
+
 	c.probs = c.probs[:n]
 	initProbSlice(c.probs)
 }
@@ -49,6 +53,7 @@ func (c *literalCodec) Encode(e *rangeEncoder, s byte,
 	probs := c.probs[k : k+0x300]
 	symbol := uint32(1)
 	r := uint32(s)
+
 	if state >= 7 {
 		m := uint32(match)
 		for {
@@ -56,27 +61,34 @@ func (c *literalCodec) Encode(e *rangeEncoder, s byte,
 			m <<= 1
 			bit := (r >> 7) & 1
 			r <<= 1
+
 			i := ((1 + matchBit) << 8) | symbol
 			if err = probs[i].Encode(e, bit); err != nil {
-				return
+				return err
 			}
+
 			symbol = (symbol << 1) | bit
 			if matchBit != bit {
 				break
 			}
+
 			if symbol >= 0x100 {
 				break
 			}
 		}
 	}
+
 	for symbol < 0x100 {
 		bit := (r >> 7) & 1
 		r <<= 1
+
 		if err = probs[symbol].Encode(e, bit); err != nil {
-			return
+			return err
 		}
+
 		symbol = (symbol << 1) | bit
 	}
+
 	return nil
 }
 
@@ -87,21 +99,25 @@ func (c *literalCodec) Encode(e *rangeEncoder, s byte,
 // loops are free of calls and error branches; read errors are sticky on the
 // decoder and checked once per operation.
 func (c *literalCodec) decode(d *rangeDecoder,
-	state uint32, match byte, litState uint32, rng, code uint32,
+	state uint32, match byte, litState, rng, code uint32,
 ) (s byte, nrng, ncode uint32) {
 	k := litState * 0x300
 	probs := c.probs[k : k+0x300]
 	symbol := uint32(1)
+
 	if state >= 7 {
 		m := uint32(match)
 		for {
 			matchBit := (m >> 7) & 1
 			m <<= 1
 			i := ((1 + matchBit) << 8) | symbol
+
 			var bit uint32
+
 			bit, rng, code = decodeBitArith(&probs[i], rng, code)
 			if rng < rcTop {
 				rng <<= 8
+
 				code <<= 8
 				if pos := d.pos; pos < len(d.buf) {
 					code |= uint32(d.buf[pos])
@@ -110,20 +126,25 @@ func (c *literalCodec) decode(d *rangeDecoder,
 					code |= uint32(d.readByteSlow())
 				}
 			}
+
 			symbol = (symbol << 1) | bit
 			if matchBit != bit {
 				break
 			}
+
 			if symbol >= 0x100 {
 				break
 			}
 		}
 	}
+
 	for symbol < 0x100 {
 		var bit uint32
+
 		bit, rng, code = decodeBitArith(&probs[symbol], rng, code)
 		if rng < rcTop {
 			rng <<= 8
+
 			code <<= 8
 			if pos := d.pos; pos < len(d.buf) {
 				code |= uint32(d.buf[pos])
@@ -132,9 +153,12 @@ func (c *literalCodec) decode(d *rangeDecoder,
 				code |= uint32(d.readByteSlow())
 			}
 		}
+
 		symbol = (symbol << 1) | bit
 	}
+
 	s = byte(symbol - 0x100)
+
 	return s, rng, code
 }
 

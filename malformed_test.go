@@ -49,8 +49,10 @@ func TestTruncatedAtEveryOffset(t *testing.T) {
 		if err != nil {
 			continue
 		}
+
 		got, err := io.ReadAll(pr)
 		_ = pr.Close()
+
 		if err == nil && bytes.Equal(got, want) {
 			t.Fatalf("parallel reader accepted a %d byte prefix "+
 				"of a %d byte file as complete", n, len(full))
@@ -71,17 +73,22 @@ func TestTruncatedAtEveryOffset(t *testing.T) {
 // on the same input.
 func TestMissingIndexAndFooterIsTruncation(t *testing.T) {
 	payload := parallelTestData(4096)
+
 	var buf bytes.Buffer
+
 	w, err := NewWriter(&buf)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err = w.Write(payload); err != nil {
 		t.Fatal(err)
 	}
+
 	if err = w.Close(); err != nil {
 		t.Fatal(err)
 	}
+
 	full := buf.Bytes()
 
 	// Walk back over the tail so the exact index size does not matter; every
@@ -91,6 +98,7 @@ func TestMissingIndexAndFooterIsTruncation(t *testing.T) {
 		if err != nil {
 			continue
 		}
+
 		got, err := io.ReadAll(r)
 		if err == nil {
 			t.Fatalf("a file missing its last %d bytes decoded to %d bytes "+
@@ -122,8 +130,10 @@ func TestSingleByteCorruptionAtEveryOffset(t *testing.T) {
 		if err != nil {
 			continue
 		}
+
 		got, err := io.ReadAll(pr)
 		_ = pr.Close()
+
 		if err == nil && !bytes.Equal(got, want) {
 			t.Fatalf("byte %d: parallel reader returned different data "+
 				"with no error", i)
@@ -144,6 +154,7 @@ func TestGarbageInputIsRejected(t *testing.T) {
 		"magic then zeros": append(append([]byte{}, headerMagic...), make([]byte, 512)...),
 	}
 	rng := rand.New(rand.NewSource(11))
+
 	for i := range 8 {
 		p := make([]byte, 64*(i+1))
 		rng.Read(p)
@@ -160,11 +171,14 @@ func TestGarbageInputIsRejected(t *testing.T) {
 						len(data))
 				}
 			}
+
 			pr, err := NewParallelReader(bytes.NewReader(data), int64(len(data)))
 			if err != nil {
 				return
 			}
+
 			defer func() { _ = pr.Close() }()
+
 			if _, err = io.ReadAll(pr); err == nil {
 				t.Errorf("parallel reader accepted %d bytes of garbage",
 					len(data))
@@ -189,10 +203,12 @@ func TestUnsupportedFilterID(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var f lzmaFilter
+
 			err := f.UnmarshalBinary(tc.data)
 			if err == nil {
 				t.Fatalf("accepted %#v", tc.data)
 			}
+
 			if !errors.Is(err, tc.kind) {
 				t.Errorf("got %v; want a match for %v", err, tc.kind)
 			}
@@ -202,15 +218,20 @@ func TestUnsupportedFilterID(t *testing.T) {
 	// A reserved filter id must be reported as reserved rather than merely
 	// unknown, and an unknown one as unsupported.
 	if _, err := readFilter(bytes.NewReader(
-		uvarintBytes(minReservedID))); err == nil {
+		uvarintBytes(minReservedID),
+	)); err == nil {
 		t.Error("reserved filter id accepted")
 	}
+
 	if _, err := readFilter(bytes.NewReader([]byte{0x22})); !errors.Is(
-		err, ErrUnsupported) {
+		err, ErrUnsupported,
+	) {
 		t.Errorf("unknown filter id gave %v; want a match for ErrUnsupported", err)
 	}
+
 	if _, err := readFilters(bytes.NewReader([]byte{0x21, 0x01, 0x00}), 2); !errors.Is(
-		err, ErrUnsupported) {
+		err, ErrUnsupported,
+	) {
 		t.Errorf("two filters gave %v; want a match for ErrUnsupported", err)
 	}
 }
@@ -222,9 +243,11 @@ func TestHeaderAndFooterValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !ValidHeader(good) {
 		t.Fatal("ValidHeader rejected a header we just marshalled")
 	}
+
 	if ValidHeader(good[:HeaderLen-1]) {
 		t.Error("ValidHeader accepted a short header")
 	}
@@ -238,6 +261,7 @@ func TestHeaderAndFooterValidation(t *testing.T) {
 		t.Run("header "+name, func(t *testing.T) {
 			bad := append([]byte{}, good...)
 			mutate(bad)
+
 			var h header
 			if err := h.UnmarshalBinary(bad); err == nil {
 				t.Error("accepted a corrupted header")
@@ -251,13 +275,16 @@ func TestHeaderAndFooterValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var f footer
 	if err := f.UnmarshalBinary(goodFooter); err != nil {
 		t.Fatalf("rejected a footer we just marshalled: %s", err)
 	}
+
 	if f.indexSize != 8 || f.flags != CRC64 {
 		t.Errorf("footer round trip gave %+v", f)
 	}
+
 	for name, mutate := range map[string]func([]byte){
 		"magic":          func(p []byte) { p[10] = 'X' },
 		"reserved flags": func(p []byte) { p[8] = 1 },
@@ -267,6 +294,7 @@ func TestHeaderAndFooterValidation(t *testing.T) {
 		t.Run("footer "+name, func(t *testing.T) {
 			bad := append([]byte{}, goodFooter...)
 			mutate(bad)
+
 			var f footer
 			if err := f.UnmarshalBinary(bad); err == nil {
 				t.Error("accepted a corrupted footer")
@@ -275,6 +303,7 @@ func TestHeaderAndFooterValidation(t *testing.T) {
 			}
 		})
 	}
+
 	var short footer
 	if err := short.UnmarshalBinary(make([]byte, footerLen-1)); err == nil {
 		t.Error("accepted a short footer")
@@ -306,6 +335,7 @@ func TestWriterConfigValidation(t *testing.T) {
 			if err := cfg.Verify(); err == nil {
 				t.Errorf("Verify accepted %+v", c)
 			}
+
 			if _, err := c.NewWriter(io.Discard); err == nil {
 				t.Errorf("NewWriter accepted %+v", c)
 			}
@@ -317,10 +347,12 @@ func TestWriterConfigValidation(t *testing.T) {
 	if err := nilCfg.Verify(); err == nil {
 		t.Error("nil WriterConfig.Verify returned no error")
 	}
+
 	var nilReader *ReaderConfig
 	if err := nilReader.Verify(); err == nil {
 		t.Error("nil ReaderConfig.Verify returned no error")
 	}
+
 	var nilParallel *ParallelReaderConfig
 	if err := nilParallel.Verify(); err == nil {
 		t.Error("nil ParallelReaderConfig.Verify returned no error")
@@ -330,16 +362,20 @@ func TestWriterConfigValidation(t *testing.T) {
 // TestWriterCloseTwice and friends cover the writer's own state machine.
 func TestWriterCloseTwice(t *testing.T) {
 	var buf bytes.Buffer
+
 	w, err := NewWriter(&buf)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err = w.Close(); err != nil {
 		t.Fatal(err)
 	}
+
 	if err = w.Close(); !errors.Is(err, ErrClosed) {
 		t.Errorf("second Close gave %v; want a match for ErrClosed", err)
 	}
+
 	if _, err = w.Write([]byte("x")); !errors.Is(err, ErrClosed) {
 		t.Errorf("Write after Close gave %v; want a match for ErrClosed", err)
 	}
@@ -348,10 +384,12 @@ func TestWriterCloseTwice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewReader on an empty stream: %s", err)
 	}
+
 	got, err := io.ReadAll(r)
 	if err != nil {
 		t.Fatalf("reading an empty stream: %s", err)
 	}
+
 	if len(got) != 0 {
 		t.Errorf("empty stream decoded to %d bytes", len(got))
 	}
@@ -370,6 +408,7 @@ func TestBlockHeaderPaddingIsCorrupt(t *testing.T) {
 	// 3 bytes of LZMA2 filter, 3 bytes of padding, then the CRC over
 	// everything before it.
 	const hdrOff = 12
+
 	hlen := (int(full[hdrOff]) + 1) * 4
 	bad := append([]byte{}, full...)
 	bad[hdrOff+hlen-5] ^= 0x40 // last padding byte
@@ -380,9 +419,11 @@ func TestBlockHeaderPaddingIsCorrupt(t *testing.T) {
 	if err == nil {
 		_, err = io.ReadAll(r)
 	}
+
 	if err == nil {
 		t.Fatal("sequential reader accepted non-zero block header padding")
 	}
+
 	if !errors.Is(err, ErrCorrupt) {
 		t.Errorf("sequential reader returned %v; want a match for ErrCorrupt",
 			err)
@@ -393,9 +434,11 @@ func TestBlockHeaderPaddingIsCorrupt(t *testing.T) {
 		_, err = io.ReadAll(pr)
 		_ = pr.Close()
 	}
+
 	if err == nil {
 		t.Fatal("parallel reader accepted non-zero block header padding")
 	}
+
 	if !errors.Is(err, ErrCorrupt) {
 		t.Errorf("parallel reader returned %v; want a match for ErrCorrupt",
 			err)
@@ -416,6 +459,7 @@ func TestIndexIndicatorAtBlockIsCorrupt(t *testing.T) {
 	// its first byte is the header size, and 0x00 there is the index
 	// indicator. Nothing else is touched, so the index still points here.
 	const hdrOff = 12
+
 	bad := append([]byte{}, full...)
 	bad[hdrOff] = 0x00
 
@@ -423,6 +467,7 @@ func TestIndexIndicatorAtBlockIsCorrupt(t *testing.T) {
 	if err == nil {
 		_, err = io.ReadAll(r)
 	}
+
 	if err == nil {
 		t.Fatal("sequential reader accepted an index indicator in place of the block")
 	}
@@ -432,9 +477,11 @@ func TestIndexIndicatorAtBlockIsCorrupt(t *testing.T) {
 		_, err = io.ReadAll(pr)
 		_ = pr.Close()
 	}
+
 	if err == nil {
 		t.Fatal("parallel reader accepted an index indicator in place of the block")
 	}
+
 	if !errors.Is(err, ErrCorrupt) {
 		t.Errorf("parallel reader returned %v; want a match for ErrCorrupt", err)
 	}
@@ -455,6 +502,7 @@ func TestIndexIndicatorAtBlockIsCorrupt(t *testing.T) {
 func TestBlockHeaderRunningPastBlockIsCorrupt(t *testing.T) {
 	data := bytes.Repeat([]byte("a"), 180000)
 	full := compressMultiBlock(t, data, 60000)
+
 	blocks, _, err := parseBlocks(bytes.NewReader(full), int64(len(full)))
 	if err != nil {
 		t.Fatal(err)
@@ -462,10 +510,12 @@ func TestBlockHeaderRunningPastBlockIsCorrupt(t *testing.T) {
 	// The first block header starts after the 12-byte stream header; 0xff
 	// there claims a 1024-byte header.
 	const hdrOff = 12
+
 	if blocks[0].paddedSize() >= 1024 {
 		t.Fatalf("first block is %d bytes; the fixture needs it under 1024",
 			blocks[0].paddedSize())
 	}
+
 	bad := append([]byte{}, full...)
 	bad[hdrOff] = 0xff
 
@@ -473,11 +523,14 @@ func TestBlockHeaderRunningPastBlockIsCorrupt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewParallelReader: %v", err)
 	}
+
 	got, err := io.ReadAll(pr)
 	_ = pr.Close()
+
 	if err == nil {
 		t.Fatalf("parallel reader returned %d bytes and no error for a block header that overruns its block", len(got))
 	}
+
 	if !errors.Is(err, ErrCorrupt) {
 		t.Errorf("parallel reader returned %v; want a match for ErrCorrupt", err)
 	}
@@ -486,9 +539,11 @@ func TestBlockHeaderRunningPastBlockIsCorrupt(t *testing.T) {
 	if err == nil {
 		_, err = io.ReadAll(r)
 	}
+
 	if err == nil {
 		t.Fatal("sequential reader accepted a block header that overruns its block")
 	}
+
 	if !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, ErrCorrupt) {
 		t.Errorf("sequential reader returned %v; want unexpected EOF or a match for ErrCorrupt", err)
 	}
