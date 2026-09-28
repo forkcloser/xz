@@ -199,6 +199,8 @@ func (d *decoder) apply(op operation) error {
 // The codecs report no per-call errors; input failures are sticky on the
 // rangeDecoder (rd.err) and are checked by the caller (decompress) after each
 // operation.
+//
+//nolint:gocognit // one operation's bits hand-inlined into one function, measured in PERF.md steps 7 and 9
 func (d *decoder) readOp() (op operation, err error) {
 	// Value of the end of stream (EOS) marker
 	const eosDist = 1<<32 - 1
