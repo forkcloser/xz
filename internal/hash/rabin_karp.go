@@ -19,7 +19,7 @@ type RabinKarp struct {
 }
 
 // NewRabinKarp creates a new RabinKarp value. The argument n defines the
-// length of the byte sequence to be hashed. The default constant will will be
+// length of the byte sequence to be hashed. The default constant will be
 // used.
 func NewRabinKarp(n int) *RabinKarp {
 	return NewRabinKarpConst(n, A)
