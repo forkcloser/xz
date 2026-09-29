@@ -45,7 +45,7 @@ const (
 	Lnowarn                   // suppresses output from Warn[f|ln]
 	Lnoprint                  // suppresses output from Print[f|ln]
 	Lnodebug                  // suppresses output from Debug[f|ln]
-	// initial values for the standard logger
+	// initial values for the standard logger.
 	Lstdflags = Ldate | Ltime | Lnodebug
 )
 

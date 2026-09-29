@@ -187,7 +187,7 @@ func (e *encoder) writeOp(op operation) error {
 	return e.writeMatch(op)
 }
 
-// writeMatch writes a repetition operation into the operation stream
+// writeMatch writes a repetition operation into the operation stream.
 func (e *encoder) writeMatch(m operation) error {
 	var err error
 
@@ -284,7 +284,7 @@ func (e *encoder) writeMatch(m operation) error {
 	return e.state.repLenCodec.Encode(e.re, n, posState)
 }
 
-// writeLiteral writes a literal into the LZMA stream
+// writeLiteral writes a literal into the LZMA stream.
 func (e *encoder) writeLiteral(l operation) error {
 	var err error
 

@@ -19,7 +19,7 @@ type rangeEncoder struct {
 	cache    byte
 }
 
-// maxInt64 provides the  maximal value of the int64 type
+// maxInt64 provides the maximal value of the int64 type.
 const maxInt64 = 1<<63 - 1
 
 // newRangeEncoder creates a new range encoder.

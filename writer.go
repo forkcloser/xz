@@ -459,7 +459,7 @@ func (bw *blockWriter) unpaddedSize() int64 {
 }
 
 // uncompressedSize returns the number of data written to the
-// blockWriter
+// blockWriter.
 func (bw *blockWriter) uncompressedSize() int64 {
 	return bw.n
 }

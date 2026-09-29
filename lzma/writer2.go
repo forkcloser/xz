@@ -383,7 +383,7 @@ func (w *Writer2) writeUncompressedChunk() error {
 	return err
 }
 
-// written returns the number of bytes written to the current chunk
+// written returns the number of bytes written to the current chunk.
 func (w *Writer2) written() int {
 	if w.encoder == nil {
 		return 0
