@@ -228,11 +228,11 @@ func TestReaderBadFiles(t *testing.T) {
 		t.Fatalf("Open: %s", err)
 	}
 
-	defer func() {
+	t.Cleanup(func() {
 		if err = dir.Close(); err != nil {
 			t.Fatalf("dir.Close() error %s", err)
 		}
-	}()
+	})
 
 	all, err := dir.Readdirnames(0)
 	if err != nil {
@@ -254,34 +254,36 @@ func TestReaderBadFiles(t *testing.T) {
 	t.Log("files:", files)
 
 	for _, filename := range files {
-		pathname := filepath.Join(dirname, filename)
+		t.Run(filename, func(t *testing.T) {
+			t.Parallel()
 
-		f, err := os.Open(pathname)
-		if err != nil {
-			t.Fatalf("Open(\"%s\"): %s", pathname, err)
-		}
-		defer func(f *os.File) {
-			if err = f.Close(); err != nil {
-				t.Fatalf("f.Close() error %s", err)
+			pathname := filepath.Join(dirname, filename)
+
+			f, err := os.Open(pathname)
+			if err != nil {
+				t.Fatalf("Open(\"%s\"): %s", pathname, err)
 			}
-		}(f)
+			defer func(f *os.File) {
+				if err = f.Close(); err != nil {
+					t.Fatalf("f.Close() error %s", err)
+				}
+			}(f)
 
-		t.Logf("file %s opened", filename)
+			l, err := NewReader(f)
+			if err != nil {
+				t.Fatalf("NewReader: %s", err)
+			}
 
-		l, err := NewReader(f)
-		if err != nil {
-			t.Fatalf("NewReader: %s", err)
-		}
+			decoded, err := io.ReadAll(l)
+			if err == nil {
+				t.Errorf("ReadAll: no error")
+				t.Logf("%s", decoded)
 
-		decoded, err := io.ReadAll(l)
-		if err == nil {
-			t.Errorf("ReadAll for %s: no error", filename)
-			t.Logf("%s", decoded)
+				return
+			}
 
-			continue
-		}
-
-		t.Logf("%s: error %s", filename, err)
+			t.Logf("error %s", err)
+		})
 	}
 }
 
