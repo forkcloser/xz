@@ -24,10 +24,10 @@ import (
 // singleBlockFile is a small one-block file whose bytes are almost all LZMA2
 // payload, so a corruption sweep over it exercises the decoder rather than
 // the container.
-func singleBlockFile(tb testing.TB) ([]byte, []byte) {
+func singleBlockFile(tb testing.TB) (file, want []byte) {
 	tb.Helper()
 
-	want := parallelTestData(4096)
+	want = parallelTestData(4096)
 
 	var buf bytes.Buffer
 

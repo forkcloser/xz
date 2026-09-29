@@ -11,6 +11,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"runtime"
+	"slices"
 	"testing"
 	"time"
 )
@@ -107,8 +108,8 @@ func TestParallelReaderMultiStream(t *testing.T) {
 	xzb := compressMultiBlock(t, b, 32<<10)
 	// concatenated streams with stream padding in between
 	pad := make([]byte, 8)
-	file := append(append(append([]byte{}, xza...), pad...), xzb...)
-	testParallelRead(t, file, append(append([]byte{}, a...), b...), 3)
+	file := slices.Concat(xza, pad, xzb)
+	testParallelRead(t, file, slices.Concat(a, b), 3)
 }
 
 func TestParallelReaderEmpty(t *testing.T) {
@@ -353,6 +354,7 @@ func TestParallelReaderAbandonedReleasesGoroutines(t *testing.T) {
 	deadline := time.Now().Add(5 * time.Second)
 
 	for {
+		//revive:disable-next-line:call-to-gc collecting runs finished goroutines' cleanup before they are counted
 		runtime.GC()
 
 		n := runtime.NumGoroutine()

@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/forkcloser/xz/lzma"
@@ -66,7 +67,7 @@ func TestReaderInputConsumption(t *testing.T) {
 
 	comp, plain := lzmaEnwik(t, 200000)
 	trailer := []byte("TRAILER-AFTER-THE-STREAM")
-	withTrailer := append(append([]byte{}, comp...), trailer...)
+	withTrailer := slices.Concat(comp, trailer)
 
 	t.Run("byteReaderIsExact", func(t *testing.T) {
 		t.Parallel()
