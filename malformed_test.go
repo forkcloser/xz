@@ -537,6 +537,10 @@ func TestBlockHeaderRunningPastBlockIsCorrupt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	if len(blocks) == 0 {
+		t.Fatal("the fixture has no blocks")
+	}
 	// The first block header starts after the 12-byte stream header; 0xff
 	// there claims a 1024-byte header.
 	const hdrOff = 12

@@ -17,7 +17,12 @@ func TestRabinKarpSimple(t *testing.T) {
 
 	h2 := Hashes(r, p)
 	for i, h := range h2 {
-		w := Hashes(r, p[i:i+4])[0]
+		ws := Hashes(r, p[i:i+4])
+		if len(ws) != 1 {
+			t.Fatalf("%d hashes of a 4-byte window; want 1", len(ws))
+		}
+
+		w := ws[0]
 		t.Logf("%d h=%#016x w=%#016x", i, h, w)
 
 		if h != w {

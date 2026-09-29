@@ -158,7 +158,11 @@ func comapOfLM(lm ngrams) comap {
 // trigram returns the trigram with prefix g2 using a probability value
 // in the range [0.0,1.0).
 func (c comap) trigram(g2 string, p float64) string {
-	prs := c[g2]
+	prs, ok := c[g2]
+	if !ok {
+		panic("no trigrams with prefix " + g2)
+	}
+
 	i := prs.SearchProb(p)
 
 	return prs[i].s
