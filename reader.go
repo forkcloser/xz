@@ -275,12 +275,12 @@ func (r *streamReader) Read(p []byte) (n int, err error) {
 		n += k
 
 		if err != nil {
-			if errors.Is(err, io.EOF) {
-				r.index = append(r.index, r.br.record())
-				r.br = nil
-			} else {
+			if !errors.Is(err, io.EOF) {
 				return n, err
 			}
+
+			r.index = append(r.index, r.br.record())
+			r.br = nil
 		}
 	}
 
