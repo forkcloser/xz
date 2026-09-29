@@ -60,7 +60,7 @@ func (f *lzmaFilter) UnmarshalBinary(data []byte) error {
 }
 
 // id returns the ID for the LZMA2 filter.
-func (f lzmaFilter) id() uint64 { return lzmaFilterID }
+func (lzmaFilter) id() uint64 { return lzmaFilterID }
 
 // lzma2Cache carries an LZMA2 reader across the blocks of an xz file. Every
 // block is decoded by a fresh chunk sequence, so without reuse each block
@@ -143,4 +143,4 @@ func (f lzmaFilter) writeCloser(w io.WriteCloser, c *WriterConfig,
 
 // last returns true, because an LZMA2 filter must be the last filter in
 // the filter list.
-func (f lzmaFilter) last() bool { return true }
+func (lzmaFilter) last() bool { return true }

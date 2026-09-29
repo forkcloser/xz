@@ -128,7 +128,7 @@ type nopWCloser struct {
 }
 
 // Close returns nil and doesn't do anything else.
-func (c nopWCloser) Close() error {
+func (nopWCloser) Close() error {
 	return nil
 }
 
