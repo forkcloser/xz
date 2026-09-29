@@ -15,7 +15,7 @@ import (
 // errFailingReaderAt fails every read with a distinctive I/O error.
 type errFailingReaderAt struct{ err error }
 
-func (e errFailingReaderAt) ReadAt(p []byte, off int64) (int, error) {
+func (e errFailingReaderAt) ReadAt([]byte, int64) (int, error) {
 	return 0, e.err
 }
 
@@ -135,7 +135,7 @@ func TestWriteToOnExhaustedReader(t *testing.T) {
 // The loop must give up rather than spin.
 type stuckWriter struct{ calls int }
 
-func (w *stuckWriter) Write(p []byte) (int, error) {
+func (w *stuckWriter) Write([]byte) (int, error) {
 	w.calls++
 	return 0, nil
 }
