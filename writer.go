@@ -372,12 +372,12 @@ type blockWriter struct {
 }
 
 // newBlockWriter creates a new block writer.
-func (c *WriterConfig) newBlockWriter(xz io.Writer, hash hash.Hash) (bw *blockWriter, err error) {
+func (c *WriterConfig) newBlockWriter(xz io.Writer, check hash.Hash) (bw *blockWriter, err error) {
 	bw = &blockWriter{
 		cxz:       countingWriter{w: xz},
 		blockSize: c.BlockSize,
 		filters:   c.filters(),
-		hash:      hash,
+		hash:      check,
 	}
 
 	bw.w, err = c.newFilterWriteCloser(&bw.cxz, bw.filters)
