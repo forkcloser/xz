@@ -39,6 +39,8 @@ const maxLCLP = 4
 // Properties contains the parameters LC, LP and PB. The parameter LC
 // defines the number of literal context bits; parameter LP the number
 // of literal position bits and PB the number of position bits.
+//
+//nolint:recvcheck // verify takes the pointer, as a nil *Properties is the unset state it rejects
 type Properties struct {
 	LC int
 	LP int

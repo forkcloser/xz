@@ -282,6 +282,8 @@ func putUint16BE(p []byte, x uint16) {
 }
 
 // chunkState is used to manage the state of the chunks.
+//
+//nolint:recvcheck // a one-byte state: read by value, advanced in place by next
 type chunkState byte
 
 // start and stop define the initial and terminating state of the chunk

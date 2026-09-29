@@ -17,6 +17,8 @@ var (
 )
 
 // Writer2Config is used to create a Writer2 using parameters.
+//
+//nolint:recvcheck // NewWriter2 copies the config, so it works on a literal; Verify and fill take the pointer
 type Writer2Config struct {
 	// The properties for the encoding. If the it is nil the value
 	// {LC: 3, LP: 0, PB: 2} will be chosen.

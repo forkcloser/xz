@@ -16,6 +16,8 @@ const probInit prob = 1 << (probbits - 1)
 
 // Type prob represents probabilities. The type can also be used to encode and
 // decode single bits.
+//
+//nolint:recvcheck // a 16-bit probability: read by value, updated in place
 type prob uint16
 
 // Bits returns 1. One is the number of bits that can be encoded or decoded

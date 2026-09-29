@@ -24,6 +24,8 @@ var (
 
 // ReaderConfig stores the parameters for the reader of the classic LZMA
 // format.
+//
+//nolint:recvcheck // NewReader copies the config, so it works on a literal; Verify and fill take the pointer
 type ReaderConfig struct {
 	// DictCap is an upper limit for a .lzma file's dictionary size (upstream
 	// introduced the limit in v0.5.14). It helps to mitigate problems with
