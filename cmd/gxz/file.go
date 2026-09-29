@@ -311,11 +311,7 @@ func (w *writer) Close() error {
 			return err
 		}
 
-		if err = os.Remove(w.f.Name()); err != nil {
-			return err
-		}
-
-		return nil
+		return os.Remove(w.f.Name())
 	}
 
 	if w.cmp != nil {
@@ -336,11 +332,7 @@ func (w *writer) Close() error {
 		return err
 	}
 
-	if err = os.Rename(w.f.Name(), w.name); err != nil {
-		return err
-	}
-
-	return nil
+	return os.Rename(w.f.Name(), w.name)
 }
 
 // SetSuccess sets the success variable to true.
@@ -511,11 +503,7 @@ func (r *reader) Close() error {
 		return nil
 	}
 
-	if err := os.Remove(r.f.Name()); err != nil {
-		return err
-	}
-
-	return nil
+	return os.Remove(r.f.Name())
 }
 
 func (r *reader) SetSuccess() { r.success = true }

@@ -87,11 +87,7 @@ func (c *WriterConfig) Verify() error {
 		return errBlockSize
 	}
 
-	if err := verifyFlags(c.CheckSum); err != nil {
-		return err
-	}
-
-	return nil
+	return verifyFlags(c.CheckSum)
 }
 
 // maxInt64 defines the maximum 64-bit signed integer.
@@ -339,11 +335,7 @@ func (w *Writer) newBlockWriter() error {
 		return err
 	}
 
-	if err = w.bw.writeHeader(w.xz); err != nil {
-		return err
-	}
-
-	return nil
+	return w.bw.writeHeader(w.xz)
 }
 
 // countingWriter is a writer that counts all data written to it.
