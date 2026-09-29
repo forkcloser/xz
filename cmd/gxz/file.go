@@ -44,6 +44,7 @@ func signalHandler(w *writer) chan<- struct{} {
 			return
 		case <-sigch:
 			w.removeTmpFile()
+			//revive:disable-next-line:deep-exit the interrupt ends the process once the temporary file is gone
 			os.Exit(7)
 		}
 	}()
