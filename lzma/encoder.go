@@ -107,28 +107,6 @@ func (e *encoder) Reopen(bw io.ByteWriter) error {
 	return nil
 }
 
-// writeLiteral writes a literal into the LZMA stream
-func (e *encoder) writeLiteral(l operation) error {
-	var err error
-
-	state, state2, _ := e.state.states(e.dict.Pos())
-	if err = e.state.isMatch[state2].Encode(e.re, 0); err != nil {
-		return err
-	}
-
-	litState := e.state.litState(e.dict.ByteAt(1), e.dict.Pos())
-	match := e.dict.ByteAt(int(e.state.rep[0]) + 1)
-
-	err = e.state.litCodec.Encode(e.re, l.b, state, match, litState)
-	if err != nil {
-		return err
-	}
-
-	e.state.updateStateLiteral()
-
-	return nil
-}
-
 // iverson implements the Iverson operator as proposed by Donald Knuth in his
 // book Concrete Mathematics.
 func iverson(ok bool) uint32 {
@@ -137,6 +115,76 @@ func iverson(ok bool) uint32 {
 	}
 
 	return 0
+}
+
+// eosMatch is a pseudo operation that indicates the end of the stream.
+var eosMatch = matchOp(maxDistance, minMatchLen)
+
+// Close terminates the LZMA stream. If requested the end-of-stream
+// marker will be written. If the byte writer limit has been or will be
+// reached during compression of the remaining data in the buffer the
+// LZMA stream will be closed and data will remain in the buffer.
+func (e *encoder) Close() error {
+	err := e.compress(all)
+	if err != nil && !errors.Is(err, errLimit) {
+		return err
+	}
+
+	if e.marker {
+		if err = e.writeMatch(eosMatch); err != nil {
+			return err
+		}
+	}
+
+	err = e.re.Close()
+
+	return err
+}
+
+// Compressed returns the number bytes of the input data that been
+// compressed.
+func (e *encoder) Compressed() int64 {
+	return e.dict.Pos() - e.start
+}
+
+// compress compressed data from the dictionary buffer. If the flag all
+// is set, all data in the dictionary buffer will be compressed. The
+// function returns errLimit if the underlying writer has reached its
+// limit.
+func (e *encoder) compress(flags compressFlags) error {
+	n := 0
+	if flags&all == 0 {
+		n = maxMatchLen - 1
+	}
+
+	d := e.dict
+
+	m := d.m
+	for d.Buffered() > n {
+		op := m.NextOp(e.state.rep)
+		if err := e.writeOp(op); err != nil {
+			return err
+		}
+
+		d.Discard(op.Len())
+	}
+
+	return nil
+}
+
+// writeOp writes a single operation to the range encoder. The function
+// checks whether there is enough space available to close the LZMA
+// stream.
+func (e *encoder) writeOp(op operation) error {
+	if e.re.Available() < int64(e.margin) {
+		return errLimit
+	}
+
+	if op.literal {
+		return e.writeLiteral(op)
+	}
+
+	return e.writeMatch(op)
 }
 
 // writeMatch writes a repetition operation into the operation stream
@@ -236,72 +284,24 @@ func (e *encoder) writeMatch(m operation) error {
 	return e.state.repLenCodec.Encode(e.re, n, posState)
 }
 
-// writeOp writes a single operation to the range encoder. The function
-// checks whether there is enough space available to close the LZMA
-// stream.
-func (e *encoder) writeOp(op operation) error {
-	if e.re.Available() < int64(e.margin) {
-		return errLimit
-	}
+// writeLiteral writes a literal into the LZMA stream
+func (e *encoder) writeLiteral(l operation) error {
+	var err error
 
-	if op.literal {
-		return e.writeLiteral(op)
-	}
-
-	return e.writeMatch(op)
-}
-
-// compress compressed data from the dictionary buffer. If the flag all
-// is set, all data in the dictionary buffer will be compressed. The
-// function returns errLimit if the underlying writer has reached its
-// limit.
-func (e *encoder) compress(flags compressFlags) error {
-	n := 0
-	if flags&all == 0 {
-		n = maxMatchLen - 1
-	}
-
-	d := e.dict
-
-	m := d.m
-	for d.Buffered() > n {
-		op := m.NextOp(e.state.rep)
-		if err := e.writeOp(op); err != nil {
-			return err
-		}
-
-		d.Discard(op.Len())
-	}
-
-	return nil
-}
-
-// eosMatch is a pseudo operation that indicates the end of the stream.
-var eosMatch = matchOp(maxDistance, minMatchLen)
-
-// Close terminates the LZMA stream. If requested the end-of-stream
-// marker will be written. If the byte writer limit has been or will be
-// reached during compression of the remaining data in the buffer the
-// LZMA stream will be closed and data will remain in the buffer.
-func (e *encoder) Close() error {
-	err := e.compress(all)
-	if err != nil && !errors.Is(err, errLimit) {
+	state, state2, _ := e.state.states(e.dict.Pos())
+	if err = e.state.isMatch[state2].Encode(e.re, 0); err != nil {
 		return err
 	}
 
-	if e.marker {
-		if err = e.writeMatch(eosMatch); err != nil {
-			return err
-		}
+	litState := e.state.litState(e.dict.ByteAt(1), e.dict.Pos())
+	match := e.dict.ByteAt(int(e.state.rep[0]) + 1)
+
+	err = e.state.litCodec.Encode(e.re, l.b, state, match, litState)
+	if err != nil {
+		return err
 	}
 
-	err = e.re.Close()
+	e.state.updateStateLiteral()
 
-	return err
-}
-
-// Compressed returns the number bytes of the input data that been
-// compressed.
-func (e *encoder) Compressed() int64 {
-	return e.dict.Pos() - e.start
+	return nil
 }

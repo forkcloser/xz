@@ -43,17 +43,6 @@ func (e *rangeEncoder) Available() int64 {
 	return e.lbw.N - (e.cacheLen + 4)
 }
 
-// writeByte writes a single byte to the underlying writer. An error is
-// returned if the limit is reached. The written byte will be counted if
-// the underlying writer doesn't return an error.
-func (e *rangeEncoder) writeByte(c byte) error {
-	if e.Available() < 1 {
-		return errLimit
-	}
-
-	return e.lbw.WriteByte(c)
-}
-
 // DirectEncodeBit encodes the least-significant bit of b with probability 1/2.
 func (e *rangeEncoder) DirectEncodeBit(b uint32) error {
 	e.nrange >>= 1
@@ -105,6 +94,17 @@ func (e *rangeEncoder) Close() error {
 	}
 
 	return nil
+}
+
+// writeByte writes a single byte to the underlying writer. An error is
+// returned if the limit is reached. The written byte will be counted if
+// the underlying writer doesn't return an error.
+func (e *rangeEncoder) writeByte(c byte) error {
+	if e.Available() < 1 {
+		return errLimit
+	}
+
+	return e.lbw.WriteByte(c)
 }
 
 // shiftLow shifts the low value for 8 bit. The shifted byte is written into

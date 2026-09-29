@@ -26,16 +26,6 @@ type ReaderConfig struct {
 	DictCap int
 }
 
-// fill converts the zero values of the configuration to the default values.
-func (c *ReaderConfig) fill() {
-	if c.DictCap == 0 {
-		// set an upper limit of 2 GiB-1 for dictionary capacity
-		// to address the zero prefix security issue.
-		c.DictCap = (1 << 31) - 1
-		// original: c.DictCap = 8 * 1024 * 1024
-	}
-}
-
 // Verify checks the reader configuration for errors. Zero values will
 // be replaced by default values.
 func (c *ReaderConfig) Verify() error {
@@ -208,6 +198,16 @@ func (c ReaderConfig) NewReader(lzma io.Reader) (r *Reader, err error) {
 	}
 
 	return r, nil
+}
+
+// fill converts the zero values of the configuration to the default values.
+func (c *ReaderConfig) fill() {
+	if c.DictCap == 0 {
+		// set an upper limit of 2 GiB-1 for dictionary capacity
+		// to address the zero prefix security issue.
+		c.DictCap = (1 << 31) - 1
+		// original: c.DictCap = 8 * 1024 * 1024
+	}
 }
 
 // Header returns the header as read from the LZMA stream. It is intended to

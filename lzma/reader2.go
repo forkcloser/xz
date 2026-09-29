@@ -16,13 +16,6 @@ type Reader2Config struct {
 	DictCap int
 }
 
-// fill converts the zero values of the configuration to the default values.
-func (c *Reader2Config) fill() {
-	if c.DictCap == 0 {
-		c.DictCap = 8 * 1024 * 1024
-	}
-}
-
 // Verify checks the reader configuration for errors. Zero configuration values
 // will be replaced by default values.
 func (c *Reader2Config) Verify() error {
@@ -88,6 +81,13 @@ func (c Reader2Config) NewReader2(lzma2 io.Reader) (r *Reader2, err error) {
 	return r, nil
 }
 
+// fill converts the zero values of the configuration to the default values.
+func (c *Reader2Config) fill() {
+	if c.DictCap == 0 {
+		c.DictCap = 8 * 1024 * 1024
+	}
+}
+
 // DictCap returns the dictionary capacity the reader was created with.
 func (r *Reader2) DictCap() int { return r.dict.dictCap }
 
@@ -117,6 +117,53 @@ func (r *Reader2) Reset(z io.Reader) {
 // chunk.
 func uncompressed(ctype chunkType) bool {
 	return ctype == cU || ctype == cUD
+}
+
+// Read reads data from the LZMA2 chunk sequence.
+func (r *Reader2) Read(p []byte) (n int, err error) {
+	if r.err != nil {
+		return 0, r.err
+	}
+
+	for n < len(p) {
+		var k int
+
+		k, err = r.chunkReader.Read(p[n:])
+		n += k
+
+		if err != nil {
+			switch {
+			case errors.Is(err, io.EOF):
+				err = r.startChunk()
+				if err == nil {
+					continue
+				}
+			case errors.Is(err, io.ErrUnexpectedEOF) && r.chunkReader == r.decoder:
+				// A compressed chunk is read into memory in full before
+				// the decoder starts (startChunk), so the decoder running
+				// out of bytes is not the input ending early: the chunk
+				// header promised a chunk its bytes do not contain.
+				err = corruptf("lzma: compressed chunk ends before its data does")
+			}
+
+			r.err = err
+
+			return n, err
+		}
+
+		if k == 0 {
+			r.err = errors.New("lzma: Reader2 doesn't get data")
+			return n, r.err
+		}
+	}
+
+	return n, nil
+}
+
+// EOS returns whether the LZMA2 stream has been terminated by an
+// end-of-stream chunk.
+func (r *Reader2) EOS() bool {
+	return r.cstate == stop
 }
 
 // startChunk parses a new chunk.
@@ -218,53 +265,6 @@ func (r *Reader2) startChunk() error {
 	return nil
 }
 
-// Read reads data from the LZMA2 chunk sequence.
-func (r *Reader2) Read(p []byte) (n int, err error) {
-	if r.err != nil {
-		return 0, r.err
-	}
-
-	for n < len(p) {
-		var k int
-
-		k, err = r.chunkReader.Read(p[n:])
-		n += k
-
-		if err != nil {
-			switch {
-			case errors.Is(err, io.EOF):
-				err = r.startChunk()
-				if err == nil {
-					continue
-				}
-			case errors.Is(err, io.ErrUnexpectedEOF) && r.chunkReader == r.decoder:
-				// A compressed chunk is read into memory in full before
-				// the decoder starts (startChunk), so the decoder running
-				// out of bytes is not the input ending early: the chunk
-				// header promised a chunk its bytes do not contain.
-				err = corruptf("lzma: compressed chunk ends before its data does")
-			}
-
-			r.err = err
-
-			return n, err
-		}
-
-		if k == 0 {
-			r.err = errors.New("lzma: Reader2 doesn't get data")
-			return n, r.err
-		}
-	}
-
-	return n, nil
-}
-
-// EOS returns whether the LZMA2 stream has been terminated by an
-// end-of-stream chunk.
-func (r *Reader2) EOS() bool {
-	return r.cstate == stop
-}
-
 // uncompressedReader is used to read uncompressed chunks.
 type uncompressedReader struct {
 	lr   io.LimitedReader
@@ -288,28 +288,6 @@ func (ur *uncompressedReader) Reopen(r io.Reader, size int64) {
 	ur.err = nil
 	ur.eof = false
 	ur.lr = io.LimitedReader{R: r, N: size}
-}
-
-// fill reads uncompressed data into the dictionary.
-func (ur *uncompressedReader) fill() error {
-	if !ur.eof {
-		n, err := io.CopyN(ur.Dict, &ur.lr, int64(ur.Dict.Available()))
-		if !errors.Is(err, io.EOF) {
-			return err
-		}
-
-		ur.eof = true
-
-		if n > 0 {
-			return nil
-		}
-	}
-
-	if ur.lr.N != 0 {
-		return io.ErrUnexpectedEOF
-	}
-
-	return io.EOF
 }
 
 // Read reads uncompressed data from the limited reader.
@@ -341,4 +319,26 @@ func (ur *uncompressedReader) Read(p []byte) (n int, err error) {
 	ur.err = err
 
 	return n, err
+}
+
+// fill reads uncompressed data into the dictionary.
+func (ur *uncompressedReader) fill() error {
+	if !ur.eof {
+		n, err := io.CopyN(ur.Dict, &ur.lr, int64(ur.Dict.Available()))
+		if !errors.Is(err, io.EOF) {
+			return err
+		}
+
+		ur.eof = true
+
+		if n > 0 {
+			return nil
+		}
+	}
+
+	if ur.lr.N != 0 {
+		return io.ErrUnexpectedEOF
+	}
+
+	return io.EOF
 }

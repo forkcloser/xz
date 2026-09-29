@@ -11,39 +11,6 @@ type literalCodec struct {
 	probs []prob
 }
 
-// deepcopy initializes literal codec c as a deep copy of the source, keeping
-// the existing backing array when it is big enough, as probTree.deepcopy does.
-func (c *literalCodec) deepcopy(src *literalCodec) {
-	if c == src {
-		return
-	}
-
-	if cap(c.probs) < len(src.probs) {
-		c.probs = make([]prob, len(src.probs))
-	}
-
-	c.probs = c.probs[:len(src.probs)]
-	copy(c.probs, src.probs)
-}
-
-// init initializes the literal codec.
-func (c *literalCodec) init(lc, lp int) {
-	switch {
-	case !(minLC <= lc && lc <= maxLC):
-		panic("lc out of range")
-	case !(minLP <= lp && lp <= maxLP):
-		panic("lp out of range")
-	}
-
-	n := 0x300 << uint(lc+lp)
-	if cap(c.probs) < n {
-		c.probs = make([]prob, n)
-	}
-
-	c.probs = c.probs[:n]
-	initProbSlice(c.probs)
-}
-
 // Encode encodes the byte s using a range encoder as well as the current LZMA
 // encoder state, a match byte and the literal state.
 func (c *literalCodec) Encode(e *rangeEncoder, s byte,
@@ -90,6 +57,39 @@ func (c *literalCodec) Encode(e *rangeEncoder, s byte,
 	}
 
 	return nil
+}
+
+// init initializes the literal codec.
+func (c *literalCodec) init(lc, lp int) {
+	switch {
+	case !(minLC <= lc && lc <= maxLC):
+		panic("lc out of range")
+	case !(minLP <= lp && lp <= maxLP):
+		panic("lp out of range")
+	}
+
+	n := 0x300 << uint(lc+lp)
+	if cap(c.probs) < n {
+		c.probs = make([]prob, n)
+	}
+
+	c.probs = c.probs[:n]
+	initProbSlice(c.probs)
+}
+
+// deepcopy initializes literal codec c as a deep copy of the source, keeping
+// the existing backing array when it is big enough, as probTree.deepcopy does.
+func (c *literalCodec) deepcopy(src *literalCodec) {
+	if c == src {
+		return
+	}
+
+	if cap(c.probs) < len(src.probs) {
+		c.probs = make([]prob, len(src.probs))
+	}
+
+	c.probs = c.probs[:len(src.probs)]
+	copy(c.probs, src.probs)
 }
 
 // decode decodes a literal byte using the range decoder as well as the LZMA

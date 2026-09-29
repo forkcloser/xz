@@ -162,26 +162,11 @@ type parallelDecoder struct {
 	readBufSize int
 }
 
-// setErr records the first error the reader saw and returns the error it will
-// report from here on. Later errors do not displace the first, so the reason a
-// stream stopped stays stable across calls.
-func (r *ParallelReader) setErr(err error) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if r.err == nil {
-		r.err = err
-	}
-
-	return r.err
-}
-
-// getErr returns the error the reader is in, or nil.
-func (r *ParallelReader) getErr() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	return r.err
+// NewParallelReader creates a reader that decodes the blocks of an xz
+// file concurrently using the default parameters. See ParallelReader
+// for the conditions under which this actually parallelizes.
+func NewParallelReader(xz io.ReaderAt, size int64) (r *ParallelReader, err error) {
+	return ParallelReaderConfig{}.NewParallelReader(xz, size)
 }
 
 // blockResult is the outcome of decoding one block.
@@ -195,13 +180,6 @@ type blockResult struct {
 type blockWork struct {
 	d      blockDesc
 	result chan blockResult
-}
-
-// NewParallelReader creates a reader that decodes the blocks of an xz
-// file concurrently using the default parameters. See ParallelReader
-// for the conditions under which this actually parallelizes.
-func NewParallelReader(xz io.ReaderAt, size int64) (r *ParallelReader, err error) {
-	return ParallelReaderConfig{}.NewParallelReader(xz, size)
 }
 
 // NewParallelReader creates a new parallel reader using the given
@@ -483,19 +461,6 @@ var errReaderClosed = &kindError{
 	kind: ErrClosed,
 }
 
-// start launches the dispatcher and the decode workers.
-func (r *ParallelReader) start() {
-	r.started = true
-	// Workers and DictCap are promoted fields, so they are writable between
-	// construction and the first read. Re-apply the floor here: zero workers
-	// would leave every read waiting for a block that nothing is decoding.
-	if r.Workers < 1 {
-		r.Workers = runtime.GOMAXPROCS(0)
-	}
-
-	r.dec.start(r.Workers, r.DictCap)
-}
-
 // start launches the dispatcher and the decode workers. The queue
 // capacity bounds the number of blocks in flight (decoding or decoded
 // but not yet consumed) and thereby the memory use.
@@ -746,50 +711,6 @@ func (d *parallelDecoder) decodeBlock(bd *blockDesc, bufp *[]byte, s *workerScra
 	return buf, nil
 }
 
-// nextBlock retires the current buffer and blocks until the next
-// decoded block is available. It returns io.EOF after the last block.
-// It gives up if the reader is cancelled: a cancelled dispatcher can leave a
-// block queued that no worker will ever report on, so both receives have to
-// watch done rather than only the queue.
-func (r *ParallelReader) nextBlock() error {
-	r.dec.putBuf(r.cur)
-	r.cur = nil
-	r.curPos = 0
-
-	var w *blockWork
-
-	select {
-	case queued, ok := <-r.dec.queue:
-		if !ok {
-			return io.EOF
-		}
-
-		w = queued
-	case <-r.dec.done:
-		return errReaderClosed
-	}
-
-	select {
-	case res := <-w.result:
-		if res.err != nil {
-			// The end of the stream is the closed queue above, never a
-			// block result: a worker reporting io.EOF found its block cut
-			// short. Say so rather than let Read take it for a clean end.
-			if errors.Is(res.err, io.EOF) && !errors.Is(res.err, io.ErrUnexpectedEOF) {
-				return io.ErrUnexpectedEOF
-			}
-
-			return res.err
-		}
-
-		r.cur = res.data
-
-		return nil
-	case <-r.dec.done:
-		return errReaderClosed
-	}
-}
-
 // Read reads the uncompressed data stream. The blocks are decoded
 // concurrently but delivered in order.
 func (r *ParallelReader) Read(p []byte) (n int, err error) {
@@ -899,4 +820,83 @@ func (r *ParallelReader) Close() error {
 	_ = r.setErr(errReaderClosed)
 
 	return nil
+}
+
+// nextBlock retires the current buffer and blocks until the next
+// decoded block is available. It returns io.EOF after the last block.
+// It gives up if the reader is cancelled: a cancelled dispatcher can leave a
+// block queued that no worker will ever report on, so both receives have to
+// watch done rather than only the queue.
+func (r *ParallelReader) nextBlock() error {
+	r.dec.putBuf(r.cur)
+	r.cur = nil
+	r.curPos = 0
+
+	var w *blockWork
+
+	select {
+	case queued, ok := <-r.dec.queue:
+		if !ok {
+			return io.EOF
+		}
+
+		w = queued
+	case <-r.dec.done:
+		return errReaderClosed
+	}
+
+	select {
+	case res := <-w.result:
+		if res.err != nil {
+			// The end of the stream is the closed queue above, never a
+			// block result: a worker reporting io.EOF found its block cut
+			// short. Say so rather than let Read take it for a clean end.
+			if errors.Is(res.err, io.EOF) && !errors.Is(res.err, io.ErrUnexpectedEOF) {
+				return io.ErrUnexpectedEOF
+			}
+
+			return res.err
+		}
+
+		r.cur = res.data
+
+		return nil
+	case <-r.dec.done:
+		return errReaderClosed
+	}
+}
+
+// start launches the dispatcher and the decode workers.
+func (r *ParallelReader) start() {
+	r.started = true
+	// Workers and DictCap are promoted fields, so they are writable between
+	// construction and the first read. Re-apply the floor here: zero workers
+	// would leave every read waiting for a block that nothing is decoding.
+	if r.Workers < 1 {
+		r.Workers = runtime.GOMAXPROCS(0)
+	}
+
+	r.dec.start(r.Workers, r.DictCap)
+}
+
+// getErr returns the error the reader is in, or nil.
+func (r *ParallelReader) getErr() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	return r.err
+}
+
+// setErr records the first error the reader saw and returns the error it will
+// report from here on. Later errors do not displace the first, so the reason a
+// stream stopped stays stable across calls.
+func (r *ParallelReader) setErr(err error) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.err == nil {
+		r.err = err
+	}
+
+	return r.err
 }

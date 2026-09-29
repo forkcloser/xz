@@ -334,6 +334,9 @@ func (w *writer) Close() error {
 	return nil
 }
 
+// SetSuccess sets the success variable to true.
+func (w *writer) SetSuccess() { w.success = true }
+
 // removeTmpFile removes the temporary file for the writer. It is used
 // by the signal handler goroutine.
 func (w *writer) removeTmpFile() {
@@ -341,9 +344,6 @@ func (w *writer) removeTmpFile() {
 	// nothing useful to do with a failure.
 	_ = os.Remove(w.f.Name())
 }
-
-// SetSuccess sets the success variable to true.
-func (w *writer) SetSuccess() { w.success = true }
 
 // reader is used as a file reader.
 type reader struct {

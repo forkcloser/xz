@@ -28,9 +28,6 @@ func (f lzmaFilter) String() string {
 	return fmt.Sprintf("LZMA dict cap %#x", f.dictCap)
 }
 
-// id returns the ID for the LZMA2 filter.
-func (f lzmaFilter) id() uint64 { return lzmaFilterID }
-
 // MarshalBinary converts the lzmaFilter in its encoded representation.
 func (f lzmaFilter) MarshalBinary() (data []byte, err error) {
 	c := lzma.EncodeDictCap(f.dictCap)
@@ -61,6 +58,9 @@ func (f *lzmaFilter) UnmarshalBinary(data []byte) error {
 
 	return nil
 }
+
+// id returns the ID for the LZMA2 filter.
+func (f lzmaFilter) id() uint64 { return lzmaFilterID }
 
 // lzma2Cache carries an LZMA2 reader across the blocks of an xz file. Every
 // block is decoded by a fresh chunk sequence, so without reuse each block

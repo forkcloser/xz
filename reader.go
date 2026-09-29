@@ -226,53 +226,6 @@ func (c ReaderConfig) newStreamReader(xz io.Reader, cache *lzma2Cache) (r *strea
 	return r, nil
 }
 
-// readTail reads the index body and the xz footer.
-func (r *streamReader) readTail() error {
-	index, n, err := readIndexBody(r.xz, len(r.index), -1)
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			err = io.ErrUnexpectedEOF
-		}
-
-		return err
-	}
-
-	for i, rec := range r.index {
-		if rec != index[i] {
-			return corruptf("xz: record %d is %v; want %v",
-				i, rec, index[i])
-		}
-	}
-
-	p := make([]byte, footerLen)
-	if _, err = io.ReadFull(r.xz, p); err != nil {
-		if errors.Is(err, io.EOF) {
-			err = io.ErrUnexpectedEOF
-		}
-
-		return err
-	}
-
-	var f footer
-	if err = f.UnmarshalBinary(p); err != nil {
-		return err
-	}
-
-	if xlog.DebugEnabled() {
-		xlog.Debugf("xz footer %s", f)
-	}
-
-	if f.flags != r.h.flags {
-		return corruptf("xz: footer flags incorrect")
-	}
-
-	if f.indexSize != n+1 {
-		return corruptf("xz: index size in footer wrong")
-	}
-
-	return nil
-}
-
 // Read reads actual data from the xz stream.
 func (r *streamReader) Read(p []byte) (n int, err error) {
 	for n < len(p) {
@@ -327,6 +280,53 @@ func (r *streamReader) Read(p []byte) (n int, err error) {
 	return n, nil
 }
 
+// readTail reads the index body and the xz footer.
+func (r *streamReader) readTail() error {
+	index, n, err := readIndexBody(r.xz, len(r.index), -1)
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			err = io.ErrUnexpectedEOF
+		}
+
+		return err
+	}
+
+	for i, rec := range r.index {
+		if rec != index[i] {
+			return corruptf("xz: record %d is %v; want %v",
+				i, rec, index[i])
+		}
+	}
+
+	p := make([]byte, footerLen)
+	if _, err = io.ReadFull(r.xz, p); err != nil {
+		if errors.Is(err, io.EOF) {
+			err = io.ErrUnexpectedEOF
+		}
+
+		return err
+	}
+
+	var f footer
+	if err = f.UnmarshalBinary(p); err != nil {
+		return err
+	}
+
+	if xlog.DebugEnabled() {
+		xlog.Debugf("xz footer %s", f)
+	}
+
+	if f.flags != r.h.flags {
+		return corruptf("xz: footer flags incorrect")
+	}
+
+	if f.indexSize != n+1 {
+		return corruptf("xz: index size in footer wrong")
+	}
+
+	return nil
+}
+
 // countingReader is a reader that counts the bytes read.
 type countingReader struct {
 	r io.Reader
@@ -375,30 +375,6 @@ func (c *ReaderConfig) newBlockReader(xz io.Reader, h *blockHeader,
 	}
 
 	return br, nil
-}
-
-// uncompressedSize returns the uncompressed size of the block.
-func (br *blockReader) uncompressedSize() int64 {
-	return br.n
-}
-
-// compressedSize returns the compressed size of the block.
-func (br *blockReader) compressedSize() int64 {
-	return br.lxz.n
-}
-
-// unpaddedSize computes the unpadded size for the block.
-func (br *blockReader) unpaddedSize() int64 {
-	n := int64(br.headerLen)
-	n += br.compressedSize()
-	n += int64(br.hash.Size())
-
-	return n
-}
-
-// record returns the index record for the current block.
-func (br *blockReader) record() record {
-	return record{br.unpaddedSize(), br.uncompressedSize()}
 }
 
 // Read reads data from the block.
@@ -451,6 +427,30 @@ func (br *blockReader) Read(p []byte) (n int, err error) {
 	}
 
 	return n, io.EOF
+}
+
+// record returns the index record for the current block.
+func (br *blockReader) record() record {
+	return record{br.unpaddedSize(), br.uncompressedSize()}
+}
+
+// unpaddedSize computes the unpadded size for the block.
+func (br *blockReader) unpaddedSize() int64 {
+	n := int64(br.headerLen)
+	n += br.compressedSize()
+	n += int64(br.hash.Size())
+
+	return n
+}
+
+// compressedSize returns the compressed size of the block.
+func (br *blockReader) compressedSize() int64 {
+	return br.lxz.n
+}
+
+// uncompressedSize returns the uncompressed size of the block.
+func (br *blockReader) uncompressedSize() int64 {
+	return br.n
 }
 
 func (c *ReaderConfig) newFilterReader(r io.Reader, f []filter,

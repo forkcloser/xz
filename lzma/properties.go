@@ -61,6 +61,12 @@ func PropertiesForCode(code byte) (p Properties, err error) {
 	return p, nil
 }
 
+// Code converts the properties to a byte. The function assumes that
+// the properties components are all in range.
+func (p Properties) Code() byte {
+	return byte((p.PB*5+p.LP)*9 + p.LC)
+}
+
 // verify checks the properties for correctness.
 func (p *Properties) verify() error {
 	if p == nil {
@@ -84,10 +90,4 @@ func (p *Properties) verify() error {
 	}
 
 	return nil
-}
-
-// Code converts the properties to a byte. The function assumes that
-// the properties components are all in range.
-func (p Properties) Code() byte {
-	return byte((p.PB*5+p.LP)*9 + p.LC)
 }
