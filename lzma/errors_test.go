@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package lzma
+package lzma_test
 
 import (
 	"bytes"
@@ -10,6 +10,8 @@ import (
 	"io"
 	"math/rand"
 	"testing"
+
+	"github.com/forkcloser/xz/lzma"
 )
 
 // lzma2Stream compresses data into an LZMA2 chunk sequence.
@@ -18,7 +20,7 @@ func lzma2Stream(tb testing.TB, data []byte) []byte {
 
 	var buf bytes.Buffer
 
-	w, err := NewWriter2(&buf)
+	w, err := lzma.NewWriter2(&buf)
 	if err != nil {
 		tb.Fatal(err)
 	}
@@ -54,7 +56,7 @@ func TestReader2CorruptionMatchesErrCorrupt(t *testing.T) {
 			bad := append([]byte{}, stream...)
 			bad[i] ^= mask
 
-			r, err := NewReader2(bytes.NewReader(bad))
+			r, err := lzma.NewReader2(bytes.NewReader(bad))
 			if err != nil {
 				t.Fatalf("NewReader2 failed on byte %d: %v (errors are deferred to Read)", i, err)
 			}
@@ -65,7 +67,7 @@ func TestReader2CorruptionMatchesErrCorrupt(t *testing.T) {
 				if !bytes.Equal(got, want) {
 					t.Errorf("byte %d ^ %#x: different data with no error", i, mask)
 				}
-			case errors.Is(err, ErrCorrupt), errors.Is(err, io.ErrUnexpectedEOF):
+			case errors.Is(err, lzma.ErrCorrupt), errors.Is(err, io.ErrUnexpectedEOF):
 			default:
 				t.Errorf("byte %d ^ %#x: %q matches neither ErrCorrupt nor io.ErrUnexpectedEOF", i, mask, err)
 			}
@@ -94,7 +96,7 @@ func TestReader2ShortChunkIsCorruptNotTruncated(t *testing.T) {
 
 	bad[1] ^= 0x10
 
-	r, err := NewReader2(bytes.NewReader(bad))
+	r, err := lzma.NewReader2(bytes.NewReader(bad))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +106,7 @@ func TestReader2ShortChunkIsCorruptNotTruncated(t *testing.T) {
 		t.Fatal("a chunk promising more data than it holds was accepted")
 	}
 
-	if !errors.Is(err, ErrCorrupt) {
+	if !errors.Is(err, lzma.ErrCorrupt) {
 		t.Errorf("got %v; want a match for ErrCorrupt", err)
 	}
 
@@ -113,7 +115,7 @@ func TestReader2ShortChunkIsCorruptNotTruncated(t *testing.T) {
 	}
 
 	// Truncating the stream itself, on the other hand, is.
-	r, err = NewReader2(bytes.NewReader(stream[:len(stream)/2]))
+	r, err = lzma.NewReader2(bytes.NewReader(stream[:len(stream)/2]))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +132,7 @@ func TestReaderClassicHeaderErrorsAreClassified(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	w, err := NewWriter(&buf)
+	w, err := lzma.NewWriter(&buf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,11 +150,11 @@ func TestReaderClassicHeaderErrorsAreClassified(t *testing.T) {
 	bad := append([]byte{}, stream...)
 
 	bad[0] = 0xff // properties code out of range
-	if _, err = NewReader(bytes.NewReader(bad)); !errors.Is(err, ErrCorrupt) {
+	if _, err = lzma.NewReader(bytes.NewReader(bad)); !errors.Is(err, lzma.ErrCorrupt) {
 		t.Errorf("invalid properties code gave %v; want a match for ErrCorrupt", err)
 	}
 
-	if _, err = NewReader(bytes.NewReader(stream[:5])); !errors.Is(err, io.ErrUnexpectedEOF) {
+	if _, err = lzma.NewReader(bytes.NewReader(stream[:5])); !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Errorf("short header gave %v; want io.ErrUnexpectedEOF", err)
 	}
 
@@ -161,7 +163,7 @@ func TestReaderClassicHeaderErrorsAreClassified(t *testing.T) {
 	// decodes.
 	copy(bad[5:13], []byte{0, 0, 0, 0, 0, 0, 0, 0x10})
 
-	if _, err = NewReader(bytes.NewReader(bad)); !errors.Is(err, ErrUnsupported) {
+	if _, err = lzma.NewReader(bytes.NewReader(bad)); !errors.Is(err, lzma.ErrUnsupported) {
 		t.Errorf("pebibyte stream gave %v; want a match for ErrUnsupported", err)
 	}
 }
@@ -194,7 +196,7 @@ func TestWriter2ErrorIsSticky(t *testing.T) {
 	ioErr := errors.New("transient")
 	fw := &countingFailingWriter{allow: 0, err: ioErr}
 
-	w, err := NewWriter2(fw)
+	w, err := lzma.NewWriter2(fw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +238,7 @@ func TestWriterErrorIsSticky(t *testing.T) {
 	fw := &countingFailingWriter{allow: 1, err: ioErr} // the header is the first write
 	// The smallest dictionary, so the encoder compresses during Write
 	// rather than buffering the whole input until Close.
-	w, err := WriterConfig{DictCap: MinDictCap}.NewWriter(fw)
+	w, err := lzma.WriterConfig{DictCap: lzma.MinDictCap}.NewWriter(fw)
 	if err != nil {
 		t.Fatal(err)
 	}
