@@ -10,6 +10,8 @@ import (
 )
 
 func TestFlagSet_Bool(t *testing.T) {
+	t.Parallel()
+
 	f := NewFlagSet("Bool", ContinueOnError)
 	a := f.Bool("test-a", false, "")
 	b := f.BoolP("test-b", "b", true, "")
@@ -35,6 +37,8 @@ func TestFlagSet_Bool(t *testing.T) {
 }
 
 func TestFlagSet_Counter_1(t *testing.T) {
+	t.Parallel()
+
 	f := NewFlagSet("Counter_1", ContinueOnError)
 	a := f.Counter("test-a", 0, "")
 	b := f.CounterP("test-b", "b", 0, "")
@@ -58,6 +62,8 @@ func TestFlagSet_Counter_1(t *testing.T) {
 }
 
 func TestFlagSet_Counter_2(t *testing.T) {
+	t.Parallel()
+
 	f := NewFlagSet("Counter_2", ContinueOnError)
 	v := f.CounterP("verbose", "v", 0, "")
 
@@ -80,6 +86,8 @@ func TestFlagSet_Counter_2(t *testing.T) {
 }
 
 func TestFlagSet_Int(t *testing.T) {
+	t.Parallel()
+
 	f := NewFlagSet("Int", ContinueOnError)
 	a := f.Int("test-a", 0, "")
 	b := f.IntP("test-b", "b", 0, "")
@@ -117,6 +125,8 @@ func TestFlagSet_Int(t *testing.T) {
 }
 
 func TestFlagSet_String(t *testing.T) {
+	t.Parallel()
+
 	f := NewFlagSet("String", ContinueOnError)
 	a := f.StringP("test-s", "s", "test", "")
 
@@ -139,6 +149,8 @@ func TestFlagSet_String(t *testing.T) {
 }
 
 func TestFlagSet_Usage(t *testing.T) {
+	t.Parallel()
+
 	f := NewFlagSet("test", ContinueOnError)
 	f.IntP("test-a", "a", 3, "tests a")
 	f.CounterP("count-b", "b", 0, "counts b")
@@ -150,6 +162,8 @@ func TestFlagSet_Usage(t *testing.T) {
 }
 
 func TestFlagSet_Preset(t *testing.T) {
+	t.Parallel()
+
 	f := NewFlagSet("test", ContinueOnError)
 
 	n := f.Preset(0, 9, 6, "preset flag")

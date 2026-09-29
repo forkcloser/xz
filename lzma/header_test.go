@@ -7,6 +7,8 @@ package lzma
 import "testing"
 
 func TestHeaderMarshalling(t *testing.T) {
+	t.Parallel()
+
 	tests := []Header{
 		{
 			Properties: Properties{3, 0, 2}, DictSize: 8 * 1024 * 1024,
@@ -35,6 +37,8 @@ func TestHeaderMarshalling(t *testing.T) {
 }
 
 func TestValidHeader(t *testing.T) {
+	t.Parallel()
+
 	tests := []Header{
 		{
 			Properties: Properties{3, 0, 2}, DictSize: 8 * 1024 * 1024,

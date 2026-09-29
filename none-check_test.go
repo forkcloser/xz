@@ -10,6 +10,8 @@ import (
 )
 
 func TestNoneHash(t *testing.T) {
+	t.Parallel()
+
 	h := newNoneHash()
 
 	p := []byte("foo")

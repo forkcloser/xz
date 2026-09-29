@@ -60,11 +60,15 @@ func lzmaEnwik(tb testing.TB, size int) (compressed, plain []byte) {
 // io.ByteReader input is consumed exactly to the end of the stream, a plain
 // io.Reader is buffered and may be read past it. Both decode identically.
 func TestReaderInputConsumption(t *testing.T) {
+	t.Parallel()
+
 	comp, plain := lzmaEnwik(t, 200000)
 	trailer := []byte("TRAILER-AFTER-THE-STREAM")
 	withTrailer := append(append([]byte{}, comp...), trailer...)
 
 	t.Run("byteReaderIsExact", func(t *testing.T) {
+		t.Parallel()
+
 		src := bytes.NewReader(withTrailer) // an io.ByteReader
 
 		r, err := NewReader(src)
@@ -88,6 +92,8 @@ func TestReaderInputConsumption(t *testing.T) {
 	})
 
 	t.Run("plainReaderIsBuffered", func(t *testing.T) {
+		t.Parallel()
+
 		src := &plainReader{r: bytes.NewReader(withTrailer)}
 
 		r, err := NewReader(src)
@@ -111,6 +117,8 @@ func TestReaderInputConsumption(t *testing.T) {
 	})
 
 	t.Run("plainReaderReadCount", func(t *testing.T) {
+		t.Parallel()
+
 		// The point of buffering: the number of Read calls on the source
 		// must be far below one per compressed byte.
 		calls := 0

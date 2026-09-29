@@ -13,6 +13,8 @@ import (
 )
 
 func TestPanic(t *testing.T) {
+	t.Parallel()
+
 	data := []byte{253, 55, 122, 88, 90, 0, 0, 0, 255, 18, 217, 65, 0, 189, 191, 239, 189, 191, 239, 48}
 	t.Logf("%q", string(data))
 	t.Logf("0x%02x", data)

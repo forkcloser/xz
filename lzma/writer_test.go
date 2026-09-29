@@ -18,6 +18,8 @@ import (
 )
 
 func TestWriterCycle(t *testing.T) {
+	t.Parallel()
+
 	orig := readOrigFile(t)
 	buf := new(bytes.Buffer)
 
@@ -69,6 +71,8 @@ func TestWriterCycle(t *testing.T) {
 }
 
 func TestWriterLongData(t *testing.T) {
+	t.Parallel()
+
 	const (
 		seed = 49
 		size = 82237
@@ -128,6 +132,8 @@ func TestWriterLongData(t *testing.T) {
 }
 
 func TestWriter_Size(t *testing.T) {
+	t.Parallel()
+
 	buf := new(bytes.Buffer)
 
 	w, err := WriterConfig{Size: 10, EOSMarker: true}.NewWriter(buf)

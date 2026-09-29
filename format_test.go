@@ -10,6 +10,8 @@ import (
 )
 
 func TestHeader(t *testing.T) {
+	t.Parallel()
+
 	h := header{flags: CRC32}
 
 	data, err := h.MarshalBinary()
@@ -28,6 +30,8 @@ func TestHeader(t *testing.T) {
 }
 
 func TestFooter(t *testing.T) {
+	t.Parallel()
+
 	f := footer{indexSize: 64, flags: CRC32}
 
 	data, err := f.MarshalBinary()
@@ -46,6 +50,8 @@ func TestFooter(t *testing.T) {
 }
 
 func TestRecord(t *testing.T) {
+	t.Parallel()
+
 	r := record{1234567, 10000}
 
 	p, err := r.MarshalBinary()
@@ -77,6 +83,8 @@ func TestRecord(t *testing.T) {
 }
 
 func TestIndex(t *testing.T) {
+	t.Parallel()
+
 	records := []record{{1234, 1}, {2345, 2}}
 
 	var buf bytes.Buffer
@@ -121,6 +129,8 @@ func TestIndex(t *testing.T) {
 }
 
 func TestBlockHeader(t *testing.T) {
+	t.Parallel()
+
 	h := blockHeader{
 		compressedSize:   1234,
 		uncompressedSize: -1,

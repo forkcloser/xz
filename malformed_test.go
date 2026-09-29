@@ -31,6 +31,8 @@ func wellFormed(tb testing.TB) []byte {
 // readers. A prefix is never a valid xz file, so each must either refuse it or
 // stop short with an error — never succeed, never crash.
 func TestTruncatedAtEveryOffset(t *testing.T) {
+	t.Parallel()
+
 	full := wellFormed(t)
 	want := parallelTestData(4096)
 
@@ -72,6 +74,8 @@ func TestTruncatedAtEveryOffset(t *testing.T) {
 // footer, so their absence is truncation — the reference tool exits non-zero
 // on the same input.
 func TestMissingIndexAndFooterIsTruncation(t *testing.T) {
+	t.Parallel()
+
 	payload := parallelTestData(4096)
 
 	var buf bytes.Buffer
@@ -111,6 +115,8 @@ func TestMissingIndexAndFooterIsTruncation(t *testing.T) {
 // change to a checked stream has to be caught: the whole point of the header,
 // index and block checksums is that no single-bit change goes unnoticed.
 func TestSingleByteCorruptionAtEveryOffset(t *testing.T) {
+	t.Parallel()
+
 	full := wellFormed(t)
 	want := parallelTestData(4096)
 
@@ -144,6 +150,8 @@ func TestSingleByteCorruptionAtEveryOffset(t *testing.T) {
 // TestGarbageInputIsRejected covers inputs that are not xz at all, including
 // the shapes most likely to confuse a backwards index walk.
 func TestGarbageInputIsRejected(t *testing.T) {
+	t.Parallel()
+
 	cases := map[string][]byte{
 		"empty":            {},
 		"one byte":         {0xfd},
@@ -163,6 +171,8 @@ func TestGarbageInputIsRejected(t *testing.T) {
 
 	for name, data := range cases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			if r, err := NewReader(bytes.NewReader(data)); err == nil {
 				if _, err = io.ReadAll(r); err == nil && len(data) != 0 {
 					// An empty stream of streams is legitimately empty; any
@@ -191,6 +201,8 @@ func TestGarbageInputIsRejected(t *testing.T) {
 // only thing standing between an unknown filter and a decode that quietly
 // produces the wrong bytes.
 func TestUnsupportedFilterID(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name string
 		data []byte
@@ -202,6 +214,8 @@ func TestUnsupportedFilterID(t *testing.T) {
 		{"short", []byte{lzmaFilterID, 0x01}, ErrCorrupt},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			var f lzmaFilter
 
 			err := f.UnmarshalBinary(tc.data)
@@ -239,6 +253,8 @@ func TestUnsupportedFilterID(t *testing.T) {
 // TestHeaderAndFooterValidation covers the fixed-size records directly, since
 // reaching every branch through a whole file is awkward.
 func TestHeaderAndFooterValidation(t *testing.T) {
+	t.Parallel()
+
 	good, err := (&header{flags: CRC64}).MarshalBinary()
 	if err != nil {
 		t.Fatal(err)
@@ -292,6 +308,8 @@ func TestHeaderAndFooterValidation(t *testing.T) {
 		"crc":            func(p []byte) { p[0] ^= 0xff },
 	} {
 		t.Run("footer "+name, func(t *testing.T) {
+			t.Parallel()
+
 			bad := append([]byte{}, goodFooter...)
 			mutate(bad)
 
@@ -314,6 +332,8 @@ func TestHeaderAndFooterValidation(t *testing.T) {
 // difference between a clear failure at construction and a confusing one
 // later.
 func TestWriterConfigValidation(t *testing.T) {
+	t.Parallel()
+
 	cases := map[string]WriterConfig{
 		"negative block size": {BlockSize: -1},
 		"bad checksum":        {CheckSum: 0x7},
@@ -331,6 +351,8 @@ func TestWriterConfigValidation(t *testing.T) {
 
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			cfg := c
 			if err := cfg.Verify(); err == nil {
 				t.Errorf("Verify accepted %+v", c)
@@ -361,6 +383,8 @@ func TestWriterConfigValidation(t *testing.T) {
 
 // TestWriterCloseTwice and friends cover the writer's own state machine.
 func TestWriterCloseTwice(t *testing.T) {
+	t.Parallel()
+
 	var buf bytes.Buffer
 
 	w, err := NewWriter(&buf)
@@ -401,6 +425,8 @@ func TestWriterCloseTwice(t *testing.T) {
 // stream padding were involved; a caller sorting "reject the input" from
 // "retry the transport" would have retried a permanently corrupt file.
 func TestBlockHeaderPaddingIsCorrupt(t *testing.T) {
+	t.Parallel()
+
 	full := wellFormed(t)
 
 	// The first block header starts after the 12-byte stream header. The
@@ -453,6 +479,8 @@ func TestBlockHeaderPaddingIsCorrupt(t *testing.T) {
 // caller sorting "reject the input" from "retry the transport" could not
 // tell what it was looking at.
 func TestIndexIndicatorAtBlockIsCorrupt(t *testing.T) {
+	t.Parallel()
+
 	full := wellFormed(t)
 
 	// The first block header starts right after the 12-byte stream header;
@@ -500,6 +528,8 @@ func TestIndexIndicatorAtBlockIsCorrupt(t *testing.T) {
 // enlarged header stays inside the block and fails its CRC instead), so the
 // input is highly compressible.
 func TestBlockHeaderRunningPastBlockIsCorrupt(t *testing.T) {
+	t.Parallel()
+
 	data := bytes.Repeat([]byte("a"), 180000)
 	full := compressMultiBlock(t, data, 60000)
 

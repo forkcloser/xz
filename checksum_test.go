@@ -45,6 +45,8 @@ func writerConfigFor(flags byte) WriterConfig {
 // unchecked one, with no error. Selecting None requires the separate
 // NoCheckSum field.
 func TestNoneCheckSumFieldIsNotSelectable(t *testing.T) {
+	t.Parallel()
+
 	var buf bytes.Buffer
 
 	w, err := WriterConfig{CheckSum: None}.NewWriter(&buf)
@@ -86,10 +88,14 @@ func TestNoneCheckSumFieldIsNotSelectable(t *testing.T) {
 }
 
 func TestCheckTypesRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	data := parallelTestData(1 << 16)
 
 	for _, ct := range checkTypes {
 		t.Run(ct.name, func(t *testing.T) {
+			t.Parallel()
+
 			var buf bytes.Buffer
 
 			w, err := writerConfigFor(ct.flags).NewWriter(&buf)
@@ -146,6 +152,8 @@ func TestCheckTypesRoundTrip(t *testing.T) {
 // bit in the compressed data must be reported by every check type that can
 // report it.
 func TestCheckTypesDetectCorruption(t *testing.T) {
+	t.Parallel()
+
 	data := parallelTestData(1 << 15)
 
 	for _, ct := range checkTypes {
@@ -154,6 +162,8 @@ func TestCheckTypesDetectCorruption(t *testing.T) {
 		}
 
 		t.Run(ct.name, func(t *testing.T) {
+			t.Parallel()
+
 			var buf bytes.Buffer
 
 			w, err := writerConfigFor(ct.flags).NewWriter(&buf)
@@ -212,6 +222,8 @@ func mustReader(t *testing.T, file []byte) *Reader {
 // everybody else would pass every test above and still produce files no other
 // implementation accepts.
 func TestCheckTypesAgainstXZ(t *testing.T) {
+	t.Parallel()
+
 	xzBin, err := exec.LookPath("xz")
 	if err != nil {
 		t.Skip("xz not installed")
@@ -221,6 +233,8 @@ func TestCheckTypesAgainstXZ(t *testing.T) {
 
 	for _, ct := range checkTypes {
 		t.Run(ct.name, func(t *testing.T) {
+			t.Parallel()
+
 			var buf bytes.Buffer
 
 			w, err := writerConfigFor(ct.flags).NewWriter(&buf)
@@ -261,6 +275,8 @@ func TestCheckTypesAgainstXZ(t *testing.T) {
 // produced, including the multi-block layout that only its threaded mode
 // emits, have to decode here.
 func TestReadXZProducedFiles(t *testing.T) {
+	t.Parallel()
+
 	xzBin, err := exec.LookPath("xz")
 	if err != nil {
 		t.Skip("xz not installed")
@@ -282,6 +298,8 @@ func TestReadXZProducedFiles(t *testing.T) {
 		{"-T2", "--block-size=16384", "-c"},
 	} {
 		t.Run(args[0], func(t *testing.T) {
+			t.Parallel()
+
 			cmd := exec.Command(xzBin, append(args, src)...)
 
 			var out bytes.Buffer
@@ -330,6 +348,8 @@ func TestReadXZProducedFiles(t *testing.T) {
 // formatting bug there would surface for the first time in whatever
 // environment had debug logging turned on.
 func TestStringersDoNotPanic(t *testing.T) {
+	t.Parallel()
+
 	for _, flags := range []byte{None, CRC32, CRC64, SHA256, 0x7} {
 		if s := flagString(flags); s == "" {
 			t.Errorf("flagString(%#x) is empty", flags)

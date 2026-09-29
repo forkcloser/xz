@@ -111,10 +111,14 @@ func cycle(t *testing.T, n int) {
 }
 
 func TestEncoderCycle1(t *testing.T) {
+	t.Parallel()
+
 	cycle(t, len(testString))
 }
 
 func TestEncoderCycle2(t *testing.T) {
+	t.Parallel()
+
 	buf := new(bytes.Buffer)
 
 	const txtlen = 50000

@@ -39,6 +39,8 @@ func (w *failingWriter) Write(p []byte) (int, error) {
 // no indication anything had gone wrong — the writer-side twin of accepting a
 // truncated file on read.
 func TestWriter2CloseReportsFlushFailure(t *testing.T) {
+	t.Parallel()
+
 	sentinel := errors.New("device full")
 
 	for _, allow := range []int{0, 1, 8, 32, 64} {
@@ -78,6 +80,8 @@ func TestWriter2CloseReportsFlushFailure(t *testing.T) {
 // TestWriter2CloseSucceedsOnGoodWriter guards the fix from turning into a
 // Close that always fails.
 func TestWriter2CloseSucceedsOnGoodWriter(t *testing.T) {
+	t.Parallel()
+
 	fw := &failingWriter{allow: 1 << 30}
 
 	w, err := NewWriter2(fw)

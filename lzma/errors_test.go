@@ -39,6 +39,8 @@ func lzma2Stream(tb testing.TB, data []byte) []byte {
 // plain errors ("unsupported chunk header byte", "writeMatch: distance out of
 // range") that a caller could only match by text.
 func TestReader2CorruptionMatchesErrCorrupt(t *testing.T) {
+	t.Parallel()
+
 	var src bytes.Buffer
 	for src.Len() < 4096 {
 		src.WriteString("the quick brown fox jumps over the lazy dog 0123456789\n")
@@ -77,6 +79,8 @@ func TestReader2CorruptionMatchesErrCorrupt(t *testing.T) {
 // inside the file, not the file ending early — reporting it as unexpected EOF
 // sent callers looking for a truncated download.
 func TestReader2ShortChunkIsCorruptNotTruncated(t *testing.T) {
+	t.Parallel()
+
 	stream := lzma2Stream(t, bytes.Repeat([]byte("abcdefgh"), 512))
 	// Chunk header: byte 0 control (its low bits are the high bits of the
 	// uncompressed size), bytes 1-2 the low 16 bits of uncompressed size-1
@@ -122,6 +126,8 @@ func TestReader2ShortChunkIsCorruptNotTruncated(t *testing.T) {
 // TestReaderClassicHeaderErrorsAreClassified covers the classic format's
 // header, whose errors were plain strings too.
 func TestReaderClassicHeaderErrorsAreClassified(t *testing.T) {
+	t.Parallel()
+
 	var buf bytes.Buffer
 
 	w, err := NewWriter(&buf)
@@ -183,6 +189,8 @@ func (f *countingFailingWriter) Write(p []byte) (int, error) {
 // "maxUncompressed reached"; now the first error is what every later call
 // reports, and nothing more is written.
 func TestWriter2ErrorIsSticky(t *testing.T) {
+	t.Parallel()
+
 	ioErr := errors.New("transient")
 	fw := &countingFailingWriter{allow: 0, err: ioErr}
 
@@ -222,6 +230,8 @@ func TestWriter2ErrorIsSticky(t *testing.T) {
 
 // TestWriterErrorIsSticky is the classic-format counterpart.
 func TestWriterErrorIsSticky(t *testing.T) {
+	t.Parallel()
+
 	ioErr := errors.New("transient")
 	fw := &countingFailingWriter{allow: 1, err: ioErr} // the header is the first write
 	// The smallest dictionary, so the encoder compresses during Write

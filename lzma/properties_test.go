@@ -16,6 +16,8 @@ import "testing"
 // writer has always refused to emit anything above it. Only the decoder was
 // missing the check.
 func TestPropertiesForCodeRejectsLargeLCLP(t *testing.T) {
+	t.Parallel()
+
 	var accepted, rejected int
 
 	for code := 0; code <= 0xff; code++ {
@@ -49,6 +51,8 @@ func TestPropertiesForCodeRejectsLargeLCLP(t *testing.T) {
 // tightened past what real files use. lc=3 lp=0 pb=2 is the default that
 // virtually every xz file in existence carries.
 func TestPropertiesForCodeAcceptsRealWorldValues(t *testing.T) {
+	t.Parallel()
+
 	for _, want := range []Properties{
 		{LC: 3, LP: 0, PB: 2}, // the xz default
 		{LC: 0, LP: 0, PB: 0},

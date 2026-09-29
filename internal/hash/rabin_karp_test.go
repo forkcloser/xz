@@ -10,6 +10,8 @@ import (
 )
 
 func TestRabinKarpSimple(t *testing.T) {
+	t.Parallel()
+
 	p := []byte("abcde")
 	r := NewRabinKarp(4)
 

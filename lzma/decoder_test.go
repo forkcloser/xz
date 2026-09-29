@@ -12,6 +12,8 @@ import (
 )
 
 func TestDecoder(t *testing.T) {
+	t.Parallel()
+
 	filename := "fox.lzma"
 	want := "The quick brown fox jumps over the lazy dog.\n"
 

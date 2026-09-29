@@ -13,6 +13,8 @@ import (
 )
 
 func TestReaderSimple(t *testing.T) {
+	t.Parallel()
+
 	const file = "testdata/fox.xz"
 
 	xz, err := os.Open(file)
@@ -32,6 +34,8 @@ func TestReaderSimple(t *testing.T) {
 }
 
 func TestReaderSingleStream(t *testing.T) {
+	t.Parallel()
+
 	data, err := os.ReadFile("testdata/fox.xz")
 	if err != nil {
 		t.Fatalf("ReadFile error %s", err)
@@ -66,6 +70,8 @@ func TestReaderSingleStream(t *testing.T) {
 }
 
 func TestReaderMultipleStreams(t *testing.T) {
+	t.Parallel()
+
 	data, err := os.ReadFile("testdata/fox.xz")
 	if err != nil {
 		t.Fatalf("ReadFile error %s", err)
@@ -94,6 +100,8 @@ func TestReaderMultipleStreams(t *testing.T) {
 }
 
 func TestCheckNone(t *testing.T) {
+	t.Parallel()
+
 	const file = "testdata/fox-check-none.xz"
 
 	xz, err := os.Open(file)

@@ -80,6 +80,8 @@ func testParallelRead(t *testing.T, xz, want []byte, workers int) {
 }
 
 func TestParallelReaderMultiBlock(t *testing.T) {
+	t.Parallel()
+
 	data := parallelTestData(1 << 20)
 
 	xz := compressMultiBlock(t, data, 64<<10)
@@ -89,12 +91,16 @@ func TestParallelReaderMultiBlock(t *testing.T) {
 }
 
 func TestParallelReaderSingleBlock(t *testing.T) {
+	t.Parallel()
+
 	data := parallelTestData(1 << 18)
 	xz := compressMultiBlock(t, data, 0) // default: one block
 	testParallelRead(t, xz, data, 4)
 }
 
 func TestParallelReaderMultiStream(t *testing.T) {
+	t.Parallel()
+
 	a := parallelTestData(1 << 19)
 	b := parallelTestData(1 << 18)
 	xza := compressMultiBlock(t, a, 32<<10)
@@ -106,11 +112,15 @@ func TestParallelReaderMultiStream(t *testing.T) {
 }
 
 func TestParallelReaderEmpty(t *testing.T) {
+	t.Parallel()
+
 	xz := compressMultiBlock(t, nil, 64<<10)
 	testParallelRead(t, xz, nil, 2)
 }
 
 func TestParallelReaderWriteTo(t *testing.T) {
+	t.Parallel()
+
 	data := parallelTestData(1 << 20)
 	xz := compressMultiBlock(t, data, 64<<10)
 
@@ -132,6 +142,8 @@ func TestParallelReaderWriteTo(t *testing.T) {
 }
 
 func TestParallelReaderAgainstReader(t *testing.T) {
+	t.Parallel()
+
 	data := parallelTestData(1 << 20)
 	xz := compressMultiBlock(t, data, 128<<10)
 
@@ -149,6 +161,8 @@ func TestParallelReaderAgainstReader(t *testing.T) {
 }
 
 func TestParallelReaderTruncated(t *testing.T) {
+	t.Parallel()
+
 	data := parallelTestData(1 << 20)
 	xz := compressMultiBlock(t, data, 64<<10)
 	// missing footer
@@ -190,6 +204,8 @@ func (s slowReaderAt) ReadAt(p []byte, off int64) (int, error) {
 // to want that is when the input has gone slow — which is exactly when Read is
 // parked waiting for a block. A cancelled dispatcher used to leave both the
 // block queue and the pending result unattended, so Read waited forever.
+//
+//nolint:paralleltest // counts the process's goroutines; a parallel test's would count as leaked
 func TestParallelReaderCloseUnblocksRead(t *testing.T) {
 	data := parallelTestData(1 << 20)
 	xz := compressMultiBlock(t, data, 16<<10)
@@ -246,6 +262,8 @@ func TestParallelReaderCloseUnblocksRead(t *testing.T) {
 // TestParallelReaderCloseAfterEOFKeepsEOF checks that cancelling a reader that
 // already finished does not rewrite why it finished.
 func TestParallelReaderCloseAfterEOFKeepsEOF(t *testing.T) {
+	t.Parallel()
+
 	data := parallelTestData(1 << 16)
 	xz := compressMultiBlock(t, data, 8<<10)
 
@@ -268,6 +286,8 @@ func TestParallelReaderCloseAfterEOFKeepsEOF(t *testing.T) {
 }
 
 func TestParallelReaderClose(t *testing.T) {
+	t.Parallel()
+
 	data := parallelTestData(1 << 20)
 	xz := compressMultiBlock(t, data, 16<<10)
 
@@ -305,6 +325,8 @@ func TestParallelReaderClose(t *testing.T) {
 // keep the abandoned reader reachable, or the cleanup that cancels them could
 // never fire and they would run for the life of the process, pinned on a full
 // block queue.
+//
+//nolint:paralleltest // counts the process's goroutines; a parallel test's would count as leaked
 func TestParallelReaderAbandonedReleasesGoroutines(t *testing.T) {
 	data := parallelTestData(1 << 20)
 	xz := compressMultiBlock(t, data, 16<<10) // 64 blocks, far more than the queue holds
