@@ -259,6 +259,8 @@ func (l *Logger) writeEntry(calldepth int, now time.Time, s string) error {
 }
 
 // formatHeader puts the header into the buf field of the buffer.
+//
+//nolint:gocognit // one branch per header flag, as package log's formatHeader
 func (l *Logger) formatHeader(t time.Time, file string, line int) {
 	l.buf = append(l.buf, l.prefix...)
 	if l.flag&(Ldate|Ltime|Lmicroseconds) != 0 {

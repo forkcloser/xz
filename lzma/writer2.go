@@ -150,6 +150,8 @@ var errClosed = errors.New("lzma: writer closed")
 // buffered.
 // Use Flush or Close to ensure that data is written to the underlying
 // writer.
+//
+//nolint:gocognit // one loop filling chunks and flushing each as it fills or hits the limit
 func (w *Writer2) Write(p []byte) (n int, err error) {
 	if w.err != nil {
 		return 0, w.err

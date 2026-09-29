@@ -675,6 +675,8 @@ const initialBlockBufSize = 1 << 20
 // caller can recycle it whether decoding succeeds, fails or panics.
 // decodeBlock verifies the block check and that header, compressed size
 // and uncompressed size agree with the index record.
+//
+//nolint:gocognit // one block's header, data and sizes, each failure classified in place
 func (d *parallelDecoder) decodeBlock(bd *blockDesc, bufp *[]byte, s *workerScratch) ([]byte, error) {
 	sr := io.NewSectionReader(d.xz, bd.offset, bd.paddedSize())
 	s.xr.Reset(sr)
@@ -798,6 +800,8 @@ func (r *ParallelReader) Read(p []byte) (n int, err error) {
 // WriteTo writes the whole remaining uncompressed data stream to w. It
 // avoids the intermediate copy of the Read interface by handing the
 // decoded block buffers directly to the writer.
+//
+//nolint:gocognit // delivers blocks in order, each end or error classified where it happens
 func (r *ParallelReader) WriteTo(w io.Writer) (n int64, err error) {
 	// An exhausted reader has nothing left to write, which is success, not
 	// failure: io.Copy does not report io.EOF for an ordinary reader, and a

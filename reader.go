@@ -130,6 +130,8 @@ var errUnexpectedData = corruptf("xz: unexpected data after stream")
 // trailing bytes of that data may stem from decoder state that was fed input
 // past the point of corruption; discard data received alongside such an error
 // rather than treating it as a correct prefix of the stream.
+//
+//nolint:gocognit // the loop over streams: how a single stream ends and the padding between streams, each commented in place
 func (r *Reader) Read(p []byte) (n int, err error) {
 	for n < len(p) {
 		if r.sr == nil {
@@ -234,6 +236,8 @@ func (c ReaderConfig) newStreamReader(xz io.Reader, cache *lzma2Cache) (r *strea
 }
 
 // Read reads actual data from the xz stream.
+//
+//nolint:gocognit // the loop over blocks: the next block, or the index and the tail, each case commented in place
 func (r *streamReader) Read(p []byte) (n int, err error) {
 	for n < len(p) {
 		if r.br == nil {

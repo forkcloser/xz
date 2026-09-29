@@ -119,6 +119,8 @@ func (d *decoderDict) Read(p []byte) (n int, err error) { return d.buf.Read(p) }
 // The error value ErrNoSpace indicates that no space is available in
 // the dictionary for writing. You need to read from the dictionary
 // first.
+//
+//nolint:gocognit // the match copy PERF.md step 8 shaped: pattern doubling, wrap-around apart
 func (d *decoderDict) writeMatch(dist int64, length int) error {
 	if !(0 < length && length <= maxMatchLen) {
 		return corruptf("lzma: match length %d out of range", length)

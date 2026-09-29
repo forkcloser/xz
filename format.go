@@ -481,6 +481,8 @@ func (h *blockHeader) UnmarshalBinary(data []byte) error {
 }
 
 // MarshalBinary marshals the binary header.
+//
+//nolint:gocognit // encodes the header field by field, in the order the xz format fixes
 func (h *blockHeader) MarshalBinary() (data []byte, err error) {
 	if !(minFilters <= len(h.filters) && len(h.filters) <= maxFilters) {
 		return nil, errFilterCount

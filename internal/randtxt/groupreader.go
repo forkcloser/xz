@@ -28,6 +28,8 @@ func NewGroupReader(r io.Reader) *GroupReader {
 // Read formats the data provided by the internal reader in groups of 5
 // characters. If GroupsPerLine hasn't been initialized 8 groups per
 // line will be produced.
+//
+//nolint:gocognit // one character per iteration: group spaces, line ends and the last line
 func (r *GroupReader) Read(p []byte) (n int, err error) {
 	if r.eof {
 		return 0, io.EOF
