@@ -165,9 +165,9 @@ func (c comap) trigram(g2 string, p float64) string {
 }
 
 var (
-	// CDF for normal probabilities
+	// CDF for normal probabilities.
 	pcdf = pCDFOfLM(englm3)
-	// map of two letter conditionals
+	// map of two letter conditionals.
 	cmap = comapOfLM(englm3)
 )
 

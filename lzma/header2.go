@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	// maximum size of compressed data in a chunk
+	// maximum size of compressed data in a chunk.
 	maxCompressed = 1 << 16
-	// maximum size of uncompressed data in a chunk
+	// maximum size of uncompressed data in a chunk.
 	maxUncompressed = 1 << 21
 )
 
@@ -24,19 +24,19 @@ type chunkType byte
 
 // Possible values for the chunk type.
 const (
-	// end of stream
+	// end of stream.
 	cEOS chunkType = iota
-	// uncompressed; reset dictionary
+	// uncompressed; reset dictionary.
 	cUD
-	// uncompressed; no reset of dictionary
+	// uncompressed; no reset of dictionary.
 	cU
-	// LZMA compressed; no reset
+	// LZMA compressed; no reset.
 	cL
-	// LZMA compressed; reset state
+	// LZMA compressed; reset state.
 	cLR
-	// LZMA compressed; reset state; new property value
+	// LZMA compressed; reset state; new property value.
 	cLRN
-	// LZMA compressed; reset state; new property value; reset dictionary
+	// LZMA compressed; reset state; new property value; reset dictionary.
 	cLRND
 )
 
@@ -112,7 +112,7 @@ func headerChunkType(h byte) (c chunkType, err error) {
 	return c, err
 }
 
-// uncompressedHeaderLen provides the length of an uncompressed header
+// uncompressedHeaderLen provides the length of an uncompressed header.
 const uncompressedHeaderLen = 3
 
 // headerLen returns the length of the LZMA2 header for a given chunk
@@ -275,23 +275,23 @@ func putUint16BE(p []byte, x uint16) {
 	p[1] = byte(x)
 }
 
-// chunkState is used to manage the state of the chunks
+// chunkState is used to manage the state of the chunks.
 type chunkState byte
 
 // start and stop define the initial and terminating state of the chunk
-// state
+// state.
 const (
 	start chunkState = 'S'
 	stop  chunkState = 'T'
 )
 
-// errors for the chunk state handling
+// errors for the chunk state handling.
 var (
 	errChunkType = corruptf("lzma: unexpected chunk type")
 	errState     = errors.New("lzma: wrong chunk state")
 )
 
-// next transitions state based on chunk type input
+// next transitions state based on chunk type input.
 func (c *chunkState) next(ctype chunkType) error {
 	switch *c {
 	// start state

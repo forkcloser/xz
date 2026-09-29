@@ -4,7 +4,7 @@
 
 package lzma
 
-// states defines the overall state count
+// states defines the overall state count.
 const states = 12
 
 // State maintains the full state of the operation encoding or decoding

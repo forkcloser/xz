@@ -72,7 +72,7 @@ type Reader struct {
 	lz lzma2Cache
 }
 
-// streamReader decodes a single xz stream
+// streamReader decodes a single xz stream.
 type streamReader struct {
 	ReaderConfig
 
