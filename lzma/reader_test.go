@@ -90,8 +90,6 @@ func testDecodeFile(t *testing.T, filename string, orig []byte) {
 func TestReaderSimple(t *testing.T) {
 	t.Parallel()
 
-	// DebugOn(os.Stderr)
-	// defer DebugOff()
 	testDecodeFile(t, "a.lzma", readOrigFile(t))
 }
 
