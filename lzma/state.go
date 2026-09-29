@@ -140,6 +140,7 @@ func (s *state) updateStateShortRep() {
 // states computes the states of the operation codec.
 func (s *state) states(dictHead int64) (state1, state2, posState uint32) {
 	state1 = s.state
+	// #nosec G115 -- only the low bits the mask keeps are wanted
 	posState = uint32(dictHead) & s.posBitMask
 	state2 = (s.state << maxPosBits) | posState
 
@@ -149,6 +150,7 @@ func (s *state) states(dictHead int64) (state1, state2, posState uint32) {
 // litState computes the literal state.
 func (s *state) litState(prev byte, dictHead int64) uint32 {
 	lp, lc := uint(s.Properties.LP), uint(s.Properties.LC)
+	// #nosec G115 -- only the low lp bits are wanted
 	litState := ((uint32(dictHead) & ((1 << lp) - 1)) << lc) |
 		(uint32(prev) >> (8 - lc))
 

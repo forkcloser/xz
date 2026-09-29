@@ -86,6 +86,7 @@ func (h *Header) unmarshalBinary(data []byte) error {
 	if s == noHeaderSize {
 		h.Size = -1
 	} else {
+		// #nosec G115 -- a size past 1<<63 wraps negative, which the next line rejects as corrupt
 		h.Size = int64(s)
 		if h.Size < 0 {
 			return corruptf("lzma: header uncompressed size out of int64 range")

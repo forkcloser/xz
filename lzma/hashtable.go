@@ -86,6 +86,7 @@ func newHashTable(capacity, wordLen int) (t *hashTable, err error) {
 		return nil, errHashCapacity
 	}
 
+	// #nosec G115 -- capacity is the dictionary capacity, non-negative and at most MaxDictCap, 1<<32 - 1
 	exp := hashTableExponent(uint32(capacity))
 
 	if !(1 <= wordLen && wordLen <= 4) {
@@ -207,6 +208,7 @@ func (t *hashTable) NextOp(rep [4]uint32) operation {
 		case 0:
 			continue
 		case 1:
+			// #nosec G115 -- dist is a found match distance, at least minDistance and within the dictionary
 			if uint32(dist-minDistance) != rep[0] {
 				continue
 			}

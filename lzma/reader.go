@@ -163,6 +163,7 @@ func (c ReaderConfig) NewReader(lzma io.Reader) (r *Reader, err error) {
 	if int64(c.DictCap) < dictSize {
 		return nil, newErrDictSize(
 			"lzma: header dictionary size %[2]d exceeds configured dictionary capacity %[1]d",
+			// #nosec G115 -- dictSize was read from the header's uint32
 			c.DictCap, uint32(dictSize),
 		)
 	}
@@ -189,6 +190,7 @@ func (c ReaderConfig) NewReader(lzma io.Reader) (r *Reader, err error) {
 		dictSize = MinDictCap
 	}
 
+	// #nosec G115 -- the header's uint32, raised at most to MinDictCap
 	r.header.DictSize = uint32(dictSize)
 
 	state := newState(r.header.Properties)

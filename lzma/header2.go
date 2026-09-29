@@ -230,12 +230,14 @@ func (h *chunkHeader) MarshalBinary() (data []byte, err error) {
 		data[0] = hLRND
 	}
 
+	// #nosec G115 -- the low 16 of the chunk size's 21 bits; the high 5 go into data[0] below
 	binary.BigEndian.PutUint16(data[1:3], uint16(h.uncompressed))
 
 	if h.ctype <= cU {
 		return data, nil
 	}
 
+	// #nosec G115 -- the high 5 of the chunk size's 21 bits
 	data[0] |= byte(h.uncompressed>>16) &^ hLRND
 
 	binary.BigEndian.PutUint16(data[3:5], h.compressed)

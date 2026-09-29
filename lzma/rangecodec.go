@@ -111,9 +111,11 @@ func (e *rangeEncoder) writeByte(c byte) error {
 // shiftLow shifts the low value for 8 bit. The shifted byte is written into
 // the byte writer. The cache value is used to handle overflows.
 func (e *rangeEncoder) shiftLow() error {
+	// #nosec G115 -- the range coder splits low into its 32-bit word and the carry above it
 	if uint32(e.low) < 0xff000000 || (e.low>>32) != 0 {
 		tmp := e.cache
 		for {
+			// #nosec G115 -- the carry, 0 or 1
 			err := e.writeByte(tmp + byte(e.low>>32))
 			if err != nil {
 				return err
@@ -131,10 +133,12 @@ func (e *rangeEncoder) shiftLow() error {
 			}
 		}
 
+		// #nosec G115 -- the top byte of low's 32-bit word
 		e.cache = byte(uint32(e.low) >> 24)
 	}
 
 	e.cacheLen++
+	// #nosec G115 -- shifting out the top byte of low's 32-bit word is the point
 	e.low = uint64(uint32(e.low) << 8)
 
 	return nil
@@ -264,6 +268,7 @@ func decodeBitArith(p *prob, rng, code uint32) (bit, nrng, ncode uint32) {
 	// bit 0: code stays,    nrange  = bound, p += (max-p)>>movebits
 	ncode = code - bound&mask
 	nrng = (rng-bound)&mask | bound&^mask
+	// #nosec G115 -- the update keeps a probability within its probbits (11) bits
 	*p = prob(pv + ((((1 << probbits) - pv) >> movebits) &^ mask) - ((pv >> movebits) & mask))
 
 	return bit, nrng, ncode

@@ -211,6 +211,7 @@ func (e *encoder) writeMatch(m operation) error {
 		return err
 	}
 
+	// #nosec G115 -- match lengths are minMatchLen to maxMatchLen (273)
 	n := uint32(m.n - minMatchLen)
 
 	if b == 0 {

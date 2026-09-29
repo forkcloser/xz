@@ -399,6 +399,7 @@ func readSizeInBlockHeader(r io.ByteReader, present bool) (n int64, err error) {
 		return 0, corruptf("xz: size overflow in block header")
 	}
 
+	// #nosec G115 -- x is checked below 1<<63 just above
 	return int64(x), nil
 }
 
@@ -503,6 +504,7 @@ func (h *blockHeader) MarshalBinary() (data []byte, err error) {
 	buf.WriteByte(0)
 
 	// flags
+	// #nosec G115 -- the filter count is checked to be one to four
 	flags := byte(len(h.filters) - 1)
 	if h.compressedSize >= 0 {
 		flags |= compressedSizePresent
@@ -656,6 +658,7 @@ func readRecord(r io.ByteReader) (rec record, n int, err error) {
 		return rec, n, err
 	}
 
+	// #nosec G115 -- a value past 1<<63 wraps negative, which the next line rejects as corrupt
 	rec.unpaddedSize = int64(u)
 	if rec.unpaddedSize < 0 {
 		return rec, n, corruptf("xz: unpadded size negative")
@@ -668,6 +671,7 @@ func readRecord(r io.ByteReader) (rec record, n int, err error) {
 		return rec, n, err
 	}
 
+	// #nosec G115 -- a value past 1<<63 wraps negative, which the next line rejects as corrupt
 	rec.uncompressedSize = int64(u)
 	if rec.uncompressedSize < 0 {
 		return rec, n, corruptf("xz: uncompressed size negative")
@@ -680,7 +684,9 @@ func readRecord(r io.ByteReader) (rec record, n int, err error) {
 func (rec *record) MarshalBinary() (data []byte, err error) {
 	// maximum length of a uvarint is 10
 	p := make([]byte, 20)
+	// #nosec G115 -- record sizes are never negative: checked where they are read and built
 	n := putUvarint(p, uint64(rec.unpaddedSize))
+	// #nosec G115 -- record sizes are never negative: checked where they are read and built
 	n += putUvarint(p[n:], uint64(rec.uncompressedSize))
 
 	return p[:n], nil
@@ -771,6 +777,7 @@ func readIndexBody(r io.Reader, expectedRecordLen, maxRecords int) (records []re
 		return nil, n, err
 	}
 
+	// #nosec G115 -- the next line rejects a count that does not survive the conversion
 	recLen := int(u)
 	if recLen < 0 || uint64(recLen) != u {
 		return nil, n, corruptf("xz: record number overflow")
