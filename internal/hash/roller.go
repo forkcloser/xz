@@ -20,7 +20,7 @@ func Hashes(r Roller, p []byte) []uint64 {
 	}
 
 	h := make([]uint64, len(p)-n+1)
-	for i := 0; i < n-1; i++ {
+	for i := range n - 1 {
 		r.RollByte(p[i])
 	}
 
