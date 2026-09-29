@@ -167,7 +167,7 @@ func (d *decoder) decompress() error {
 				case errors.Is(err, io.EOF):
 					return io.ErrUnexpectedEOF
 				case errors.Is(err, errEOS):
-					break
+					// The end-of-stream marker: the stream ended where it should.
 				default:
 					return err
 				}

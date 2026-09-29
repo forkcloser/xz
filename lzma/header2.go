@@ -326,7 +326,7 @@ func (c *chunkState) next(ctype chunkType) error {
 		case cU:
 			*c = 'U'
 		case cL, cLR, cLRN, cLRND:
-			break
+			// An LZMA chunk continues LZMA mode.
 		default:
 			return errChunkType
 		}
@@ -336,7 +336,7 @@ func (c *chunkState) next(ctype chunkType) error {
 		case cEOS:
 			*c = 'T'
 		case cUD, cU:
-			break
+			// An uncompressed chunk does not satisfy the reset LZMA needs.
 		case cLRN, cLRND:
 			*c = 'L'
 		default:
@@ -350,7 +350,7 @@ func (c *chunkState) next(ctype chunkType) error {
 		case cUD:
 			*c = 'R'
 		case cU:
-			break
+			// Another uncompressed chunk stays uncompressed.
 		case cL, cLR, cLRN, cLRND:
 			*c = 'L'
 		default:
