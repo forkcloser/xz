@@ -75,7 +75,7 @@ const (
 
 // Value is the interface to the value of a specific flag.
 type Value interface {
-	Set(string) error
+	Set(s string) error
 	Update()
 	Get() any
 	String() string
