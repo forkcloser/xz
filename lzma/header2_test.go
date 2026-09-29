@@ -11,6 +11,8 @@ import (
 )
 
 func TestChunkTypeString(t *testing.T) {
+	t.Parallel()
+
 	tests := [...]struct {
 		c chunkType
 		s string
@@ -32,6 +34,8 @@ func TestChunkTypeString(t *testing.T) {
 }
 
 func TestHeaderChunkType(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		h byte
 		c chunkType
@@ -64,6 +68,8 @@ func TestHeaderChunkType(t *testing.T) {
 }
 
 func TestHeaderLen(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		c chunkType
 		n int
@@ -114,6 +120,8 @@ func chunkHeaderSamples(t *testing.T) []chunkHeader {
 }
 
 func TestChunkHeaderMarshalling(t *testing.T) {
+	t.Parallel()
+
 	for _, h := range chunkHeaderSamples(t) {
 		data, err := h.MarshalBinary()
 		if err != nil {
@@ -132,6 +140,8 @@ func TestChunkHeaderMarshalling(t *testing.T) {
 }
 
 func TestReadChunkHeader(t *testing.T) {
+	t.Parallel()
+
 	for _, h := range chunkHeaderSamples(t) {
 		data, err := h.MarshalBinary()
 		if err != nil {
@@ -155,6 +165,8 @@ func TestReadChunkHeader(t *testing.T) {
 }
 
 func TestReadEOS(t *testing.T) {
+	t.Parallel()
+
 	var b [1]byte
 
 	r := bytes.NewReader(b[:])

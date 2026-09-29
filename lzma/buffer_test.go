@@ -11,6 +11,8 @@ import (
 )
 
 func TestBuffer_Write(t *testing.T) {
+	t.Parallel()
+
 	buf := newBuffer(10)
 
 	b := []byte("1234567890")
@@ -66,6 +68,8 @@ func TestBuffer_Write(t *testing.T) {
 }
 
 func TestBuffer_Buffered_Available(t *testing.T) {
+	t.Parallel()
+
 	buf := newBuffer(19)
 	b := []byte("0123456789")
 
@@ -92,6 +96,8 @@ func TestBuffer_Buffered_Available(t *testing.T) {
 }
 
 func TestBuffer_Read(t *testing.T) {
+	t.Parallel()
+
 	buf := newBuffer(10)
 	b := []byte("0123456789")
 
@@ -163,6 +169,8 @@ func TestBuffer_Read(t *testing.T) {
 }
 
 func TestBuffer_Discard(t *testing.T) {
+	t.Parallel()
+
 	buf := newBuffer(10)
 	b := []byte("0123456789")
 
@@ -208,6 +216,8 @@ func TestBuffer_Discard(t *testing.T) {
 }
 
 func TestBuffer_Discard_error(t *testing.T) {
+	t.Parallel()
+
 	buf := newBuffer(10)
 
 	n, err := buf.Discard(-1)
@@ -221,6 +231,8 @@ func TestBuffer_Discard_error(t *testing.T) {
 }
 
 func TestPrefixLen(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		a, b []byte
 		k    int
@@ -246,6 +258,8 @@ func TestPrefixLen(t *testing.T) {
 }
 
 func TestMatchLen(t *testing.T) {
+	t.Parallel()
+
 	buf := newBuffer(13)
 
 	const s = "abcaba"

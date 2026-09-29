@@ -88,6 +88,8 @@ func dirtyState(s *state, seed int64) {
 // assigns a zero struct, so a field added later without a matching reset line
 // would silently survive — this catches that.
 func TestStateResetReusesWithoutDrift(t *testing.T) {
+	t.Parallel()
+
 	props := []Properties{
 		{LC: 3, LP: 0, PB: 2},
 		{LC: 0, LP: 0, PB: 0},
@@ -113,6 +115,8 @@ func TestStateResetReusesWithoutDrift(t *testing.T) {
 // lc+lp resizes the literal codec, so the reused array must end up holding
 // exactly what a fresh one would.
 func TestStateResetAcrossProperties(t *testing.T) {
+	t.Parallel()
+
 	seq := []Properties{
 		{LC: 3, LP: 0, PB: 2},
 		{LC: 0, LP: 4, PB: 4}, // larger literal codec
@@ -143,6 +147,8 @@ func TestStateResetAcrossProperties(t *testing.T) {
 // TestStateResetKeepsBackingArrays is the performance claim itself: resetting
 // to the same properties must not hand back a different array.
 func TestStateResetKeepsBackingArrays(t *testing.T) {
+	t.Parallel()
+
 	s := newState(Properties{LC: 3, LP: 0, PB: 2})
 	before := &s.litCodec.probs[0]
 	beforeHigh := &s.lenCodec.high.probs[0]

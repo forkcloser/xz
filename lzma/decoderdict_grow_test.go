@@ -61,6 +61,8 @@ func dictState(d *decoderDict, maxDist int) []byte {
 // through byteAt, and the bytes read out — stays identical. Growth must be
 // invisible to the decoder; only the allocation differs.
 func TestDecoderDictGrowMatchesEager(t *testing.T) {
+	t.Parallel()
+
 	caps := []int{
 		1, 2, 3, 7, 273, 274, 1000, 4096,
 		initialDictCap - 1, initialDictCap, initialDictCap + 1,
@@ -74,6 +76,8 @@ func TestDecoderDictGrowMatchesEager(t *testing.T) {
 	for _, dictCap := range caps {
 		for _, initial := range initials {
 			t.Run("", func(t *testing.T) {
+				t.Parallel()
+
 				testGrowMatchesEager(t, dictCap, initial)
 			})
 		}
@@ -173,6 +177,8 @@ func testGrowMatchesEager(t *testing.T, dictCap, initial int) {
 // cLRND chunk performs: it zeroes head while the buffer keeps its write
 // position, so growth has to stay correct across it.
 func TestDecoderDictGrowWithReset(t *testing.T) {
+	t.Parallel()
+
 	for _, dictCap := range []int{1000, initialDictCap, 3 * initialDictCap} {
 		grow, err := newDecoderDict(dictCap)
 		if err != nil {
@@ -218,6 +224,8 @@ func TestDecoderDictGrowWithReset(t *testing.T) {
 // that decodes very little must not pay for a dictionary the header merely
 // claims.
 func TestDecoderDictGrowsOnlyAsFarAsNeeded(t *testing.T) {
+	t.Parallel()
+
 	const huge = 1 << 30
 
 	d, err := newDecoderDict(huge)
@@ -249,6 +257,8 @@ func TestDecoderDictGrowsOnlyAsFarAsNeeded(t *testing.T) {
 // really does use its dictionary still gets the full capacity, so long
 // distance matches keep resolving.
 func TestDecoderDictGrowReachesDeclaredCap(t *testing.T) {
+	t.Parallel()
+
 	const dictCap = 4 * initialDictCap
 
 	d, err := newDecoderDict(dictCap)

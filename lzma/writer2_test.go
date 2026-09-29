@@ -15,6 +15,8 @@ import (
 )
 
 func TestWriter2(t *testing.T) {
+	t.Parallel()
+
 	var buf bytes.Buffer
 
 	w, err := Writer2Config{DictCap: 4096}.NewWriter2(&buf)
@@ -52,6 +54,8 @@ func TestWriter2(t *testing.T) {
 }
 
 func TestCycle1(t *testing.T) {
+	t.Parallel()
+
 	var buf bytes.Buffer
 
 	w, err := Writer2Config{DictCap: 4096}.NewWriter2(&buf)
@@ -83,6 +87,8 @@ func TestCycle1(t *testing.T) {
 }
 
 func TestCycle2(t *testing.T) {
+	t.Parallel()
+
 	buf := new(bytes.Buffer)
 
 	w, err := Writer2Config{DictCap: 4096}.NewWriter2(buf)
@@ -139,6 +145,8 @@ func TestCycle2(t *testing.T) {
 // replay the chunk's input, and choosing the uncompressed form made Write and
 // Close fail with ErrNoSpace.
 func TestWriter2SmallDictIncompressible(t *testing.T) {
+	t.Parallel()
+
 	rnd := rand.New(rand.NewSource(13))
 
 	for _, dictCap := range []int{MinDictCap, 8192, 16384, 1 << 16} {

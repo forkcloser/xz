@@ -12,6 +12,8 @@ import (
 )
 
 func TestReader(t *testing.T) {
+	t.Parallel()
+
 	lr := io.LimitReader(NewReader(rand.NewSource(13)), 195)
 	pretty := NewGroupReader(lr)
 
@@ -26,6 +28,8 @@ func TestReader(t *testing.T) {
 }
 
 func TestComap(t *testing.T) {
+	t.Parallel()
+
 	prs := cmap["TH"]
 	for _, p := range prs[3:6] {
 		t.Logf("%v", p)

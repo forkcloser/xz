@@ -16,6 +16,8 @@ import (
 )
 
 func TestWriter(t *testing.T) {
+	t.Parallel()
+
 	const text = "The quick brown fox jumps over the lazy dog."
 
 	var buf bytes.Buffer
@@ -56,6 +58,8 @@ func TestWriter(t *testing.T) {
 }
 
 func TestIssue12(t *testing.T) {
+	t.Parallel()
+
 	var buf bytes.Buffer
 
 	w, err := NewWriter(&buf)
@@ -117,6 +121,8 @@ func Example() {
 }
 
 func TestWriter2(t *testing.T) {
+	t.Parallel()
+
 	const txtlen = 1023
 
 	var buf bytes.Buffer
@@ -168,6 +174,8 @@ func TestWriter2(t *testing.T) {
 }
 
 func TestWriterNoneCheck(t *testing.T) {
+	t.Parallel()
+
 	const txtlen = 1023
 
 	var buf bytes.Buffer

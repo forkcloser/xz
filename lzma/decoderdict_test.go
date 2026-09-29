@@ -9,6 +9,8 @@ import (
 )
 
 func TestNewDecoderDict(t *testing.T) {
+	t.Parallel()
+
 	if _, err := newDecoderDict(0); err == nil {
 		t.Fatalf("no error for zero dictionary capacity")
 	}

@@ -35,6 +35,8 @@ func (f *failingWriter) Write(p []byte) (int, error) {
 // never closed — and Close went on to write an index over a block that was
 // never finished. The first error is now the only one the writer reports.
 func TestWriterErrorIsSticky(t *testing.T) {
+	t.Parallel()
+
 	ioErr := errors.New("disk on fire")
 	// Stream header and first block header are the first two writes; the
 	// first block's data is the third.
@@ -70,6 +72,8 @@ func TestWriterErrorIsSticky(t *testing.T) {
 // inside the lzma package — a library aborting the process because the disk
 // hiccupped once.
 func TestWriterTransientErrorDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
 	ioErr := errors.New("transient")
 	// Header, block header, then the first chunk flush fails; everything
 	// after would succeed if attempted.

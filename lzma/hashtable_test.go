@@ -10,6 +10,8 @@ import (
 )
 
 func TestHashTable(t *testing.T) {
+	t.Parallel()
+
 	ht, err := newHashTable(32, 2)
 	if err != nil {
 		t.Fatalf("newHashTable: error %s", err)

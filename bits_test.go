@@ -11,6 +11,8 @@ import (
 )
 
 func TestUvarint(t *testing.T) {
+	t.Parallel()
+
 	// 1<<63-1 is the largest value the xz variable-length integer encoding
 	// can express, and it takes all nine permitted bytes.
 	tests := []uint64{0, 0x80, 0x100, 0xffffffff, 0x100000000, 1<<63 - 1}
@@ -42,6 +44,8 @@ func TestUvarint(t *testing.T) {
 }
 
 func TestUvarIntCVE_2020_16845(t *testing.T) {
+	t.Parallel()
+
 	a := []byte{
 		0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87,
 		0x88, 0x89, 0x8a, 0x8b,

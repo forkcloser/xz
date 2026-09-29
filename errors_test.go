@@ -23,6 +23,8 @@ func (e errFailingReaderAt) ReadAt(p []byte, off int64) (int, error) {
 // deciding whether to reject input or retry a transfer must be able to tell a
 // malformed file from a failed read without matching message text.
 func TestErrCorruptDistinguishesFromIO(t *testing.T) {
+	t.Parallel()
+
 	// A malformed file.
 	bad := hostileStream([]byte{0, 0, 0, 0},
 		[]hostileRecord{{unpaddedSize: 1, uncompressedSize: 1 << 60}}, -1)
@@ -52,6 +54,8 @@ func TestErrCorruptDistinguishesFromIO(t *testing.T) {
 // TestErrClosedMatchesSentinel covers the reader and the writer, whose closed
 // errors used to be unexported values with nothing in common.
 func TestErrClosedMatchesSentinel(t *testing.T) {
+	t.Parallel()
+
 	data := parallelTestData(1 << 14)
 	xz := compressMultiBlock(t, data, 4<<10)
 
@@ -88,6 +92,8 @@ func TestErrClosedMatchesSentinel(t *testing.T) {
 // reports io.EOF for an ordinary reader, so a drained reader must report
 // success rather than making callers special-case EOF.
 func TestWriteToOnExhaustedReader(t *testing.T) {
+	t.Parallel()
+
 	data := parallelTestData(1 << 15)
 	xz := compressMultiBlock(t, data, 4<<10)
 
@@ -135,6 +141,8 @@ func (w *stuckWriter) Write(p []byte) (int, error) {
 }
 
 func TestWriteToGivesUpOnStuckWriter(t *testing.T) {
+	t.Parallel()
+
 	data := parallelTestData(1 << 15)
 	xz := compressMultiBlock(t, data, 4<<10)
 
@@ -160,6 +168,8 @@ func TestWriteToGivesUpOnStuckWriter(t *testing.T) {
 // would make this package disagree with the reference decoder about what a
 // file contains.
 func TestNonCanonicalUvarintRejected(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name string
 		enc  []byte
@@ -194,6 +204,8 @@ func TestNonCanonicalUvarintRejected(t *testing.T) {
 // something unusable between construction and the first read. It used to leave
 // Read waiting on blocks that nothing was decoding.
 func TestZeroWorkersStillDecodes(t *testing.T) {
+	t.Parallel()
+
 	data := parallelTestData(1 << 16)
 	xz := compressMultiBlock(t, data, 8<<10)
 

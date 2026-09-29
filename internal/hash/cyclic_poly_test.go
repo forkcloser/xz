@@ -7,6 +7,8 @@ package hash
 import "testing"
 
 func TestCyclicPolySimple(t *testing.T) {
+	t.Parallel()
+
 	p := []byte("abcde")
 	r := NewCyclicPoly(4)
 

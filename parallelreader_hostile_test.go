@@ -139,6 +139,8 @@ func readAllParallel(t *testing.T, file []byte, workers int) error {
 // goroutine, so an unvalidated value used to abort the process with
 // "makeslice: len out of range" — unrecoverably, since the caller does not own
 // that goroutine.
+//
+//nolint:paralleltest // measures the process's TotalAlloc against a budget; a parallel test's allocations would count against it
 func TestParallelReaderHostileUncompressedSize(t *testing.T) {
 	for _, size := range []uint64{1 << 40, 1 << 49, 1 << 62, 1<<63 - 1} {
 		file := hostileStream([]byte{0, 0, 0, 0},
@@ -162,6 +164,8 @@ func TestParallelReaderHostileUncompressedSize(t *testing.T) {
 // records than it contains. The parallel reader parses the index before the
 // blocks and so cannot cross-check the count, which used to leave the declared
 // number feeding make([]record, n) directly: a 40-byte file reserved 16 TiB.
+//
+//nolint:paralleltest // measures the process's TotalAlloc against a budget; a parallel test's allocations would count against it
 func TestParallelReaderHostileRecordCount(t *testing.T) {
 	for _, count := range []int64{1 << 20, 1 << 40, 1 << 45, 1<<62 - 1} {
 		file := hostileStream([]byte{0, 0, 0, 0},
@@ -185,6 +189,8 @@ func TestParallelReaderHostileRecordCount(t *testing.T) {
 // sum past MaxInt64. The sum feeds the position of the stream header, so
 // wrapping it negative places the header at or after the footer the walk
 // started from and the backwards walk stops making progress.
+//
+//nolint:paralleltest // measures the process's TotalAlloc against a budget; a parallel test's allocations would count against it
 func TestParallelReaderIndexSizeOverflow(t *testing.T) {
 	file := hostileStream([]byte{0, 0, 0, 0}, []hostileRecord{
 		{unpaddedSize: 1<<63 - 1, uncompressedSize: 0},
@@ -219,6 +225,8 @@ var loopFile = []byte{
 // The construction is fiddly enough that it is worth keeping the exact bytes
 // rather than re-deriving them.
 func TestParallelReaderNoHangOnLoopFile(t *testing.T) {
+	t.Parallel()
+
 	done := make(chan error, 1)
 
 	go func() {
@@ -244,6 +252,8 @@ func TestParallelReaderNoHangOnLoopFile(t *testing.T) {
 // tight that it rejects real files: a normally compressed multi-block stream
 // must still parse and decode.
 func TestParallelReaderPlausibleSizeStillDecodes(t *testing.T) {
+	t.Parallel()
+
 	data := parallelTestData(1 << 18)
 	xz := compressMultiBlock(t, data, 32<<10)
 	testParallelRead(t, xz, data, 4)
@@ -255,6 +265,8 @@ func TestParallelReaderPlausibleSizeStillDecodes(t *testing.T) {
 // 350,000 times the unpadded size, so an 8 KiB block may declare gigabytes;
 // the decode buffer used to be sized from that declaration before anything
 // validated it, ~38,000-fold amplification from one small file.
+//
+//nolint:paralleltest // measures the process's TotalAlloc against a budget; a parallel test's allocations would count against it
 func TestParallelReaderHostileSizeWithinBound(t *testing.T) {
 	blockArea := make([]byte, 8192)
 	file := hostileStream(blockArea,
@@ -272,6 +284,8 @@ func TestParallelReaderHostileSizeWithinBound(t *testing.T) {
 // block, so the decode actually runs: the block decodes fine but delivers far
 // less than the index declares. The buffer must grow with the decoded data
 // rather than with the declaration, and the mismatch must surface as an error.
+//
+//nolint:paralleltest // measures the process's TotalAlloc against a budget; a parallel test's allocations would count against it
 func TestParallelReaderHostileSizeRealBlock(t *testing.T) {
 	data := parallelTestData(32 << 10)
 
@@ -326,6 +340,8 @@ func TestParallelReaderHostileSizeRealBlock(t *testing.T) {
 // attacker sizes freely. A block cannot occupy fewer than minBlockSize bytes,
 // so the stream itself bounds the count, and that bound is applied before any
 // record is read.
+//
+//nolint:paralleltest // measures the process's TotalAlloc against a budget; a parallel test's allocations would count against it
 func TestParallelReaderHostileRecordCountIsBoundedEarly(t *testing.T) {
 	recs := make([]hostileRecord, 100000)
 	for i := range recs {

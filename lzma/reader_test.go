@@ -17,6 +17,8 @@ import (
 )
 
 func TestNewReader(t *testing.T) {
+	t.Parallel()
+
 	f, err := os.Open("examples/a.lzma")
 	if err != nil {
 		t.Fatalf("open examples/a.lzma: %s", err)
@@ -86,12 +88,16 @@ func testDecodeFile(t *testing.T, filename string, orig []byte) {
 }
 
 func TestReaderSimple(t *testing.T) {
+	t.Parallel()
+
 	// DebugOn(os.Stderr)
 	// defer DebugOff()
 	testDecodeFile(t, "a.lzma", readOrigFile(t))
 }
 
 func TestReaderAll(t *testing.T) {
+	t.Parallel()
+
 	dirname := "examples"
 
 	dir, err := os.Open(dirname)
@@ -199,6 +205,8 @@ func (w *wrapTest) testFile(t *testing.T, filename string, orig []byte) {
 }
 
 func TestReaderWrap(t *testing.T) {
+	t.Parallel()
+
 	tests := [...]wrapTest{
 		{"DataErrReader", iotest.DataErrReader},
 		{"HalfReader", iotest.HalfReader},
@@ -213,6 +221,8 @@ func TestReaderWrap(t *testing.T) {
 }
 
 func TestReaderBadFiles(t *testing.T) {
+	t.Parallel()
+
 	dirname := "examples"
 
 	dir, err := os.Open(dirname)
@@ -322,6 +332,8 @@ func newCodeReader(r io.Reader) *io.PipeReader {
 }
 
 func TestReaderErrAgain(t *testing.T) {
+	t.Parallel()
+
 	lengths := []int64{0, 128, 1024, 4095, 4096, 4097, 8191, 8192, 8193}
 	buf := make([]byte, 128)
 
@@ -371,6 +383,8 @@ func TestReaderErrAgain(t *testing.T) {
 }
 
 func TestMinDictSize(t *testing.T) {
+	t.Parallel()
+
 	const file = "examples/a.txt"
 
 	uncompressed, err := os.ReadFile(file)
@@ -419,6 +433,8 @@ func TestMinDictSize(t *testing.T) {
 }
 
 func TestZeroPrefixIssue(t *testing.T) {
+	t.Parallel()
+
 	files := []string{
 		"examples/a.lzma",
 		"examples/a_lp1_lc2_pb1.lzma",
@@ -431,6 +447,8 @@ func TestZeroPrefixIssue(t *testing.T) {
 
 	for _, tc := range files {
 		t.Run(tc, func(t *testing.T) {
+			t.Parallel()
+
 			f, err := os.Open(tc)
 			if err != nil {
 				t.Fatalf("Open(%q) error %s", tc, err)

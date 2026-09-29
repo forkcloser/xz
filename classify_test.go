@@ -63,6 +63,8 @@ func checkClassified(t *testing.T, reader string, i int, mask byte, err error) {
 // a multi-block file, with two different masks, and requires each reader to
 // either return the right data or an error a caller can act on.
 func TestCorruptionIsClassified(t *testing.T) {
+	t.Parallel()
+
 	single, singleWant := singleBlockFile(t)
 	multi := wellFormed(t)
 	multiWant := parallelTestData(4096)
@@ -115,6 +117,8 @@ func TestCorruptionIsClassified(t *testing.T) {
 // sentinel without hiding the lzma one or the decoder's message, so a caller
 // who wants the detail still gets it.
 func TestPayloadErrorsKeepTheirChain(t *testing.T) {
+	t.Parallel()
+
 	file, _ := singleBlockFile(t)
 	// The first LZMA2 chunk header byte follows the 12-byte stream header
 	// and the 12-byte block header the writer emits for LZMA2 without
@@ -166,6 +170,8 @@ func (e *errAfterReader) Read(p []byte) (int, error) {
 // file" from "retry the transport" would have rejected a good file on a bad
 // connection.
 func TestSingleStreamReportsIOErrorAsIs(t *testing.T) {
+	t.Parallel()
+
 	file, want := singleBlockFile(t)
 	ioErr := errors.New("disk on fire")
 
