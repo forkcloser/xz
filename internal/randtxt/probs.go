@@ -164,6 +164,7 @@ func (c comap) trigram(g2 string, p float64) string {
 	return prs[i].s
 }
 
+//nolint:gochecknoglobals // derived from the trigram model once, read only
 var (
 	// CDF for normal probabilities.
 	pcdf = pCDFOfLM(englm3)

@@ -72,6 +72,8 @@ func New(out io.Writer, prefix string, flag int) *Logger {
 }
 
 // std is the standard logger used by the package scope functions.
+//
+//nolint:gochecknoglobals // the logger behind the package functions, as in package log
 var std = New(os.Stderr, "", Lstdflags)
 
 // itoa converts the integer to ASCII. A negative widths will avoid

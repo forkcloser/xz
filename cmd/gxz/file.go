@@ -63,9 +63,13 @@ type format struct {
 
 // dictCapExps maps preset values to exponent for dictionary capacity
 // sizes.
+//
+//nolint:gochecknoglobals // the preset table, read only
 var lzmaDictCapExps = []uint{18, 20, 21, 22, 22, 23, 23, 24, 25, 26}
 
 // formats contains the formats supported by gxz.
+//
+//nolint:gochecknoglobals // the formats gxz knows, read only
 var formats = map[string]*format{
 	"lzma": {
 		newCompressor: func(w io.Writer, opts *options,

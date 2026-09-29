@@ -57,6 +57,8 @@ func (r *CyclicPoly) RollByte(x byte) uint64 {
 }
 
 // Stores the hash for the individual bytes.
+//
+//nolint:gochecknoglobals // the byte values the hash is defined by, read only
 var hash = [256]uint64{
 	0x2e4fc3f904065142, 0xc790984cfbc99527,
 	0x879f95eb8c62f187, 0x3b61be86b5021ef2,

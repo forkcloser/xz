@@ -49,6 +49,8 @@ var (
 // CommandLine is the default set of command-line flags parsed from
 // os.Args. The top-level functions such as BoolVarP, Args, etc. are
 // wrappers for the methods of command line.
+//
+//nolint:gochecknoglobals // package flag's CommandLine, which this package mirrors
 var CommandLine = NewFlagSet(os.Args[0], ExitOnError)
 
 // ErrorHandling defines how flag parsing errors are handled.
@@ -233,6 +235,8 @@ func defaultUsage(f *FlagSet) {
 }
 
 // Usage prints the default usage message.
+//
+//nolint:gochecknoglobals // package flag's Usage, which this package mirrors and callers replace
 var Usage = func() {
 	fmt.Fprintf(CommandLine.out(), "Usage of %s:\n", os.Args[0])
 	PrintDefaults()
