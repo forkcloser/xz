@@ -31,6 +31,10 @@ func TestComap(t *testing.T) {
 	t.Parallel()
 
 	prs := cmap["TH"]
+	if len(prs) < 6 {
+		t.Fatalf("%d trigrams with prefix TH; want at least 6", len(prs))
+	}
+
 	for _, p := range prs[3:6] {
 		t.Logf("%v", p)
 	}
