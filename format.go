@@ -156,7 +156,7 @@ func (h *header) UnmarshalBinary(data []byte) error {
 	crc := crc32.NewIEEE()
 	crc.Write(data[6:8])
 
-	if uint32LE(data[8:]) != crc.Sum32() {
+	if binary.LittleEndian.Uint32(data[8:]) != crc.Sum32() {
 		return corruptf("xz: invalid checksum for file header")
 	}
 
@@ -187,7 +187,7 @@ func (h *header) MarshalBinary() (data []byte, err error) {
 
 	crc := crc32.NewIEEE()
 	crc.Write(data[6:8])
-	putUint32LE(data[8:], crc.Sum32())
+	binary.LittleEndian.PutUint32(data[8:], crc.Sum32())
 
 	return data, nil
 }
@@ -236,7 +236,7 @@ func (f *footer) MarshalBinary() (data []byte, err error) {
 
 	// backward size (index size)
 	s := (f.indexSize / 4) - 1
-	putUint32LE(data[4:], uint32(s))
+	binary.LittleEndian.PutUint32(data[4:], uint32(s))
 	// flags
 	data[9] = f.flags
 	// footer magic
@@ -245,7 +245,7 @@ func (f *footer) MarshalBinary() (data []byte, err error) {
 	// CRC-32
 	crc := crc32.NewIEEE()
 	crc.Write(data[4:10])
-	putUint32LE(data, crc.Sum32())
+	binary.LittleEndian.PutUint32(data, crc.Sum32())
 
 	return data, nil
 }
@@ -266,13 +266,13 @@ func (f *footer) UnmarshalBinary(data []byte) error {
 	crc := crc32.NewIEEE()
 	crc.Write(data[4:10])
 
-	if uint32LE(data) != crc.Sum32() {
+	if binary.LittleEndian.Uint32(data) != crc.Sum32() {
 		return corruptf("xz: footer checksum error")
 	}
 
 	var g footer
 	// backward size (index size)
-	g.indexSize = (int64(uint32LE(data[4:])) + 1) * 4
+	g.indexSize = (int64(binary.LittleEndian.Uint32(data[4:])) + 1) * 4
 
 	// flags
 	if data[8] != 0 {
@@ -426,7 +426,7 @@ func (h *blockHeader) UnmarshalBinary(data []byte) error {
 	crc := crc32.NewIEEE()
 	crc.Write(data[:n])
 
-	if crc.Sum32() != uint32LE(data[n:]) {
+	if crc.Sum32() != binary.LittleEndian.Uint32(data[n:]) {
 		return corruptf("xz: checksum error for block header")
 	}
 
@@ -556,7 +556,7 @@ func (h *blockHeader) MarshalBinary() (data []byte, err error) {
 
 	crc := crc32.NewIEEE()
 	crc.Write(data[:len(data)-4])
-	putUint32LE(data[len(data)-4:], crc.Sum32())
+	binary.LittleEndian.PutUint32(data[len(data)-4:], crc.Sum32())
 
 	return data, nil
 }
@@ -735,7 +735,7 @@ func writeIndex(w io.Writer, index []record) (n int64, err error) {
 	}
 
 	// crc32 checksum
-	putUint32LE(p, crc.Sum32())
+	binary.LittleEndian.PutUint32(p, crc.Sum32())
 	k, err = w.Write(p[:4])
 	n += int64(k)
 
@@ -833,7 +833,7 @@ func readIndexBody(r io.Reader, expectedRecordLen, maxRecords int) (records []re
 		return records, n, err
 	}
 
-	if uint32LE(p) != s {
+	if binary.LittleEndian.Uint32(p) != s {
 		return nil, n, corruptf("xz: wrong checksum for index")
 	}
 

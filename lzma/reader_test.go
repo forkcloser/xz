@@ -7,6 +7,7 @@ package lzma //nolint:testpackage // white-box: tests the unexported decoder int
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"io"
 	"log"
@@ -413,7 +414,7 @@ func TestMinDictSize(t *testing.T) {
 	}
 
 	compressed := buf.Bytes()
-	putUint32LE(compressed[1:5], 0)
+	binary.LittleEndian.PutUint32(compressed[1:5], 0)
 
 	z := bytes.NewReader(compressed)
 

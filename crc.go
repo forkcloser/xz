@@ -5,6 +5,7 @@
 package xz
 
 import (
+	"encoding/binary"
 	"hash"
 	"hash/crc32"
 	"hash/crc64"
@@ -19,7 +20,7 @@ type crc32Hash struct {
 // Sum returns the crc32 value as little endian.
 func (h crc32Hash) Sum(b []byte) []byte {
 	var p [4]byte
-	putUint32LE(p[:], h.Sum32())
+	binary.LittleEndian.PutUint32(p[:], h.Sum32())
 
 	return append(b, p[:]...)
 }
@@ -39,7 +40,7 @@ type crc64Hash struct {
 // Sum returns the CRC-64 value in little-endian encoding.
 func (h crc64Hash) Sum(b []byte) []byte {
 	var p [8]byte
-	putUint64LE(p[:], h.Sum64())
+	binary.LittleEndian.PutUint64(p[:], h.Sum64())
 
 	return append(b, p[:]...)
 }

@@ -5,6 +5,7 @@
 package lzma
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -180,7 +181,7 @@ func (h *chunkHeader) UnmarshalBinary(data []byte) error {
 		return nil
 	}
 
-	h.uncompressed = uint32(uint16BE(data[1:3]))
+	h.uncompressed = uint32(binary.BigEndian.Uint16(data[1:3]))
 
 	if c <= cU {
 		return nil
@@ -188,7 +189,7 @@ func (h *chunkHeader) UnmarshalBinary(data []byte) error {
 
 	h.uncompressed |= uint32(data[0]&^hLRND) << 16
 
-	h.compressed = uint16BE(data[3:5])
+	h.compressed = binary.BigEndian.Uint16(data[3:5])
 
 	if c <= cLR {
 		return nil
@@ -229,7 +230,7 @@ func (h *chunkHeader) MarshalBinary() (data []byte, err error) {
 		data[0] = hLRND
 	}
 
-	putUint16BE(data[1:3], uint16(h.uncompressed))
+	binary.BigEndian.PutUint16(data[1:3], uint16(h.uncompressed))
 
 	if h.ctype <= cU {
 		return data, nil
@@ -237,7 +238,7 @@ func (h *chunkHeader) MarshalBinary() (data []byte, err error) {
 
 	data[0] |= byte(h.uncompressed>>16) &^ hLRND
 
-	putUint16BE(data[3:5], h.compressed)
+	binary.BigEndian.PutUint16(data[3:5], h.compressed)
 
 	if h.ctype <= cLR {
 		return data, nil
@@ -268,19 +269,6 @@ func readChunkHeader(r io.Reader, p []byte, h *chunkHeader) (err error) {
 	}
 
 	return h.UnmarshalBinary(p)
-}
-
-// uint16BE converts a big-endian uint16 representation to an uint16
-// value.
-func uint16BE(p []byte) uint16 {
-	return uint16(p[0])<<8 | uint16(p[1])
-}
-
-// putUint16BE puts the big-endian uint16 presentation into the given
-// slice.
-func putUint16BE(p []byte, x uint16) {
-	p[0] = byte(x >> 8)
-	p[1] = byte(x)
 }
 
 // chunkState is used to manage the state of the chunks.
