@@ -27,6 +27,8 @@ var (
 
 // WriterConfig describes the parameters for an xz writer. The zero value
 // selects the defaults given for each field.
+//
+//nolint:recvcheck // NewWriter copies the config, so it works on a literal; Verify and fill take the pointer
 type WriterConfig struct {
 	// Properties are the LZMA literal-context, literal-position and
 	// position bits of the encoder (default: LC 3, LP 0, PB 2, which is what

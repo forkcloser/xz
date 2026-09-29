@@ -36,6 +36,8 @@ var (
 )
 
 // ReaderConfig defines the parameters for the xz reader.
+//
+//nolint:recvcheck // NewReader copies the config, so it works on a literal; Verify and fill take the pointer
 type ReaderConfig struct {
 	// DictCap is the smallest dictionary the reader will use. A block whose
 	// header asks for more gets what it asks for, so this raises the floor

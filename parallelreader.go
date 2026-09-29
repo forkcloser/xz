@@ -25,6 +25,8 @@ var (
 // ParallelReaderConfig defines the parameters for the parallel xz
 // reader. Workers is the number of blocks decoded concurrently; values
 // below 1 select runtime.GOMAXPROCS(0).
+//
+//nolint:recvcheck // NewParallelReader copies the config, so it works on a literal; Verify takes the pointer
 type ParallelReaderConfig struct {
 	DictCap int
 	Workers int

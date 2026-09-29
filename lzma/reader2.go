@@ -17,6 +17,8 @@ var (
 )
 
 // Reader2Config stores the parameters for the LZMA2 reader.
+//
+//nolint:recvcheck // NewReader2 copies the config, so it works on a literal; Verify and fill take the pointer
 type Reader2Config struct {
 	DictCap int
 }
