@@ -48,7 +48,8 @@ func (r *CyclicPoly) RollByte(x byte) uint64 {
 		// r.i is always below n here, so advancing and wrapping on equality
 		// is the same as taking the remainder — without the hardware divide
 		// that a non-constant modulus costs on every input byte.
-		if r.i++; r.i == n {
+		r.i++
+		if r.i == n {
 			r.i = 0
 		}
 	}
