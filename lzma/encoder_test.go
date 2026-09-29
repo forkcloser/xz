@@ -14,7 +14,7 @@ import (
 	"github.com/forkcloser/xz/internal/randtxt"
 )
 
-var testString = `LZMA decoder test example
+const testString = `LZMA decoder test example
 =========================
 ! LZMA ! Decoder ! TEST !
 =========================

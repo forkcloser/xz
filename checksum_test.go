@@ -17,15 +17,20 @@ import (
 // None-checked file. newCRC32 had no coverage at all, which means the CRC-32
 // path — the one the reference tool uses by default — was never run.
 
-var checkTypes = []struct {
+// checkType is one of the integrity checks xz defines.
+type checkType struct {
 	name  string
 	flags byte
 	size  int
-}{
-	{"None", None, 0},
-	{"CRC32", CRC32, 4},
-	{"CRC64", CRC64, 8},
-	{"SHA256", SHA256, 32},
+}
+
+func checkTypes() []checkType {
+	return []checkType{
+		{"None", None, 0},
+		{"CRC32", CRC32, 4},
+		{"CRC64", CRC64, 8},
+		{"SHA256", SHA256, 32},
+	}
 }
 
 // writerConfigFor builds a config that actually selects the given check.
@@ -92,7 +97,7 @@ func TestCheckTypesRoundTrip(t *testing.T) {
 
 	data := parallelTestData(1 << 16)
 
-	for _, ct := range checkTypes {
+	for _, ct := range checkTypes() {
 		t.Run(ct.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -156,7 +161,7 @@ func TestCheckTypesDetectCorruption(t *testing.T) {
 
 	data := parallelTestData(1 << 15)
 
-	for _, ct := range checkTypes {
+	for _, ct := range checkTypes() {
 		if ct.flags == None {
 			continue // nothing to detect with
 		}
@@ -231,7 +236,7 @@ func TestCheckTypesAgainstXZ(t *testing.T) {
 
 	data := parallelTestData(1 << 16)
 
-	for _, ct := range checkTypes {
+	for _, ct := range checkTypes() {
 		t.Run(ct.name, func(t *testing.T) {
 			t.Parallel()
 
