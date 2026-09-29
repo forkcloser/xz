@@ -94,14 +94,15 @@ func hostileStream(blockArea []byte, recs []hostileRecord, recCount int64) []byt
 // gigabytes to terabytes.
 const hostileAllocBudget = 8 << 20
 
-// readAllParallel runs a full parse-and-decode cycle and returns the error. It
-// fails the test if handling the file allocated more than the budget, which is
-// the property these fixtures exist to protect: rejecting the file is not
-// enough if we blow up the heap on the way to the error.
+// readAllParallel runs a full parse-and-decode cycle with four workers and
+// returns the error. It fails the test if handling the file allocated more
+// than the budget, which is the property these fixtures exist to protect:
+// rejecting the file is not enough if we blow up the heap on the way to the
+// error.
 //
 // Reaching this function at all means no panic escaped a worker goroutine,
 // because such a panic aborts the whole test binary.
-func readAllParallel(t *testing.T, file []byte, workers int) error {
+func readAllParallel(t *testing.T, file []byte) error {
 	t.Helper()
 
 	var before, after runtime.MemStats
@@ -110,7 +111,7 @@ func readAllParallel(t *testing.T, file []byte, workers int) error {
 	runtime.ReadMemStats(&before)
 
 	err := func() error {
-		r, err := ParallelReaderConfig{Workers: workers}.NewParallelReader(
+		r, err := ParallelReaderConfig{Workers: 4}.NewParallelReader(
 			bytes.NewReader(file), int64(len(file)),
 		)
 		if err != nil {
@@ -150,7 +151,7 @@ func TestParallelReaderHostileUncompressedSize(t *testing.T) {
 				"the amplification obvious", len(file))
 		}
 
-		err := readAllParallel(t, file, 4)
+		err := readAllParallel(t, file)
 		if err == nil {
 			t.Errorf("uncompressed size %d: no error", size)
 			continue
@@ -175,7 +176,7 @@ func TestParallelReaderHostileRecordCount(t *testing.T) {
 				"the amplification obvious", len(file))
 		}
 
-		err := readAllParallel(t, file, 4)
+		err := readAllParallel(t, file)
 		if err == nil {
 			t.Errorf("record count %d: no error", count)
 			continue
@@ -197,7 +198,7 @@ func TestParallelReaderIndexSizeOverflow(t *testing.T) {
 		{unpaddedSize: 1<<63 - 52, uncompressedSize: 0},
 	}, -1)
 
-	err := readAllParallel(t, file, 4)
+	err := readAllParallel(t, file)
 	if err == nil {
 		t.Fatal("overflowing index sizes accepted")
 	}
@@ -272,7 +273,7 @@ func TestParallelReaderHostileSizeWithinBound(t *testing.T) {
 	file := hostileStream(blockArea,
 		[]hostileRecord{{unpaddedSize: 8192, uncompressedSize: 300 << 20}}, -1)
 
-	err := readAllParallel(t, file, 4)
+	err := readAllParallel(t, file)
 	if err == nil {
 		t.Fatal("index claiming 300 MiB for an 8 KiB block: no error")
 	}
@@ -323,7 +324,7 @@ func TestParallelReaderHostileSizeRealBlock(t *testing.T) {
 			uncompressedSize: 300 << 20,
 		}}, -1)
 
-	err = readAllParallel(t, file, 4)
+	err = readAllParallel(t, file)
 	if err == nil {
 		t.Fatal("index claiming 300 MiB for a 32 KiB block: no error")
 	}
