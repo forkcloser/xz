@@ -66,7 +66,7 @@ func TestWriterCycle(t *testing.T) {
 	}
 
 	if !bytes.Equal(orig, decoded) {
-		t.Fatalf("decoded file differs from original")
+		t.Fatal("decoded file differs from original")
 	}
 }
 

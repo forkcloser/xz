@@ -181,7 +181,7 @@ func TestBuffer_Discard(t *testing.T) {
 
 	n, err := buf.Discard(11)
 	if err == nil {
-		t.Fatalf("buf.Discard(11) didn't return error")
+		t.Fatal("buf.Discard(11) didn't return error")
 	}
 
 	if n != 10 {

@@ -75,7 +75,7 @@ func testParallelRead(t *testing.T, xz, want []byte, workers int) {
 	}
 
 	if !bytes.Equal(got, want) {
-		t.Fatalf("decoded data differs from original")
+		t.Fatal("decoded data differs from original")
 	}
 }
 
@@ -139,7 +139,7 @@ func TestParallelReaderWriteTo(t *testing.T) {
 	}
 
 	if n != int64(len(data)) || !bytes.Equal(buf.Bytes(), data) {
-		t.Fatalf("WriteTo result differs from original")
+		t.Fatal("WriteTo result differs from original")
 	}
 }
 
@@ -170,7 +170,7 @@ func TestParallelReaderTruncated(t *testing.T) {
 	// missing footer
 	if _, err := NewParallelReader(bytes.NewReader(xz[:len(xz)-4]),
 		int64(len(xz)-4)); err == nil {
-		t.Fatalf("NewParallelReader on truncated file: no error")
+		t.Fatal("NewParallelReader on truncated file: no error")
 	}
 	// corrupt a byte in the middle of some block
 	bad := append([]byte{}, xz...)
@@ -183,7 +183,7 @@ func TestParallelReaderTruncated(t *testing.T) {
 	}
 
 	if _, err = io.ReadAll(r); err == nil {
-		t.Fatalf("ReadAll on corrupted file: no error")
+		t.Fatal("ReadAll on corrupted file: no error")
 	}
 
 	_ = r.Close()

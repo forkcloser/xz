@@ -103,7 +103,7 @@ func cycle(t *testing.T, n int) {
 	}
 
 	if !bytes.Equal(orig, decoded) {
-		t.Fatalf("decoded file differs from original")
+		t.Fatal("decoded file differs from original")
 	}
 }
 
@@ -183,6 +183,6 @@ func TestEncoderCycle2(t *testing.T) {
 	}
 
 	if got != txt {
-		t.Fatalf("got and txt differ")
+		t.Fatal("got and txt differ")
 	}
 }

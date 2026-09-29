@@ -83,7 +83,7 @@ func testDecodeFile(t *testing.T, filename string, orig []byte) {
 	}
 
 	if !bytes.Equal(orig, decoded) {
-		t.Fatalf("decoded file differs from original")
+		t.Fatal("decoded file differs from original")
 	}
 }
 
@@ -276,7 +276,7 @@ func TestReaderBadFiles(t *testing.T) {
 
 			decoded, err := io.ReadAll(l)
 			if err == nil {
-				t.Errorf("ReadAll: no error")
+				t.Error("ReadAll: no error")
 				t.Logf("%s", decoded)
 
 				return

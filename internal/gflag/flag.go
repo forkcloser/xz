@@ -113,7 +113,7 @@ func lineFlags(name, shorthands, defaultValue string) string {
 
 	if name != "" {
 		if buf.Len() > 0 {
-			fmt.Fprintf(buf, ", ")
+			fmt.Fprint(buf, ", ")
 		}
 
 		fmt.Fprint(buf, "--", name)
@@ -226,7 +226,7 @@ func Parse() {
 // defaultUsage provides the default usage information.
 func defaultUsage(f *FlagSet) {
 	if f.name == "" {
-		fmt.Fprintf(f.out(), "Usage:\n")
+		fmt.Fprint(f.out(), "Usage:\n")
 	} else {
 		fmt.Fprintf(f.out(), "Usage of %s:\n", f.name)
 	}

@@ -143,7 +143,7 @@ func BenchmarkReader(b *testing.B) {
 	}
 
 	if err = w.Close(); err != nil {
-		b.Fatalf("w.Write(data)")
+		b.Fatal("w.Write(data)")
 	}
 
 	data = make([]byte, buf.Len())
