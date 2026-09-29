@@ -134,7 +134,7 @@ func targetName(path string, opts *options) (target string, err error) {
 		panic("path name - not supported")
 	}
 
-	if len(path) == 0 {
+	if path == "" {
 		return "", errEmptyName
 	}
 

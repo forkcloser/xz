@@ -823,7 +823,7 @@ func (f *FlagSet) processExtraFlagArg(flag *Flag, i int) error {
 
 	if i < len(f.args) {
 		arg := f.args[i]
-		if len(arg) == 0 || arg[0] != '-' {
+		if arg == "" || arg[0] != '-' {
 			err := flag.Value.Set(arg)
 			switch flag.HasArg {
 			case RequiredArg:
