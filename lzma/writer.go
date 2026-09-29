@@ -42,29 +42,6 @@ type WriterConfig struct {
 	EOSMarker bool
 }
 
-// fill converts zero-value fields to their explicit default values.
-func (c *WriterConfig) fill() {
-	if c.Properties == nil {
-		c.Properties = &Properties{LC: 3, LP: 0, PB: 2}
-	}
-
-	if c.DictCap == 0 {
-		c.DictCap = 8 * 1024 * 1024
-	}
-
-	if c.BufSize == 0 {
-		c.BufSize = 4096
-	}
-
-	if c.Size > 0 {
-		c.SizeInHeader = true
-	}
-
-	if !c.SizeInHeader {
-		c.EOSMarker = true
-	}
-}
-
 // Verify checks WriterConfig for errors. Verify will replace zero
 // values with default values.
 func (c *WriterConfig) Verify() error {
@@ -105,20 +82,6 @@ func (c *WriterConfig) Verify() error {
 	}
 
 	return nil
-}
-
-// header returns the header structure for this configuration.
-func (c *WriterConfig) header() Header {
-	h := Header{
-		Properties: *c.Properties,
-		DictSize:   uint32(c.DictCap),
-		Size:       -1,
-	}
-	if c.SizeInHeader {
-		h.Size = c.Size
-	}
-
-	return h
 }
 
 // Writer writes an LZMA stream in the classic format.
@@ -178,22 +141,47 @@ func (c WriterConfig) NewWriter(lzma io.Writer) (w *Writer, err error) {
 	return w, nil
 }
 
+// header returns the header structure for this configuration.
+func (c *WriterConfig) header() Header {
+	h := Header{
+		Properties: *c.Properties,
+		DictSize:   uint32(c.DictCap),
+		Size:       -1,
+	}
+	if c.SizeInHeader {
+		h.Size = c.Size
+	}
+
+	return h
+}
+
+// fill converts zero-value fields to their explicit default values.
+func (c *WriterConfig) fill() {
+	if c.Properties == nil {
+		c.Properties = &Properties{LC: 3, LP: 0, PB: 2}
+	}
+
+	if c.DictCap == 0 {
+		c.DictCap = 8 * 1024 * 1024
+	}
+
+	if c.BufSize == 0 {
+		c.BufSize = 4096
+	}
+
+	if c.Size > 0 {
+		c.SizeInHeader = true
+	}
+
+	if !c.SizeInHeader {
+		c.EOSMarker = true
+	}
+}
+
 // NewWriter creates a new LZMA writer using the classic format. The
 // function writes the header to the underlying stream.
 func NewWriter(lzma io.Writer) (w *Writer, err error) {
 	return WriterConfig{}.NewWriter(lzma)
-}
-
-// writeHeader writes the LZMA header into the stream.
-func (w *Writer) writeHeader() error {
-	data, err := w.h.marshalBinary()
-	if err != nil {
-		return err
-	}
-
-	_, err = w.bw.(io.Writer).Write(data)
-
-	return err
 }
 
 // Write puts data into the Writer. When the header declares a size, Write
@@ -251,6 +239,18 @@ func (w *Writer) Close() error {
 	}
 
 	w.err = err
+
+	return err
+}
+
+// writeHeader writes the LZMA header into the stream.
+func (w *Writer) writeHeader() error {
+	data, err := w.h.marshalBinary()
+	if err != nil {
+		return err
+	}
+
+	_, err = w.bw.(io.Writer).Write(data)
 
 	return err
 }

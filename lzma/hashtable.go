@@ -112,59 +112,6 @@ func newHashTable(capacity, wordLen int) (t *hashTable, err error) {
 
 func (t *hashTable) SetDict(d *encoderDict) { t.dict = d }
 
-// buffered returns the number of bytes that are currently hashed.
-func (t *hashTable) buffered() int {
-	n := t.hoff + 1
-	switch {
-	case n <= 0:
-		return 0
-	case n >= int64(len(t.data)):
-		return len(t.data)
-	}
-
-	return int(n)
-}
-
-// addIndex adds n to an index ensuring that is stays inside the
-// circular buffer for the hash chain.
-func (t *hashTable) addIndex(i, n int) int {
-	i += n - len(t.data)
-	if i < 0 {
-		i += len(t.data)
-	}
-
-	return i
-}
-
-// putDelta puts the delta instance at the current front of the circular
-// chain buffer.
-func (t *hashTable) putDelta(delta uint32) {
-	t.data[t.front] = delta
-	t.front = t.addIndex(t.front, 1)
-}
-
-// putEntry puts a new entry into the hash table. If there is already a
-// value stored it is moved into the circular chain buffer.
-func (t *hashTable) putEntry(h uint64, pos int64) {
-	if pos < 0 {
-		return
-	}
-
-	i := h & t.mask
-	old := t.t[i] - 1
-	t.t[i] = pos + 1
-
-	var delta int64
-	if old >= 0 {
-		delta = pos - old
-		if delta > 1<<32-1 || delta > int64(t.buffered()) {
-			delta = 0
-		}
-	}
-
-	t.putDelta(uint32(delta))
-}
-
 // WriteByte converts a single byte into a hash and puts them into the hash
 // table.
 func (t *hashTable) WriteByte(b byte) error {
@@ -185,63 +132,6 @@ func (t *hashTable) Write(p []byte) (n int, err error) {
 	}
 
 	return len(p), nil
-}
-
-// getMatches the matches for a specific hash. The functions returns the
-// number of positions found.
-//
-// TODO: Make a getDistances because that we are actually interested in.
-func (t *hashTable) getMatches(h uint64, positions []int64) (n int) {
-	if t.hoff < 0 || len(positions) == 0 {
-		return 0
-	}
-
-	buffered := t.buffered()
-	tailPos := t.hoff + 1 - int64(buffered)
-
-	rear := t.front - buffered
-	if rear >= 0 {
-		rear -= len(t.data)
-	}
-	// get the slot for the hash
-	pos := t.t[h&t.mask] - 1
-
-	delta := pos - tailPos
-	for {
-		if delta < 0 {
-			return n
-		}
-
-		positions[n] = tailPos + delta
-
-		n++
-		if n >= len(positions) {
-			return n
-		}
-
-		i := rear + int(delta)
-		if i < 0 {
-			i += len(t.data)
-		}
-
-		u := t.data[i]
-		if u == 0 {
-			return n
-		}
-
-		delta -= int64(u)
-	}
-}
-
-// hash computes the rolling hash for the word stored in p. For correct
-// results its length must be equal to t.wordLen.
-func (t *hashTable) hash(p []byte) uint64 {
-	var h uint64
-	for _, b := range p {
-		h = t.hr.RollByte(b)
-	}
-
-	return h
 }
 
 // Matches fills the positions slice with potential matches. The
@@ -338,4 +228,114 @@ func (t *hashTable) NextOp(rep [4]uint32) operation {
 	}
 
 	return m
+}
+
+// hash computes the rolling hash for the word stored in p. For correct
+// results its length must be equal to t.wordLen.
+func (t *hashTable) hash(p []byte) uint64 {
+	var h uint64
+	for _, b := range p {
+		h = t.hr.RollByte(b)
+	}
+
+	return h
+}
+
+// getMatches the matches for a specific hash. The functions returns the
+// number of positions found.
+//
+// TODO: Make a getDistances because that we are actually interested in.
+func (t *hashTable) getMatches(h uint64, positions []int64) (n int) {
+	if t.hoff < 0 || len(positions) == 0 {
+		return 0
+	}
+
+	buffered := t.buffered()
+	tailPos := t.hoff + 1 - int64(buffered)
+
+	rear := t.front - buffered
+	if rear >= 0 {
+		rear -= len(t.data)
+	}
+	// get the slot for the hash
+	pos := t.t[h&t.mask] - 1
+
+	delta := pos - tailPos
+	for {
+		if delta < 0 {
+			return n
+		}
+
+		positions[n] = tailPos + delta
+
+		n++
+		if n >= len(positions) {
+			return n
+		}
+
+		i := rear + int(delta)
+		if i < 0 {
+			i += len(t.data)
+		}
+
+		u := t.data[i]
+		if u == 0 {
+			return n
+		}
+
+		delta -= int64(u)
+	}
+}
+
+// putEntry puts a new entry into the hash table. If there is already a
+// value stored it is moved into the circular chain buffer.
+func (t *hashTable) putEntry(h uint64, pos int64) {
+	if pos < 0 {
+		return
+	}
+
+	i := h & t.mask
+	old := t.t[i] - 1
+	t.t[i] = pos + 1
+
+	var delta int64
+	if old >= 0 {
+		delta = pos - old
+		if delta > 1<<32-1 || delta > int64(t.buffered()) {
+			delta = 0
+		}
+	}
+
+	t.putDelta(uint32(delta))
+}
+
+// putDelta puts the delta instance at the current front of the circular
+// chain buffer.
+func (t *hashTable) putDelta(delta uint32) {
+	t.data[t.front] = delta
+	t.front = t.addIndex(t.front, 1)
+}
+
+// addIndex adds n to an index ensuring that is stays inside the
+// circular buffer for the hash chain.
+func (t *hashTable) addIndex(i, n int) int {
+	i += n - len(t.data)
+	if i < 0 {
+		i += len(t.data)
+	}
+
+	return i
+}
+
+// buffered returns the number of bytes that are currently hashed.
+func (t *hashTable) buffered() int {
+	n := t.hoff + 1
+	switch {
+	case n <= 0:
+		return 0
+	case n >= int64(len(t.data)):
+		return len(t.data)
+	}
+
+	return int(n)
 }

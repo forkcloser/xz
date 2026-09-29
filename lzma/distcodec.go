@@ -29,38 +29,6 @@ type distCodec struct {
 	alignCodec    treeReverseCodec
 }
 
-// deepcopy initializes dc as deep copy of the source.
-func (dc *distCodec) deepcopy(src *distCodec) {
-	if dc == src {
-		return
-	}
-
-	for i := range dc.posSlotCodecs {
-		dc.posSlotCodecs[i].deepcopy(&src.posSlotCodecs[i])
-	}
-
-	for i := range dc.posModel {
-		dc.posModel[i].deepcopy(&src.posModel[i])
-	}
-
-	dc.alignCodec.deepcopy(&src.alignCodec)
-}
-
-// newDistCodec creates a new distance codec.
-func (dc *distCodec) init() {
-	for i := range dc.posSlotCodecs {
-		dc.posSlotCodecs[i].init(posSlotBits)
-	}
-
-	for i := range dc.posModel {
-		posSlot := startPosModel + i
-		bits := (posSlot >> 1) - 1
-		dc.posModel[i].init(bits)
-	}
-
-	dc.alignCodec.init(alignBits)
-}
-
 // lenState converts the value l to a supported lenState value.
 func lenState(l uint32) uint32 {
 	if l >= lenStates {
@@ -107,6 +75,38 @@ func (dc *distCodec) Encode(e *rangeEncoder, dist, l uint32) (err error) {
 	}
 
 	return dc.alignCodec.Encode(dist, e)
+}
+
+// newDistCodec creates a new distance codec.
+func (dc *distCodec) init() {
+	for i := range dc.posSlotCodecs {
+		dc.posSlotCodecs[i].init(posSlotBits)
+	}
+
+	for i := range dc.posModel {
+		posSlot := startPosModel + i
+		bits := (posSlot >> 1) - 1
+		dc.posModel[i].init(bits)
+	}
+
+	dc.alignCodec.init(alignBits)
+}
+
+// deepcopy initializes dc as deep copy of the source.
+func (dc *distCodec) deepcopy(src *distCodec) {
+	if dc == src {
+		return
+	}
+
+	for i := range dc.posSlotCodecs {
+		dc.posSlotCodecs[i].deepcopy(&src.posSlotCodecs[i])
+	}
+
+	for i := range dc.posModel {
+		dc.posModel[i].deepcopy(&src.posModel[i])
+	}
+
+	dc.alignCodec.deepcopy(&src.alignCodec)
 }
 
 // decode decodes the distance offset using the parameter l. The dist value

@@ -25,21 +25,6 @@ type Writer2Config struct {
 	Matcher MatchAlgorithm
 }
 
-// fill replaces zero values with default values.
-func (c *Writer2Config) fill() {
-	if c.Properties == nil {
-		c.Properties = &Properties{LC: 3, LP: 0, PB: 2}
-	}
-
-	if c.DictCap == 0 {
-		c.DictCap = 8 * 1024 * 1024
-	}
-
-	if c.BufSize == 0 {
-		c.BufSize = 4096
-	}
-}
-
 // Verify checks the Writer2Config for correctness. Zero values will be
 // replaced by default values.
 func (c *Writer2Config) Verify() error {
@@ -142,13 +127,19 @@ func (c Writer2Config) NewWriter2(lzma2 io.Writer) (w *Writer2, err error) {
 	return w, nil
 }
 
-// written returns the number of bytes written to the current chunk
-func (w *Writer2) written() int {
-	if w.encoder == nil {
-		return 0
+// fill replaces zero values with default values.
+func (c *Writer2Config) fill() {
+	if c.Properties == nil {
+		c.Properties = &Properties{LC: 3, LP: 0, PB: 2}
 	}
 
-	return int(w.encoder.Compressed()) + w.encoder.dict.Buffered()
+	if c.DictCap == 0 {
+		c.DictCap = 8 * 1024 * 1024
+	}
+
+	if c.BufSize == 0 {
+		c.BufSize = 4096
+	}
 }
 
 // errClosed indicates that the writer is closed.
@@ -198,46 +189,110 @@ func (w *Writer2) Write(p []byte) (n int, err error) {
 	return n, nil
 }
 
-// writeUncompressedChunk writes an uncompressed chunk to the LZMA2
-// stream.
-func (w *Writer2) writeUncompressedChunk() error {
-	u := w.encoder.Compressed()
-	if u <= 0 {
-		return errors.New("lzma: can't write empty uncompressed chunk")
+// Flush writes all buffered data out to the underlying stream. This
+// could result in multiple chunks to be created.
+func (w *Writer2) Flush() (err error) {
+	if w.err != nil {
+		return w.err
 	}
 
-	if u > maxUncompressed {
-		panic("overrun of uncompressed data limit")
+	if w.cstate == stop {
+		return errClosed
+	}
+	defer func() { w.setErr(err) }()
+
+	for w.written() > 0 {
+		if err = w.flushChunk(); err != nil {
+			return err
+		}
 	}
 
-	switch w.ctype {
-	case cLRND:
-		w.ctype = cUD
-	default:
-		w.ctype = cU
-	}
-	// Roll the encoder state back to the chunk start: the decoder never sees
-	// the operations encoded into the discarded compressed form. Copy rather
-	// than alias, so w.start stays a snapshot of its own.
-	w.encoder.state.deepcopy(w.start)
+	return nil
+}
 
-	header := chunkHeader{
-		ctype:        w.ctype,
-		uncompressed: uint32(u - 1),
+// Close terminates the LZMA2 stream with an EOS chunk. After a failed Write
+// or Flush it returns that error and writes nothing.
+func (w *Writer2) Close() (err error) {
+	if w.err != nil {
+		return w.err
 	}
 
-	hdata, err := header.MarshalBinary()
-	if err != nil {
+	if w.cstate == stop {
+		return errClosed
+	}
+	defer func() { w.setErr(err) }()
+
+	if err = w.Flush(); err != nil {
+		return err
+	}
+	// write zero byte EOS chunk
+	if _, err = w.w.Write([]byte{0}); err != nil {
 		return err
 	}
 
-	if _, err = w.w.Write(hdata); err != nil {
+	w.cstate = stop
+
+	return nil
+}
+
+// setErr records the first failure so later calls report it instead of
+// continuing on a writer whose state is unknown. errClosed is a state, not a
+// failure, and is not recorded.
+func (w *Writer2) setErr(err error) {
+	if err != nil && w.err == nil && !errors.Is(err, errClosed) {
+		w.err = err
+	}
+}
+
+// flushChunk terminates the current chunk. The encoder will be reset
+// to support the next chunk.
+func (w *Writer2) flushChunk() error {
+	if w.written() == 0 {
+		return nil
+	}
+
+	var err error
+	if err = w.encoder.Close(); err != nil {
 		return err
 	}
 
-	_, err = w.encoder.dict.CopyN(w.w, int(u))
+	if err = w.writeChunk(); err != nil {
+		return err
+	}
 
-	return err
+	w.buf.Reset()
+
+	w.lbw.N = maxCompressed
+	if err = w.encoder.Reopen(&w.lbw); err != nil {
+		return err
+	}
+
+	if err = w.cstate.next(w.ctype); err != nil {
+		return err
+	}
+
+	w.ctype = w.cstate.defaultChunkType()
+	// Snapshot into the existing state rather than cloning a new one: the
+	// deepcopy methods reuse the probability arrays, so the per-chunk
+	// snapshot costs no allocation.
+	w.start.deepcopy(w.encoder.state)
+
+	return nil
+}
+
+// writes a single chunk to the underlying writer.
+func (w *Writer2) writeChunk() error {
+	u := int(uncompressedHeaderLen + w.encoder.Compressed())
+	c := headerLen(w.ctype) + w.buf.Len()
+	// The uncompressed form replays the chunk's input from the encoder
+	// dictionary. A dictionary smaller than the chunk has already dropped
+	// part of that input, so the compressed form is the only one that can
+	// be written, even when it is larger.
+	if u < c && int64(w.encoder.dict.Len()) >= w.encoder.Compressed() {
+		return w.writeUncompressedChunk()
+	}
+
+	return w.writeCompressedChunk()
 }
 
 // writeCompressedChunk writes a compressed chunk to the underlying
@@ -286,108 +341,53 @@ func (w *Writer2) writeCompressedChunk() error {
 	return err
 }
 
-// writes a single chunk to the underlying writer.
-func (w *Writer2) writeChunk() error {
-	u := int(uncompressedHeaderLen + w.encoder.Compressed())
-	c := headerLen(w.ctype) + w.buf.Len()
-	// The uncompressed form replays the chunk's input from the encoder
-	// dictionary. A dictionary smaller than the chunk has already dropped
-	// part of that input, so the compressed form is the only one that can
-	// be written, even when it is larger.
-	if u < c && int64(w.encoder.dict.Len()) >= w.encoder.Compressed() {
-		return w.writeUncompressedChunk()
+// writeUncompressedChunk writes an uncompressed chunk to the LZMA2
+// stream.
+func (w *Writer2) writeUncompressedChunk() error {
+	u := w.encoder.Compressed()
+	if u <= 0 {
+		return errors.New("lzma: can't write empty uncompressed chunk")
 	}
 
-	return w.writeCompressedChunk()
+	if u > maxUncompressed {
+		panic("overrun of uncompressed data limit")
+	}
+
+	switch w.ctype {
+	case cLRND:
+		w.ctype = cUD
+	default:
+		w.ctype = cU
+	}
+	// Roll the encoder state back to the chunk start: the decoder never sees
+	// the operations encoded into the discarded compressed form. Copy rather
+	// than alias, so w.start stays a snapshot of its own.
+	w.encoder.state.deepcopy(w.start)
+
+	header := chunkHeader{
+		ctype:        w.ctype,
+		uncompressed: uint32(u - 1),
+	}
+
+	hdata, err := header.MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	if _, err = w.w.Write(hdata); err != nil {
+		return err
+	}
+
+	_, err = w.encoder.dict.CopyN(w.w, int(u))
+
+	return err
 }
 
-// flushChunk terminates the current chunk. The encoder will be reset
-// to support the next chunk.
-func (w *Writer2) flushChunk() error {
-	if w.written() == 0 {
-		return nil
+// written returns the number of bytes written to the current chunk
+func (w *Writer2) written() int {
+	if w.encoder == nil {
+		return 0
 	}
 
-	var err error
-	if err = w.encoder.Close(); err != nil {
-		return err
-	}
-
-	if err = w.writeChunk(); err != nil {
-		return err
-	}
-
-	w.buf.Reset()
-
-	w.lbw.N = maxCompressed
-	if err = w.encoder.Reopen(&w.lbw); err != nil {
-		return err
-	}
-
-	if err = w.cstate.next(w.ctype); err != nil {
-		return err
-	}
-
-	w.ctype = w.cstate.defaultChunkType()
-	// Snapshot into the existing state rather than cloning a new one: the
-	// deepcopy methods reuse the probability arrays, so the per-chunk
-	// snapshot costs no allocation.
-	w.start.deepcopy(w.encoder.state)
-
-	return nil
-}
-
-// setErr records the first failure so later calls report it instead of
-// continuing on a writer whose state is unknown. errClosed is a state, not a
-// failure, and is not recorded.
-func (w *Writer2) setErr(err error) {
-	if err != nil && w.err == nil && !errors.Is(err, errClosed) {
-		w.err = err
-	}
-}
-
-// Flush writes all buffered data out to the underlying stream. This
-// could result in multiple chunks to be created.
-func (w *Writer2) Flush() (err error) {
-	if w.err != nil {
-		return w.err
-	}
-
-	if w.cstate == stop {
-		return errClosed
-	}
-	defer func() { w.setErr(err) }()
-
-	for w.written() > 0 {
-		if err = w.flushChunk(); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// Close terminates the LZMA2 stream with an EOS chunk. After a failed Write
-// or Flush it returns that error and writes nothing.
-func (w *Writer2) Close() (err error) {
-	if w.err != nil {
-		return w.err
-	}
-
-	if w.cstate == stop {
-		return errClosed
-	}
-	defer func() { w.setErr(err) }()
-
-	if err = w.Flush(); err != nil {
-		return err
-	}
-	// write zero byte EOS chunk
-	if _, err = w.w.Write([]byte{0}); err != nil {
-		return err
-	}
-
-	w.cstate = stop
-
-	return nil
+	return int(w.encoder.Compressed()) + w.encoder.dict.Buffered()
 }

@@ -28,25 +28,6 @@ func (b *buffer) Cap() int {
 	return len(b.data) - 1
 }
 
-// grow enlarges the buffer to newCap bytes.
-//
-// It may only be called while the buffer has not wrapped yet, that is while
-// every byte ever written still sits at the index it was written to and
-// rear <= front <= Cap(). Under that precondition the move is a plain prefix
-// copy: front, rear and every index derived from them stay valid, so the
-// caller's view of the buffered data and of the history behind it does not
-// change. Growing a wrapped buffer would need to relocate two segments and is
-// not supported.
-func (b *buffer) grow(newCap int) {
-	if newCap <= b.Cap() {
-		return
-	}
-
-	data := make([]byte, newCap+1)
-	copy(data, b.data[:b.front])
-	b.data = data
-}
-
 // Resets the buffer. The front and rear index are set to zero.
 func (b *buffer) Reset() {
 	b.front = 0
@@ -71,19 +52,6 @@ func (b *buffer) Available() int {
 	}
 
 	return delta
-}
-
-// addIndex adds a non-negative integer to the index i and returns the
-// resulting index. The function takes care of wrapping the index as
-// well as potential overflow situations.
-func (b *buffer) addIndex(i, n int) int {
-	// subtraction of len(b.data) prevents overflow
-	i += n - len(b.data)
-	if i < 0 {
-		i += len(b.data)
-	}
-
-	return i
 }
 
 // Read reads bytes from the buffer into p and returns the number of
@@ -176,6 +144,38 @@ func (b *buffer) WriteByte(c byte) error {
 	b.front = b.addIndex(b.front, 1)
 
 	return nil
+}
+
+// addIndex adds a non-negative integer to the index i and returns the
+// resulting index. The function takes care of wrapping the index as
+// well as potential overflow situations.
+func (b *buffer) addIndex(i, n int) int {
+	// subtraction of len(b.data) prevents overflow
+	i += n - len(b.data)
+	if i < 0 {
+		i += len(b.data)
+	}
+
+	return i
+}
+
+// grow enlarges the buffer to newCap bytes.
+//
+// It may only be called while the buffer has not wrapped yet, that is while
+// every byte ever written still sits at the index it was written to and
+// rear <= front <= Cap(). Under that precondition the move is a plain prefix
+// copy: front, rear and every index derived from them stay valid, so the
+// caller's view of the buffered data and of the history behind it does not
+// change. Growing a wrapped buffer would need to relocate two segments and is
+// not supported.
+func (b *buffer) grow(newCap int) {
+	if newCap <= b.Cap() {
+		return
+	}
+
+	data := make([]byte, newCap+1)
+	copy(data, b.data[:b.front])
+	b.data = data
 }
 
 // prefixLen returns the length of the common prefix of a and b.

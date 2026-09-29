@@ -10,14 +10,6 @@ type treeCodec struct {
 	probTree
 }
 
-// init (re)initializes the tree codec for values of the given bit size.
-func (tc *treeCodec) init(bits int) { tc.probTree.init(bits) }
-
-// deepcopy initializes tc as a deep copy of the source.
-func (tc *treeCodec) deepcopy(src *treeCodec) {
-	tc.probTree.deepcopy(&src.probTree)
-}
-
 // Encode uses the range encoder to encode a fixed-bit-size value.
 func (tc *treeCodec) Encode(e *rangeEncoder, v uint32) (err error) {
 	m := uint32(1)
@@ -33,6 +25,14 @@ func (tc *treeCodec) Encode(e *rangeEncoder, v uint32) (err error) {
 
 	return nil
 }
+
+// deepcopy initializes tc as a deep copy of the source.
+func (tc *treeCodec) deepcopy(src *treeCodec) {
+	tc.probTree.deepcopy(&src.probTree)
+}
+
+// init (re)initializes the tree codec for values of the given bit size.
+func (tc *treeCodec) init(bits int) { tc.probTree.init(bits) }
 
 // decode uses the range decoder to decode a fixed-bit-size value. The decoder
 // state range/code is threaded through in registers (see readOp); read errors
@@ -73,16 +73,6 @@ type treeReverseCodec struct {
 	probTree
 }
 
-// deepcopy initializes the treeReverseCodec as a deep copy of the
-// source.
-func (tc *treeReverseCodec) deepcopy(src *treeReverseCodec) {
-	tc.probTree.deepcopy(&src.probTree)
-}
-
-// init (re)initializes the reverse tree codec for values of the given bit
-// size.
-func (tc *treeReverseCodec) init(bits int) { tc.probTree.init(bits) }
-
 // Encode uses range encoder to encode a fixed-bit-size value. The range
 // encoder may cause errors.
 func (tc *treeReverseCodec) Encode(v uint32, e *rangeEncoder) (err error) {
@@ -98,6 +88,16 @@ func (tc *treeReverseCodec) Encode(v uint32, e *rangeEncoder) (err error) {
 	}
 
 	return nil
+}
+
+// init (re)initializes the reverse tree codec for values of the given bit
+// size.
+func (tc *treeReverseCodec) init(bits int) { tc.probTree.init(bits) }
+
+// deepcopy initializes the treeReverseCodec as a deep copy of the
+// source.
+func (tc *treeReverseCodec) deepcopy(src *treeReverseCodec) {
+	tc.probTree.deepcopy(&src.probTree)
 }
 
 // decode uses the range decoder to decode a fixed-bit-size value. It is
@@ -137,23 +137,9 @@ type probTree struct {
 	bits  byte
 }
 
-// deepcopy initializes the probTree value as a deep copy of the source,
-// keeping the existing backing array when it is big enough. The writer
-// snapshots its state once per LZMA2 chunk, and each snapshot copies every
-// tree; allocating them afresh each time made those snapshots the writer's
-// dominant source of allocations.
-func (t *probTree) deepcopy(src *probTree) {
-	if t == src {
-		return
-	}
-
-	if cap(t.probs) < len(src.probs) {
-		t.probs = make([]prob, len(src.probs))
-	}
-
-	t.probs = t.probs[:len(src.probs)]
-	copy(t.probs, src.probs)
-	t.bits = src.bits
+// Bits provides the number of bits for the values to de- or encode.
+func (t *probTree) Bits() int {
+	return int(t.bits)
 }
 
 // init sets the probability tree to its starting state for values of the
@@ -176,7 +162,21 @@ func (t *probTree) init(bits int) {
 	initProbSlice(t.probs)
 }
 
-// Bits provides the number of bits for the values to de- or encode.
-func (t *probTree) Bits() int {
-	return int(t.bits)
+// deepcopy initializes the probTree value as a deep copy of the source,
+// keeping the existing backing array when it is big enough. The writer
+// snapshots its state once per LZMA2 chunk, and each snapshot copies every
+// tree; allocating them afresh each time made those snapshots the writer's
+// dominant source of allocations.
+func (t *probTree) deepcopy(src *probTree) {
+	if t == src {
+		return
+	}
+
+	if cap(t.probs) < len(src.probs) {
+		t.probs = make([]prob, len(src.probs))
+	}
+
+	t.probs = t.probs[:len(src.probs)]
+	copy(t.probs, src.probs)
+	t.bits = src.bits
 }

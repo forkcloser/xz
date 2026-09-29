@@ -18,23 +18,6 @@ const probInit prob = 1 << (probbits - 1)
 // decode single bits.
 type prob uint16
 
-// Dec decreases the probability. The decrease is proportional to the
-// probability value.
-func (p *prob) dec() {
-	*p -= *p >> movebits
-}
-
-// Inc increases the probability. The Increase is proportional to the
-// difference of 1 and the probability value.
-func (p *prob) inc() {
-	*p += ((1 << probbits) - *p) >> movebits
-}
-
-// Computes the new bound for a given range using the probability value.
-func (p prob) bound(r uint32) uint32 {
-	return (r >> probbits) * uint32(p)
-}
-
 // Bits returns 1. One is the number of bits that can be encoded or decoded
 // with a single prob value.
 func (p prob) Bits() int {
@@ -45,4 +28,21 @@ func (p prob) Bits() int {
 // changed.
 func (p *prob) Encode(e *rangeEncoder, v uint32) error {
 	return e.EncodeBit(v, p)
+}
+
+// Computes the new bound for a given range using the probability value.
+func (p prob) bound(r uint32) uint32 {
+	return (r >> probbits) * uint32(p)
+}
+
+// Inc increases the probability. The Increase is proportional to the
+// difference of 1 and the probability value.
+func (p *prob) inc() {
+	*p += ((1 << probbits) - *p) >> movebits
+}
+
+// Dec decreases the probability. The decrease is proportional to the
+// probability value.
+func (p *prob) dec() {
+	*p -= *p >> movebits
 }

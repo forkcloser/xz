@@ -66,18 +66,128 @@ func (d *decoder) Reopen(br io.ByteReader, size int64) error {
 	return nil
 }
 
-// decodeLiteral decodes a single literal from the LZMA stream. The decoder
-// state range/code is threaded through in registers (see readOp).
-func (d *decoder) decodeLiteral(rng, code uint32) (op operation, nrng, ncode uint32) {
-	litState := d.State.litState(d.Dict.byteAt(1), d.Dict.head)
-	match := d.Dict.byteAt(int(d.State.rep[0]) + 1)
-	s, rng, code := d.State.litCodec.decode(d.rd, d.State.state, match, litState, rng, code)
-
-	return litOp(s), rng, code
-}
-
 // errEOS indicates that an EOS marker has been found.
 var errEOS = errors.New("EOS marker found")
+
+// Errors that may be returned while decoding data.
+var (
+	errDataAfterEOS = corruptf("lzma: data after end of stream marker")
+	errSize         = corruptf("lzma: wrong uncompressed data size")
+)
+
+// Read reads data from the buffer. If no more data is available io.EOF is
+// returned.
+func (d *decoder) Read(p []byte) (n int, err error) {
+	var k int
+	for {
+		// Read of decoder dict never returns an error.
+		k, err = d.Dict.Read(p[n:])
+		if err != nil {
+			panic(fmt.Errorf("dictionary read error %w", err))
+		}
+
+		if k == 0 && d.eos {
+			return n, io.EOF
+		}
+
+		n += k
+		if n >= len(p) {
+			return n, nil
+		}
+
+		if err = d.decompress(); err != nil && !errors.Is(err, io.EOF) {
+			return n, err
+		}
+	}
+}
+
+// Decompressed returns the number of bytes decompressed by the decoder.
+func (d *decoder) Decompressed() int64 {
+	return d.Dict.pos() - d.start
+}
+
+// decompress fills the dictionary unless no space for new data is
+// available. If the end of the LZMA stream has been reached io.EOF will
+// be returned.
+func (d *decoder) decompress() error {
+	if d.eos {
+		return io.EOF
+	}
+
+	for d.Dict.Available() >= maxMatchLen {
+		op, err := d.readOp()
+		// The range decoder records input failures as a sticky error
+		// instead of reporting them per byte (the decode loops are free
+		// of error branches). An op decoded from missing input is
+		// garbage, so the read error takes precedence over whatever
+		// readOp returned.
+		if d.rd.err != nil {
+			err = d.rd.err
+		}
+
+		switch {
+		case err == nil:
+		case errors.Is(err, errEOS):
+			d.eos = true
+			if !d.rd.possiblyAtEnd() {
+				return errDataAfterEOS
+			}
+
+			if d.size >= 0 && d.size != d.Decompressed() {
+				return errSize
+			}
+
+			return io.EOF
+		case errors.Is(err, io.EOF):
+			d.eos = true
+			return io.ErrUnexpectedEOF
+		default:
+			return err
+		}
+
+		if err = d.apply(op); err != nil {
+			return err
+		}
+
+		if d.size >= 0 && d.Decompressed() >= d.size {
+			d.eos = true
+			if d.Decompressed() > d.size {
+				return errSize
+			}
+
+			if !d.rd.possiblyAtEnd() {
+				_, err = d.readOp()
+				if d.rd.err != nil {
+					err = d.rd.err
+				}
+
+				switch {
+				case err == nil:
+					return errSize
+				case errors.Is(err, io.EOF):
+					return io.ErrUnexpectedEOF
+				case errors.Is(err, errEOS):
+					break
+				default:
+					return err
+				}
+			}
+
+			return io.EOF
+		}
+	}
+
+	return nil
+}
+
+// apply takes the operation and transforms the decoder dictionary accordingly.
+func (d *decoder) apply(op operation) error {
+	if op.literal {
+		return d.Dict.WriteByte(op.b)
+	}
+
+	return d.Dict.writeMatch(op.distance, op.n)
+}
 
 // readOp decodes the next operation from the compressed stream. It
 // returns the operation. If an explicit end of stream marker is
@@ -255,122 +365,12 @@ func (d *decoder) readOp() (op operation, err error) {
 	return op, nil
 }
 
-// apply takes the operation and transforms the decoder dictionary accordingly.
-func (d *decoder) apply(op operation) error {
-	if op.literal {
-		return d.Dict.WriteByte(op.b)
-	}
+// decodeLiteral decodes a single literal from the LZMA stream. The decoder
+// state range/code is threaded through in registers (see readOp).
+func (d *decoder) decodeLiteral(rng, code uint32) (op operation, nrng, ncode uint32) {
+	litState := d.State.litState(d.Dict.byteAt(1), d.Dict.head)
+	match := d.Dict.byteAt(int(d.State.rep[0]) + 1)
+	s, rng, code := d.State.litCodec.decode(d.rd, d.State.state, match, litState, rng, code)
 
-	return d.Dict.writeMatch(op.distance, op.n)
-}
-
-// decompress fills the dictionary unless no space for new data is
-// available. If the end of the LZMA stream has been reached io.EOF will
-// be returned.
-func (d *decoder) decompress() error {
-	if d.eos {
-		return io.EOF
-	}
-
-	for d.Dict.Available() >= maxMatchLen {
-		op, err := d.readOp()
-		// The range decoder records input failures as a sticky error
-		// instead of reporting them per byte (the decode loops are free
-		// of error branches). An op decoded from missing input is
-		// garbage, so the read error takes precedence over whatever
-		// readOp returned.
-		if d.rd.err != nil {
-			err = d.rd.err
-		}
-
-		switch {
-		case err == nil:
-		case errors.Is(err, errEOS):
-			d.eos = true
-			if !d.rd.possiblyAtEnd() {
-				return errDataAfterEOS
-			}
-
-			if d.size >= 0 && d.size != d.Decompressed() {
-				return errSize
-			}
-
-			return io.EOF
-		case errors.Is(err, io.EOF):
-			d.eos = true
-			return io.ErrUnexpectedEOF
-		default:
-			return err
-		}
-
-		if err = d.apply(op); err != nil {
-			return err
-		}
-
-		if d.size >= 0 && d.Decompressed() >= d.size {
-			d.eos = true
-			if d.Decompressed() > d.size {
-				return errSize
-			}
-
-			if !d.rd.possiblyAtEnd() {
-				_, err = d.readOp()
-				if d.rd.err != nil {
-					err = d.rd.err
-				}
-
-				switch {
-				case err == nil:
-					return errSize
-				case errors.Is(err, io.EOF):
-					return io.ErrUnexpectedEOF
-				case errors.Is(err, errEOS):
-					break
-				default:
-					return err
-				}
-			}
-
-			return io.EOF
-		}
-	}
-
-	return nil
-}
-
-// Errors that may be returned while decoding data.
-var (
-	errDataAfterEOS = corruptf("lzma: data after end of stream marker")
-	errSize         = corruptf("lzma: wrong uncompressed data size")
-)
-
-// Read reads data from the buffer. If no more data is available io.EOF is
-// returned.
-func (d *decoder) Read(p []byte) (n int, err error) {
-	var k int
-	for {
-		// Read of decoder dict never returns an error.
-		k, err = d.Dict.Read(p[n:])
-		if err != nil {
-			panic(fmt.Errorf("dictionary read error %w", err))
-		}
-
-		if k == 0 && d.eos {
-			return n, io.EOF
-		}
-
-		n += k
-		if n >= len(p) {
-			return n, nil
-		}
-
-		if err = d.decompress(); err != nil && !errors.Is(err, io.EOF) {
-			return n, err
-		}
-	}
-}
-
-// Decompressed returns the number of bytes decompressed by the decoder.
-func (d *decoder) Decompressed() int64 {
-	return d.Dict.pos() - d.start
+	return litOp(s), rng, code
 }

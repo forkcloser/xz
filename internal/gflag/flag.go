@@ -170,18 +170,18 @@ type FlagSet struct {
 	preset        bool
 }
 
-// Init initializes a flag set variable.
-func (f *FlagSet) Init(name string, errorHandling ErrorHandling) {
-	f.name = name
-	f.errorHandling = errorHandling
-}
-
 // NewFlagSet creates a new flag set.
 func NewFlagSet(name string, errorHandling ErrorHandling) *FlagSet {
 	f := new(FlagSet)
 	f.Init(name, errorHandling)
 
 	return f
+}
+
+// Init initializes a flag set variable.
+func (f *FlagSet) Init(name string, errorHandling ErrorHandling) {
+	f.name = name
+	f.errorHandling = errorHandling
 }
 
 // Arg returns the argument number i after parsing has been successful.
@@ -214,148 +214,6 @@ func Parse() {
 	_ = CommandLine.Parse(os.Args[1:])
 }
 
-// lookupLongOption looks up a long option flag.
-func (f *FlagSet) lookupLongOption(name string) (flag *Flag, err error) {
-	if len(name) < 2 {
-		f.panicf("%s is not a long option", name)
-	}
-
-	var ok bool
-	if flag, ok = f.formal[name]; !ok {
-		return nil, fmt.Errorf("long option %s is unsupported", name)
-	}
-
-	if flag.Name != name {
-		f.panicf("got %s flag; want %s flag", flag.Name, name)
-	}
-
-	return flag, nil
-}
-
-// lookupShortOption looks a short option up.
-func (f *FlagSet) lookupShortOption(r rune) (flag *Flag, err error) {
-	var ok bool
-
-	name := string([]rune{r})
-	if flag, ok = f.formal[name]; !ok {
-		return nil, fmt.Errorf("short option %s is unsupported", name)
-	}
-
-	if !strings.ContainsRune(flag.Shorthands, r) {
-		f.panicf("flag supports shorthands %q; but doesn't contain %s",
-			flag.Shorthands, name)
-	}
-
-	return flag, nil
-}
-
-// processExtraFlagArg processes a flag with extra arguments not using
-// the form --long-option=arg.
-func (f *FlagSet) processExtraFlagArg(flag *Flag, i int) error {
-	if flag.HasArg == NoArg {
-		// no argument required
-		flag.Value.Update()
-		return nil
-	}
-
-	if i < len(f.args) {
-		arg := f.args[i]
-		if len(arg) == 0 || arg[0] != '-' {
-			err := flag.Value.Set(arg)
-			switch flag.HasArg {
-			case RequiredArg:
-				f.removeArg(i)
-				return err
-			case OptionalArg:
-				if err != nil {
-					// The argument did not parse, so it is not this
-					// flag's: leave it for the next flag and treat this
-					// one as having been given without a value.
-					flag.Value.Update()
-					//nolint:nilerr // not an error: the argument is simply not ours
-					return nil
-				}
-
-				f.removeArg(i)
-
-				return nil
-			}
-		}
-	}
-	// no argument
-	if flag.HasArg == RequiredArg {
-		return errors.New("no argument present")
-	}
-	// flag.HasArg == OptionalArg
-	flag.Value.Update()
-
-	return nil
-}
-
-// removeArg removes the arguments at position i from the args field of
-// the flag set.
-func (f *FlagSet) removeArg(i int) {
-	copy(f.args[i:], f.args[i+1:])
-	f.args = f.args[:len(f.args)-1]
-}
-
-// parseArg parses the argument i.
-func (f *FlagSet) parseArg(i int) (next int, err error) {
-	arg := f.args[i]
-	if len(arg) < 2 || arg[0] != '-' {
-		return i + 1, nil
-	}
-
-	if arg[1] == '-' {
-		// argument starts with --
-		f.removeArg(i)
-
-		if len(arg) == 2 {
-			// argument is --; remove it and ignore all
-			// following arguments
-			return len(f.args), nil
-		}
-
-		arg = arg[2:]
-		flagArg := strings.SplitN(arg, "=", 2)
-
-		flag, err := f.lookupLongOption(flagArg[0])
-		if err != nil {
-			return i, err
-		}
-		// case 1: no equal sign
-		if len(flagArg) == 1 {
-			err = f.processExtraFlagArg(flag, i)
-			return i, err
-		}
-		// case 2: equal sign
-		if flag.HasArg == NoArg {
-			err = fmt.Errorf("option %s doesn't support argument",
-				arg)
-		} else {
-			err = flag.Value.Set(flagArg[1])
-		}
-
-		return i, err
-	}
-	// short options
-	f.removeArg(i)
-
-	arg = arg[1:]
-	for _, r := range arg {
-		flag, err := f.lookupShortOption(r)
-		if err != nil {
-			return i, err
-		}
-
-		if err = f.processExtraFlagArg(flag, i); err != nil {
-			return i, err
-		}
-	}
-
-	return i, nil
-}
-
 // defaultUsage provides the default usage information.
 func defaultUsage(f *FlagSet) {
 	if f.name == "" {
@@ -371,19 +229,6 @@ func defaultUsage(f *FlagSet) {
 var Usage = func() {
 	fmt.Fprintf(CommandLine.out(), "Usage of %s:\n", os.Args[0])
 	PrintDefaults()
-}
-
-// usage provides the usage information for the flag set.
-func (f *FlagSet) usage() {
-	if f.Usage == nil {
-		if f == CommandLine {
-			Usage()
-		} else {
-			defaultUsage(f)
-		}
-	} else {
-		f.Usage()
-	}
 }
 
 // Parse parses the arguments. If an error happens the error is printed
@@ -429,52 +274,9 @@ func PrintDefaults() {
 	CommandLine.PrintDefaults()
 }
 
-// out returns a writer. If the field output has not been set os.Stderr
-// is returned.
-func (f *FlagSet) out() io.Writer {
-	if f.output == nil {
-		return os.Stderr
-	}
-
-	return f.output
-}
-
 // SetOutput sets the default output writer for the flag set.
 func (f *FlagSet) SetOutput(w io.Writer) {
 	f.output = w
-}
-
-// panicf prints a formatted error message and panics.
-func (f *FlagSet) panicf(format string, values ...any) {
-	var msg string
-	if f.name == "" {
-		msg = fmt.Sprintf(format, values...)
-	} else {
-		v := make([]any, 1+len(values))
-		v[0] = f.name
-		copy(v[1:], values)
-		msg = fmt.Sprintf("%s "+format, v...)
-	}
-
-	fmt.Fprintln(f.out(), msg)
-	panic(msg)
-}
-
-// setFormal sets the flag with the given name to the flag parameter.
-func (f *FlagSet) setFormal(name string, flag *Flag) {
-	if name == "" {
-		f.panicf("no support for empty name strings")
-	}
-
-	if _, alreadythere := f.formal[name]; alreadythere {
-		f.panicf("flag redefined: %s", flag.Name)
-	}
-
-	if f.formal == nil {
-		f.formal = make(map[string]*Flag)
-	}
-
-	f.formal[name] = flag
 }
 
 // VarP creates a flag with a long and shorthand options.
@@ -516,15 +318,6 @@ func (f *FlagSet) Var(value Value, name string, hasArg HasArg) {
 	}
 
 	f.VarP(value, name, shorthands, hasArg)
-}
-
-// addLine adds a usage line to the flag set.
-func (f *FlagSet) addLine(l line) {
-	if l.flags == "" {
-		f.panicf("no flags for %q", l.usage)
-	}
-
-	f.lines = append(f.lines, l)
 }
 
 // boolValue represents a bool value in the flag.
@@ -882,4 +675,211 @@ func (f *FlagSet) Preset(start, end, value int, usage string) *int {
 	f.PresetVar(p, start, end, value, usage)
 
 	return p
+}
+
+// addLine adds a usage line to the flag set.
+func (f *FlagSet) addLine(l line) {
+	if l.flags == "" {
+		f.panicf("no flags for %q", l.usage)
+	}
+
+	f.lines = append(f.lines, l)
+}
+
+// setFormal sets the flag with the given name to the flag parameter.
+func (f *FlagSet) setFormal(name string, flag *Flag) {
+	if name == "" {
+		f.panicf("no support for empty name strings")
+	}
+
+	if _, alreadythere := f.formal[name]; alreadythere {
+		f.panicf("flag redefined: %s", flag.Name)
+	}
+
+	if f.formal == nil {
+		f.formal = make(map[string]*Flag)
+	}
+
+	f.formal[name] = flag
+}
+
+// panicf prints a formatted error message and panics.
+func (f *FlagSet) panicf(format string, values ...any) {
+	var msg string
+	if f.name == "" {
+		msg = fmt.Sprintf(format, values...)
+	} else {
+		v := make([]any, 1+len(values))
+		v[0] = f.name
+		copy(v[1:], values)
+		msg = fmt.Sprintf("%s "+format, v...)
+	}
+
+	fmt.Fprintln(f.out(), msg)
+	panic(msg)
+}
+
+// out returns a writer. If the field output has not been set os.Stderr
+// is returned.
+func (f *FlagSet) out() io.Writer {
+	if f.output == nil {
+		return os.Stderr
+	}
+
+	return f.output
+}
+
+// usage provides the usage information for the flag set.
+func (f *FlagSet) usage() {
+	if f.Usage == nil {
+		if f == CommandLine {
+			Usage()
+		} else {
+			defaultUsage(f)
+		}
+	} else {
+		f.Usage()
+	}
+}
+
+// parseArg parses the argument i.
+func (f *FlagSet) parseArg(i int) (next int, err error) {
+	arg := f.args[i]
+	if len(arg) < 2 || arg[0] != '-' {
+		return i + 1, nil
+	}
+
+	if arg[1] == '-' {
+		// argument starts with --
+		f.removeArg(i)
+
+		if len(arg) == 2 {
+			// argument is --; remove it and ignore all
+			// following arguments
+			return len(f.args), nil
+		}
+
+		arg = arg[2:]
+		flagArg := strings.SplitN(arg, "=", 2)
+
+		flag, err := f.lookupLongOption(flagArg[0])
+		if err != nil {
+			return i, err
+		}
+		// case 1: no equal sign
+		if len(flagArg) == 1 {
+			err = f.processExtraFlagArg(flag, i)
+			return i, err
+		}
+		// case 2: equal sign
+		if flag.HasArg == NoArg {
+			err = fmt.Errorf("option %s doesn't support argument",
+				arg)
+		} else {
+			err = flag.Value.Set(flagArg[1])
+		}
+
+		return i, err
+	}
+	// short options
+	f.removeArg(i)
+
+	arg = arg[1:]
+	for _, r := range arg {
+		flag, err := f.lookupShortOption(r)
+		if err != nil {
+			return i, err
+		}
+
+		if err = f.processExtraFlagArg(flag, i); err != nil {
+			return i, err
+		}
+	}
+
+	return i, nil
+}
+
+// removeArg removes the arguments at position i from the args field of
+// the flag set.
+func (f *FlagSet) removeArg(i int) {
+	copy(f.args[i:], f.args[i+1:])
+	f.args = f.args[:len(f.args)-1]
+}
+
+// processExtraFlagArg processes a flag with extra arguments not using
+// the form --long-option=arg.
+func (f *FlagSet) processExtraFlagArg(flag *Flag, i int) error {
+	if flag.HasArg == NoArg {
+		// no argument required
+		flag.Value.Update()
+		return nil
+	}
+
+	if i < len(f.args) {
+		arg := f.args[i]
+		if len(arg) == 0 || arg[0] != '-' {
+			err := flag.Value.Set(arg)
+			switch flag.HasArg {
+			case RequiredArg:
+				f.removeArg(i)
+				return err
+			case OptionalArg:
+				if err != nil {
+					// The argument did not parse, so it is not this
+					// flag's: leave it for the next flag and treat this
+					// one as having been given without a value.
+					flag.Value.Update()
+					//nolint:nilerr // not an error: the argument is simply not ours
+					return nil
+				}
+
+				f.removeArg(i)
+
+				return nil
+			}
+		}
+	}
+	// no argument
+	if flag.HasArg == RequiredArg {
+		return errors.New("no argument present")
+	}
+	// flag.HasArg == OptionalArg
+	flag.Value.Update()
+
+	return nil
+}
+
+// lookupShortOption looks a short option up.
+func (f *FlagSet) lookupShortOption(r rune) (flag *Flag, err error) {
+	var ok bool
+
+	name := string([]rune{r})
+	if flag, ok = f.formal[name]; !ok {
+		return nil, fmt.Errorf("short option %s is unsupported", name)
+	}
+
+	if !strings.ContainsRune(flag.Shorthands, r) {
+		f.panicf("flag supports shorthands %q; but doesn't contain %s",
+			flag.Shorthands, name)
+	}
+
+	return flag, nil
+}
+
+// lookupLongOption looks up a long option flag.
+func (f *FlagSet) lookupLongOption(name string) (flag *Flag, err error) {
+	if len(name) < 2 {
+		f.panicf("%s is not a long option", name)
+	}
+
+	var ok bool
+	if flag, ok = f.formal[name]; !ok {
+		return nil, fmt.Errorf("long option %s is unsupported", name)
+	}
+
+	if flag.Name != name {
+		f.panicf("got %s flag; want %s flag", flag.Name, name)
+	}
+
+	return flag, nil
 }

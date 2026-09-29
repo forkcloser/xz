@@ -95,90 +95,6 @@ func itoa(buf *[]byte, i, wid int) {
 	*buf = append(*buf, b[bp:]...)
 }
 
-// formatHeader puts the header into the buf field of the buffer.
-func (l *Logger) formatHeader(t time.Time, file string, line int) {
-	l.buf = append(l.buf, l.prefix...)
-	if l.flag&(Ldate|Ltime|Lmicroseconds) != 0 {
-		if l.flag&Ldate != 0 {
-			year, month, day := t.Date()
-			itoa(&l.buf, year, 4)
-			l.buf = append(l.buf, '-')
-			itoa(&l.buf, int(month), 2)
-			l.buf = append(l.buf, '-')
-			itoa(&l.buf, day, 2)
-			l.buf = append(l.buf, ' ')
-		}
-
-		if l.flag&(Ltime|Lmicroseconds) != 0 {
-			hour, minute, sec := t.Clock()
-			itoa(&l.buf, hour, 2)
-			l.buf = append(l.buf, ':')
-			itoa(&l.buf, minute, 2)
-			l.buf = append(l.buf, ':')
-			itoa(&l.buf, sec, 2)
-
-			if l.flag&Lmicroseconds != 0 {
-				l.buf = append(l.buf, '.')
-				itoa(&l.buf, t.Nanosecond()/1e3, 6)
-			}
-
-			l.buf = append(l.buf, ' ')
-		}
-	}
-
-	if l.flag&(Lshortfile|Llongfile) != 0 {
-		if l.flag&Lshortfile != 0 {
-			short := file
-			for i := len(file) - 1; i > 0; i-- {
-				if file[i] == '/' {
-					short = file[i+1:]
-					break
-				}
-			}
-
-			file = short
-		}
-
-		l.buf = append(l.buf, file...)
-		l.buf = append(l.buf, ':')
-		itoa(&l.buf, line, -1)
-		l.buf = append(l.buf, ": "...)
-	}
-}
-
-func (l *Logger) output(calldepth int, now time.Time, s string) error {
-	var (
-		file string
-		line int
-	)
-
-	if l.flag&(Lshortfile|Llongfile) != 0 {
-		l.mu.Unlock()
-
-		var ok bool
-
-		_, file, line, ok = runtime.Caller(calldepth)
-		if !ok {
-			file = "???"
-			line = 0
-		}
-
-		l.mu.Lock()
-	}
-
-	l.buf = l.buf[:0]
-	l.formatHeader(now, file, line)
-
-	l.buf = append(l.buf, s...)
-	if len(s) == 0 || s[len(s)-1] != '\n' {
-		l.buf = append(l.buf, '\n')
-	}
-
-	_, err := l.out.Write(l.buf)
-
-	return err
-}
-
 // Output writes the string s with the header controlled by the flags to
 // the l.out writer. A newline will be appended if s doesn't end in a
 // newline. Calldepth is used to recover the PC, although all current
@@ -303,6 +219,90 @@ func (l *Logger) SetPrefix(prefix string) {
 	defer l.mu.Unlock()
 
 	l.prefix = prefix
+}
+
+func (l *Logger) output(calldepth int, now time.Time, s string) error {
+	var (
+		file string
+		line int
+	)
+
+	if l.flag&(Lshortfile|Llongfile) != 0 {
+		l.mu.Unlock()
+
+		var ok bool
+
+		_, file, line, ok = runtime.Caller(calldepth)
+		if !ok {
+			file = "???"
+			line = 0
+		}
+
+		l.mu.Lock()
+	}
+
+	l.buf = l.buf[:0]
+	l.formatHeader(now, file, line)
+
+	l.buf = append(l.buf, s...)
+	if len(s) == 0 || s[len(s)-1] != '\n' {
+		l.buf = append(l.buf, '\n')
+	}
+
+	_, err := l.out.Write(l.buf)
+
+	return err
+}
+
+// formatHeader puts the header into the buf field of the buffer.
+func (l *Logger) formatHeader(t time.Time, file string, line int) {
+	l.buf = append(l.buf, l.prefix...)
+	if l.flag&(Ldate|Ltime|Lmicroseconds) != 0 {
+		if l.flag&Ldate != 0 {
+			year, month, day := t.Date()
+			itoa(&l.buf, year, 4)
+			l.buf = append(l.buf, '-')
+			itoa(&l.buf, int(month), 2)
+			l.buf = append(l.buf, '-')
+			itoa(&l.buf, day, 2)
+			l.buf = append(l.buf, ' ')
+		}
+
+		if l.flag&(Ltime|Lmicroseconds) != 0 {
+			hour, minute, sec := t.Clock()
+			itoa(&l.buf, hour, 2)
+			l.buf = append(l.buf, ':')
+			itoa(&l.buf, minute, 2)
+			l.buf = append(l.buf, ':')
+			itoa(&l.buf, sec, 2)
+
+			if l.flag&Lmicroseconds != 0 {
+				l.buf = append(l.buf, '.')
+				itoa(&l.buf, t.Nanosecond()/1e3, 6)
+			}
+
+			l.buf = append(l.buf, ' ')
+		}
+	}
+
+	if l.flag&(Lshortfile|Llongfile) != 0 {
+		if l.flag&Lshortfile != 0 {
+			short := file
+			for i := len(file) - 1; i > 0; i-- {
+				if file[i] == '/' {
+					short = file[i+1:]
+					break
+				}
+			}
+
+			file = short
+		}
+
+		l.buf = append(l.buf, file...)
+		l.buf = append(l.buf, ':')
+		itoa(&l.buf, line, -1)
+		l.buf = append(l.buf, ": "...)
+	}
 }
 
 // SetPrefix sets the prefix of the standard logger of the package.

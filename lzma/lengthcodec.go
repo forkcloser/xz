@@ -27,41 +27,6 @@ type lengthCodec struct {
 	high   treeCodec
 }
 
-// deepcopy initializes the lc value as deep copy of the source value.
-func (lc *lengthCodec) deepcopy(src *lengthCodec) {
-	if lc == src {
-		return
-	}
-
-	lc.choice = src.choice
-	for i := range lc.low {
-		lc.low[i].deepcopy(&src.low[i])
-	}
-
-	for i := range lc.mid {
-		lc.mid[i].deepcopy(&src.mid[i])
-	}
-
-	lc.high.deepcopy(&src.high)
-}
-
-// init initializes a new length codec.
-func (lc *lengthCodec) init() {
-	for i := range lc.choice {
-		lc.choice[i] = probInit
-	}
-
-	for i := range lc.low {
-		lc.low[i].init(3)
-	}
-
-	for i := range lc.mid {
-		lc.mid[i].init(3)
-	}
-
-	lc.high.init(8)
-}
-
 // Encode encodes the length offset. The length offset l can be compute by
 // subtracting minMatchLen (2) from the actual length.
 //
@@ -101,6 +66,41 @@ func (lc *lengthCodec) Encode(e *rangeEncoder, l, posState uint32,
 	}
 
 	return nil
+}
+
+// init initializes a new length codec.
+func (lc *lengthCodec) init() {
+	for i := range lc.choice {
+		lc.choice[i] = probInit
+	}
+
+	for i := range lc.low {
+		lc.low[i].init(3)
+	}
+
+	for i := range lc.mid {
+		lc.mid[i].init(3)
+	}
+
+	lc.high.init(8)
+}
+
+// deepcopy initializes the lc value as deep copy of the source value.
+func (lc *lengthCodec) deepcopy(src *lengthCodec) {
+	if lc == src {
+		return
+	}
+
+	lc.choice = src.choice
+	for i := range lc.low {
+		lc.low[i].deepcopy(&src.low[i])
+	}
+
+	for i := range lc.mid {
+		lc.mid[i].deepcopy(&src.mid[i])
+	}
+
+	lc.high.deepcopy(&src.high)
 }
 
 // decode reads the length offset. Add minMatchLen to compute the actual
