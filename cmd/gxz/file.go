@@ -67,7 +67,7 @@ var lzmaDictCapExps = []uint{18, 20, 21, 22, 22, 23, 23, 24, 25, 26}
 
 // formats contains the formats supported by gxz.
 var formats = map[string]*format{
-	"lzma": {
+	formatLZMA: {
 		newCompressor: func(w io.Writer, opts *options,
 		) (c io.WriteCloser, err error) {
 			lc := lzma.WriterConfig{
@@ -97,7 +97,7 @@ var formats = map[string]*format{
 			return lzma.ValidHeader(h)
 		},
 	},
-	"xz": {
+	formatXZ: {
 		newCompressor: func(w io.Writer, opts *options,
 		) (c io.WriteCloser, err error) {
 			cfg := xz.WriterConfig{
@@ -141,7 +141,7 @@ func targetName(path string, opts *options) (target string, err error) {
 	ext := "." + opts.format
 
 	tarExt := ".txz"
-	if opts.format == "lzma" {
+	if opts.format == formatLZMA {
 		tarExt = ".tlz"
 	}
 
@@ -423,7 +423,7 @@ func readerFormat(br *bufio.Reader, opts *options) (f *format, err error) {
 		return f, nil
 	}
 
-	if opts.format != "auto" {
+	if opts.format != formatAuto {
 		return nil, fmt.Errorf("%w: %q", errFormat, opts.format)
 	}
 
