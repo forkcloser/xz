@@ -194,10 +194,11 @@ func tmpName(path string, decompress bool) string {
 // writer is used as file writer for decompression and file compressor
 // for compression.
 type writer struct {
-	f    *os.File
-	name string
-	bw   *bufio.Writer
 	io.Writer
+
+	f       *os.File
+	name    string
+	bw      *bufio.Writer
 	cmp     io.WriteCloser
 	success bool
 }
@@ -351,8 +352,9 @@ func (w *writer) removeTmpFile() {
 
 // reader is used as a file reader.
 type reader struct {
-	f *os.File
 	io.Reader
+
+	f       *os.File
 	success bool
 	keep    bool
 }

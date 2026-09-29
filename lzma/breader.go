@@ -18,6 +18,7 @@ var (
 // more data from the reader than absolutely necessary.
 type breader struct {
 	io.Reader
+
 	// helper slice to save allocations
 	p []byte
 }
