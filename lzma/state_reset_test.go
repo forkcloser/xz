@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package lzma
+package lzma //nolint:testpackage // white-box: tests the unexported coder state
 
 import (
 	"math/rand"

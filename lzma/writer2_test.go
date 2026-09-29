@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package lzma
+package lzma_test
 
 import (
 	"bytes"
@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/forkcloser/xz/internal/randtxt"
+	"github.com/forkcloser/xz/lzma"
 )
 
 func TestWriter2(t *testing.T) {
@@ -19,7 +20,7 @@ func TestWriter2(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	w, err := Writer2Config{DictCap: 4096}.NewWriter2(&buf)
+	w, err := lzma.Writer2Config{DictCap: 4096}.NewWriter2(&buf)
 	if err != nil {
 		t.Fatalf("NewWriter error %s", err)
 	}
@@ -58,7 +59,7 @@ func TestCycle1(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	w, err := Writer2Config{DictCap: 4096}.NewWriter2(&buf)
+	w, err := lzma.Writer2Config{DictCap: 4096}.NewWriter2(&buf)
 	if err != nil {
 		t.Fatalf("NewWriter error %s", err)
 	}
@@ -76,7 +77,7 @@ func TestCycle1(t *testing.T) {
 		t.Fatalf("w.Close() error %s", err)
 	}
 
-	r, err := Reader2Config{DictCap: 4096}.NewReader2(&buf)
+	r, err := lzma.Reader2Config{DictCap: 4096}.NewReader2(&buf)
 	if err != nil {
 		t.Fatalf("NewReader error %s", err)
 	}
@@ -91,7 +92,7 @@ func TestCycle2(t *testing.T) {
 
 	buf := new(bytes.Buffer)
 
-	w, err := Writer2Config{DictCap: 4096}.NewWriter2(buf)
+	w, err := lzma.Writer2Config{DictCap: 4096}.NewWriter2(buf)
 	if err != nil {
 		t.Fatalf("NewWriter error %s", err)
 	}
@@ -117,7 +118,7 @@ func TestCycle2(t *testing.T) {
 
 	t.Logf("buf.Len() %d", buf.Len())
 
-	r, err := Reader2Config{DictCap: 4096}.NewReader2(buf)
+	r, err := lzma.Reader2Config{DictCap: 4096}.NewReader2(buf)
 	if err != nil {
 		t.Fatalf("NewReader error %s", err)
 	}
@@ -149,14 +150,14 @@ func TestWriter2SmallDictIncompressible(t *testing.T) {
 
 	rnd := rand.New(rand.NewSource(13))
 
-	for _, dictCap := range []int{MinDictCap, 8192, 16384, 1 << 16} {
+	for _, dictCap := range []int{lzma.MinDictCap, 8192, 16384, 1 << 16} {
 		for _, size := range []int{5000, 10000, 100000} {
 			data := make([]byte, size)
 			rnd.Read(data)
 
 			var buf bytes.Buffer
 
-			w, err := Writer2Config{DictCap: dictCap}.NewWriter2(&buf)
+			w, err := lzma.Writer2Config{DictCap: dictCap}.NewWriter2(&buf)
 			if err != nil {
 				t.Fatalf("NewWriter2 error %s", err)
 			}
@@ -171,7 +172,7 @@ func TestWriter2SmallDictIncompressible(t *testing.T) {
 					dictCap, size, err)
 			}
 
-			r, err := NewReader2(&buf)
+			r, err := lzma.NewReader2(&buf)
 			if err != nil {
 				t.Fatalf("NewReader2 error %s", err)
 			}

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package lzma
+package lzma_test
 
 import (
 	"bufio"
@@ -10,6 +10,8 @@ import (
 	"io"
 	"os"
 	"testing"
+
+	"github.com/forkcloser/xz/lzma"
 )
 
 // plainReader is an io.Reader that is deliberately not an io.ByteReader, and
@@ -40,7 +42,7 @@ func lzmaEnwik(tb testing.TB, size int) (compressed, plain []byte) {
 
 	var buf bytes.Buffer
 
-	w, err := NewWriter(&buf)
+	w, err := lzma.NewWriter(&buf)
 	if err != nil {
 		tb.Fatal(err)
 	}
@@ -71,7 +73,7 @@ func TestReaderInputConsumption(t *testing.T) {
 
 		src := bytes.NewReader(withTrailer) // an io.ByteReader
 
-		r, err := NewReader(src)
+		r, err := lzma.NewReader(src)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -96,7 +98,7 @@ func TestReaderInputConsumption(t *testing.T) {
 
 		src := &plainReader{r: bytes.NewReader(withTrailer)}
 
-		r, err := NewReader(src)
+		r, err := lzma.NewReader(src)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -123,7 +125,7 @@ func TestReaderInputConsumption(t *testing.T) {
 		// must be far below one per compressed byte.
 		calls := 0
 
-		r, err := NewReader(readCounter{bytes.NewReader(comp), &calls})
+		r, err := lzma.NewReader(readCounter{bytes.NewReader(comp), &calls})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -172,7 +174,7 @@ func BenchmarkReaderPlainFile(b *testing.B) {
 			b.Fatal(err)
 		}
 
-		r, err := NewReader(fh) // *os.File: not a ByteReader
+		r, err := lzma.NewReader(fh) // *os.File: not a ByteReader
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -208,7 +210,7 @@ func BenchmarkReaderBufioFile(b *testing.B) {
 			b.Fatal(err)
 		}
 
-		r, err := NewReader(bufio.NewReader(fh))
+		r, err := lzma.NewReader(bufio.NewReader(fh))
 		if err != nil {
 			b.Fatal(err)
 		}

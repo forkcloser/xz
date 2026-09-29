@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package xz
+package xz_test
 
 import (
 	"bytes"
@@ -12,6 +12,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/forkcloser/xz"
 	"github.com/forkcloser/xz/internal/randtxt"
 )
 
@@ -22,7 +23,7 @@ func TestWriter(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	w, err := NewWriter(&buf)
+	w, err := xz.NewWriter(&buf)
 	if err != nil {
 		t.Fatalf("NewWriter error %s", err)
 	}
@@ -42,7 +43,7 @@ func TestWriter(t *testing.T) {
 
 	var out bytes.Buffer
 
-	r, err := NewReader(&buf)
+	r, err := xz.NewReader(&buf)
 	if err != nil {
 		t.Fatalf("NewReader error %s", err)
 	}
@@ -62,7 +63,7 @@ func TestIssue12(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	w, err := NewWriter(&buf)
+	w, err := xz.NewWriter(&buf)
 	if err != nil {
 		t.Fatalf("NewWriter error %s", err)
 	}
@@ -71,7 +72,7 @@ func TestIssue12(t *testing.T) {
 		t.Fatalf("w.Close error %s", err)
 	}
 
-	r, err := NewReader(&buf)
+	r, err := xz.NewReader(&buf)
 	if err != nil {
 		t.Fatalf("NewReader error %s", err)
 	}
@@ -93,7 +94,7 @@ func Example() {
 	var buf bytes.Buffer
 
 	// compress text
-	w, err := NewWriter(&buf)
+	w, err := xz.NewWriter(&buf)
 	if err != nil {
 		log.Fatalf("NewWriter error %s", err)
 	}
@@ -107,7 +108,7 @@ func Example() {
 	}
 
 	// decompress buffer and write result to stdout
-	r, err := NewReader(&buf)
+	r, err := xz.NewReader(&buf)
 	if err != nil {
 		log.Fatalf("NewReader error %s", err)
 	}
@@ -132,7 +133,7 @@ func TestWriter2(t *testing.T) {
 
 	buf.Reset()
 
-	w, err := NewWriter(&buf)
+	w, err := xz.NewWriter(&buf)
 	if err != nil {
 		t.Fatalf("NewWriter error %s", err)
 	}
@@ -152,7 +153,7 @@ func TestWriter2(t *testing.T) {
 
 	t.Logf("buf.Len() %d", buf.Len())
 
-	r, err := NewReader(&buf)
+	r, err := xz.NewReader(&buf)
 	if err != nil {
 		t.Fatalf("NewReader error %s", err)
 	}
@@ -185,7 +186,7 @@ func TestWriterNoneCheck(t *testing.T) {
 
 	buf.Reset()
 
-	w, err := WriterConfig{NoCheckSum: true}.NewWriter(&buf)
+	w, err := xz.WriterConfig{NoCheckSum: true}.NewWriter(&buf)
 	if err != nil {
 		t.Fatalf("NewWriter error %s", err)
 	}
@@ -205,7 +206,7 @@ func TestWriterNoneCheck(t *testing.T) {
 
 	t.Logf("buf.Len() %d", buf.Len())
 
-	r, err := NewReader(&buf)
+	r, err := xz.NewReader(&buf)
 	if err != nil {
 		t.Fatalf("NewReader error %s", err)
 	}
@@ -242,7 +243,7 @@ func BenchmarkWriter(b *testing.B) {
 	for b.Loop() {
 		buf.Reset()
 
-		w, err := NewWriter(buf)
+		w, err := xz.NewWriter(buf)
 		if err != nil {
 			b.Fatalf("NewWriter(buf) error %s", err)
 		}
