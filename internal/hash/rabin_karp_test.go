@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package hash
+package hash //nolint:testpackage // white-box: defines the benchmark input cyclic_poly_test.go uses
 
 import (
 	"math/rand"
