@@ -114,7 +114,9 @@ func TestParallelReaderMultiStream(t *testing.T) {
 func TestParallelReaderEmpty(t *testing.T) {
 	t.Parallel()
 
-	xz := compressMultiBlock(t, nil, 64<<10)
+	// Empty rather than nil: Writer.Write takes the same path for both, and
+	// NilAway reads p[n:] on a nil p as a panic although n is 0 there.
+	xz := compressMultiBlock(t, []byte{}, 64<<10)
 	testParallelRead(t, xz, nil, 2)
 }
 
