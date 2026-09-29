@@ -11,6 +11,13 @@ import (
 	"github.com/forkcloser/xz/internal/hash"
 )
 
+// What newHashTable and the table's word lookups refuse.
+var (
+	errHashCapacity = errors.New("newHashTable: capacity must not be negative")
+	errHashWordLen  = errors.New("newHashTable: argument wordLen out of range")
+	errWordLen      = errors.New("byte slice has the wrong length")
+)
+
 /* For compression we need to find byte sequences that match the byte
  * sequence at the dictionary head. A hash table is a simple method to
  * provide this capability.
@@ -80,16 +87,13 @@ func hashTableExponent(n uint32) int {
 // newHashTable creates a new hash table for words of length wordLen.
 func newHashTable(capacity, wordLen int) (t *hashTable, err error) {
 	if !(0 < capacity) {
-		return nil, errors.New(
-			"newHashTable: capacity must not be negative",
-		)
+		return nil, errHashCapacity
 	}
 
 	exp := hashTableExponent(uint32(capacity))
 
 	if !(1 <= wordLen && wordLen <= 4) {
-		return nil, errors.New("newHashTable: " +
-			"argument wordLen out of range")
+		return nil, errHashWordLen
 	}
 
 	n := 1 << uint(exp)
@@ -139,9 +143,7 @@ func (t *hashTable) Write(p []byte) (n int, err error) {
 // byte slice p must have word length of the hash table.
 func (t *hashTable) Matches(p []byte, positions []int64) int {
 	if len(p) != t.wordLen {
-		panic(fmt.Errorf(
-			"byte slice must have length %d", t.wordLen,
-		))
+		panic(fmt.Errorf("%w: want %d", errWordLen, t.wordLen))
 	}
 
 	h := t.hash(p)

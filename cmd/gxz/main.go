@@ -136,7 +136,7 @@ func normalizeFormat(o *options) error {
 	case "alone":
 		o.format = "lzma"
 	default:
-		return fmt.Errorf("format %q unsupported", o.format)
+		return fmt.Errorf("%w: %q", errFormat, o.format)
 	}
 
 	return nil

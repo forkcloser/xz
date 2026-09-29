@@ -11,6 +11,11 @@ import (
 	"github.com/forkcloser/xz/internal/xlog"
 )
 
+// errNoProgress is a decoder that returned neither data nor an error.
+var (
+	errNoProgress = errors.New("lzma: Reader2 doesn't get data")
+)
+
 // Reader2Config stores the parameters for the LZMA2 reader.
 type Reader2Config struct {
 	DictCap int
@@ -22,7 +27,7 @@ func (c *Reader2Config) Verify() error {
 	c.fill()
 
 	if !(MinDictCap <= c.DictCap && int64(c.DictCap) <= MaxDictCap) {
-		return errors.New("lzma: dictionary capacity is out of range")
+		return errDictCap
 	}
 
 	return nil
@@ -152,7 +157,7 @@ func (r *Reader2) Read(p []byte) (n int, err error) {
 		}
 
 		if k == 0 {
-			r.err = errors.New("lzma: Reader2 doesn't get data")
+			r.err = errNoProgress
 			return n, r.err
 		}
 	}

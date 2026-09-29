@@ -10,6 +10,12 @@ import (
 	"io"
 )
 
+// Chunks Writer2 will not write.
+var (
+	errEmptyUncompressed = errors.New("lzma: can't write empty uncompressed chunk")
+	errEmptyCompressed   = errors.New("writeCompressedChunk: empty chunk")
+)
+
 // Writer2Config is used to create a Writer2 using parameters.
 type Writer2Config struct {
 	// The properties for the encoding. If the it is nil the value
@@ -33,11 +39,11 @@ func (c *Writer2Config) Verify() error {
 	var err error
 
 	if c == nil {
-		return errors.New("lzma: WriterConfig is nil")
+		return errWriterConfigNil
 	}
 
 	if c.Properties == nil {
-		return errors.New("lzma: WriterConfig has no Properties set")
+		return errNoProperties
 	}
 
 	if err = c.Properties.verify(); err != nil {
@@ -45,11 +51,11 @@ func (c *Writer2Config) Verify() error {
 	}
 
 	if !(MinDictCap <= c.DictCap && int64(c.DictCap) <= MaxDictCap) {
-		return errors.New("lzma: dictionary capacity is out of range")
+		return errDictCap
 	}
 
 	if !(maxMatchLen <= c.BufSize) {
-		return errors.New("lzma: lookahead buffer size too small")
+		return errBufSizeSmall
 	}
 
 	if err = c.Matcher.verify(); err != nil {
@@ -304,7 +310,7 @@ func (w *Writer2) writeCompressedChunk() error {
 
 	u := w.encoder.Compressed()
 	if u <= 0 {
-		return errors.New("writeCompressedChunk: empty chunk")
+		return errEmptyCompressed
 	}
 
 	if u > maxUncompressed {
@@ -346,7 +352,7 @@ func (w *Writer2) writeCompressedChunk() error {
 func (w *Writer2) writeUncompressedChunk() error {
 	u := w.encoder.Compressed()
 	if u <= 0 {
-		return errors.New("lzma: can't write empty uncompressed chunk")
+		return errEmptyUncompressed
 	}
 
 	if u > maxUncompressed {

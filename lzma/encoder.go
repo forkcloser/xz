@@ -10,6 +10,12 @@ import (
 	"io"
 )
 
+// A match the encoder was handed that the format cannot express.
+var (
+	errMatchDistance = errors.New("match distance out of range")
+	errMatchLength   = errors.New("match length out of range")
+)
+
 // opLenMargin provides the upper limit of the number of bytes required
 // to encode a single operation.
 const opLenMargin = 16
@@ -192,16 +198,13 @@ func (e *encoder) writeMatch(m operation) error {
 	var err error
 
 	if !(minDistance <= m.distance && m.distance <= maxDistance) {
-		panic(fmt.Errorf("match distance %d out of range", m.distance))
+		panic(fmt.Errorf("%w: %d", errMatchDistance, m.distance))
 	}
 
 	dist := uint32(m.distance - minDistance)
 	if !(minMatchLen <= m.n && m.n <= maxMatchLen) &&
 		!(dist == e.state.rep[0] && m.n == 1) {
-		panic(fmt.Errorf(
-			"match length %d out of range; dist %d rep[0] %d",
-			m.n, dist, e.state.rep[0],
-		))
+		panic(fmt.Errorf("%w: %d; dist %d rep[0] %d", errMatchLength, m.n, dist, e.state.rep[0]))
 	}
 
 	state, state2, posState := e.state.states(e.dict.Pos())

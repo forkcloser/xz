@@ -9,6 +9,11 @@ import (
 	"io"
 )
 
+// errNoData is an underlying reader that returned neither a byte nor an error.
+var (
+	errNoData = errors.New("breader.ReadByte: no data")
+)
+
 // breader provides the ReadByte function for a Reader. It doesn't read
 // more data from the reader than absolutely necessary.
 type breader struct {
@@ -32,7 +37,7 @@ func (r *breader) ReadByte() (c byte, err error) {
 	n, err := r.Read(r.p)
 	if n < 1 {
 		if err == nil {
-			err = errors.New("breader.ReadByte: no data")
+			err = errNoData
 		}
 
 		return 0, err

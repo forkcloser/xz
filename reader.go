@@ -30,6 +30,11 @@ import (
 	"github.com/forkcloser/xz/lzma"
 )
 
+// errReaderConfigNil is a nil *ReaderConfig handed to Verify.
+var (
+	errReaderConfigNil = errors.New("xz: reader parameters are nil")
+)
+
 // ReaderConfig defines the parameters for the xz reader.
 type ReaderConfig struct {
 	// DictCap is the smallest dictionary the reader will use. A block whose
@@ -49,7 +54,7 @@ type ReaderConfig struct {
 // actually be used.
 func (c *ReaderConfig) Verify() error {
 	if c == nil {
-		return errors.New("xz: reader parameters are nil")
+		return errReaderConfigNil
 	}
 
 	lc := lzma.Reader2Config{DictCap: c.DictCap}

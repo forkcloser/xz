@@ -10,6 +10,13 @@ import (
 	"io"
 )
 
+// What the encoder dictionary refuses.
+var (
+	errEncoderDictCap = errors.New("lzma: dictionary capacity out of range")
+	errBufSize        = errors.New("lzma: buffer size must be larger than zero")
+	errCantDiscard    = errors.New("lzma: can't discard bytes")
+)
+
 // matcher is an interface that supports the identification of the next
 // operation.
 type matcher interface {
@@ -33,15 +40,11 @@ type encoderDict struct {
 // defines the size of the additional buffer.
 func newEncoderDict(dictCap, bufSize int, m matcher) (d *encoderDict, err error) {
 	if !(1 <= dictCap && int64(dictCap) <= MaxDictCap) {
-		return nil, errors.New(
-			"lzma: dictionary capacity out of range",
-		)
+		return nil, errEncoderDictCap
 	}
 
 	if bufSize < 1 {
-		return nil, errors.New(
-			"lzma: buffer size must be larger than zero",
-		)
+		return nil, errBufSize
 	}
 
 	d = &encoderDict{
@@ -61,7 +64,7 @@ func (d *encoderDict) Discard(n int) {
 
 	k, _ := d.buf.Read(p)
 	if k < n {
-		panic(fmt.Errorf("lzma: can't discard %d bytes", n))
+		panic(fmt.Errorf("%w: %d", errCantDiscard, n))
 	}
 
 	d.head += int64(n)

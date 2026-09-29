@@ -9,6 +9,14 @@ import (
 	"fmt"
 )
 
+// What Properties.verify refuses.
+var (
+	errPropertiesNil = errors.New("lzma: properties are nil")
+	errLC            = errors.New("lzma: lc out of range")
+	errLP            = errors.New("lzma: lp out of range")
+	errPB            = errors.New("lzma: pb out of range")
+)
+
 // maximum and minimum values for the LZMA properties.
 const (
 	minPB = 0
@@ -70,19 +78,19 @@ func (p Properties) Code() byte {
 // verify checks the properties for correctness.
 func (p *Properties) verify() error {
 	if p == nil {
-		return errors.New("lzma: properties are nil")
+		return errPropertiesNil
 	}
 
 	if !(minLC <= p.LC && p.LC <= maxLC) {
-		return errors.New("lzma: lc out of range")
+		return errLC
 	}
 
 	if !(minLP <= p.LP && p.LP <= maxLP) {
-		return errors.New("lzma: lp out of range")
+		return errLP
 	}
 
 	if !(minPB <= p.PB && p.PB <= maxPB) {
-		return errors.New("lzma: pb out of range")
+		return errPB
 	}
 
 	if p.LC+p.LP > maxLCLP {
