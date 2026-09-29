@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 )
 
 // errDictCap is a dictionary capacity outside the range the readers and writers support.
@@ -208,7 +209,7 @@ func (c *ReaderConfig) fill() {
 	if c.DictCap == 0 {
 		// set an upper limit of 2 GiB-1 for dictionary capacity
 		// to address the zero prefix security issue.
-		c.DictCap = (1 << 31) - 1
+		c.DictCap = math.MaxInt32
 		// Upstream's default is 8 MiB.
 	}
 }

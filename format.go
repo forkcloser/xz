@@ -7,6 +7,7 @@ package xz
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash"
@@ -24,6 +25,10 @@ var (
 	errLZMA2NotLast = errors.New("xz: LZMA2 filter is not the last")
 	errLastNotLZMA2 = errors.New("xz: last filter must be the LZMA2 filter")
 )
+
+// initialIndexCap is how many index records readIndex makes room for
+// before any has arrived.
+const initialIndexCap = 64
 
 // allZeros checks whether a given byte slice has only zeros.
 func allZeros(p []byte) bool {
@@ -178,7 +183,7 @@ func (h *header) MarshalBinary() (data []byte, err error) {
 		return nil, err
 	}
 
-	data = make([]byte, 12)
+	data = make([]byte, HeaderLen)
 	copy(data, headerMagic)
 	data[7] = h.flags
 
@@ -511,7 +516,7 @@ func (h *blockHeader) MarshalBinary() (data []byte, err error) {
 
 	buf.WriteByte(flags)
 
-	p := make([]byte, 10)
+	p := make([]byte, binary.MaxVarintLen64)
 	if h.compressedSize >= 0 {
 		k := putUvarint(p, uint64(h.compressedSize))
 		buf.Write(p[:k])
@@ -693,7 +698,7 @@ func writeIndex(w io.Writer, index []record) (n int64, err error) {
 	}
 
 	// number of records
-	p := make([]byte, 10)
+	p := make([]byte, binary.MaxVarintLen64)
 	k = putUvarint(p, uint64(len(index)))
 	k, err = mw.Write(p[:k])
 
@@ -788,7 +793,7 @@ func readIndexBody(r io.Reader, expectedRecordLen, maxRecords int) (records []re
 	// slice grows with the records that actually arrive instead of being sized
 	// from the declared count. A hostile count simply runs into the end of the
 	// index; it never reaches an allocator.
-	initialCap := min(recLen, 64)
+	initialCap := min(recLen, initialIndexCap)
 	records = make([]record, 0, initialCap)
 
 	for range recLen {

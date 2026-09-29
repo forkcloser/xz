@@ -52,6 +52,7 @@ func (dc *distCodec) Encode(e *rangeEncoder, dist, l uint32) (err error) {
 	if dist < startPosModel {
 		posSlot = dist
 	} else {
+		//nolint:mnd // one less than the position of dist's highest set bit, as the specification computes the slot
 		bits = uint32(30 - nlz32(dist))
 		posSlot = startPosModel - 2 + (bits << 1)
 		posSlot += (dist >> uint(bits)) & 1

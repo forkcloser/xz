@@ -33,6 +33,7 @@ func (dc directCodec) decode(d *rangeDecoder, rng, code uint32) (v, nrng, ncode 
 	for i := int(dc); i > 0; i-- {
 		rng >>= 1
 		code -= rng
+		//nolint:mnd // the code's sign bit, spread to all ones when the subtraction went below zero
 		t := 0 - (code >> 31)
 		code += rng & t
 		v = (v << 1) | ((t + 1) & 1)

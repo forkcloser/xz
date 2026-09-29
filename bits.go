@@ -6,6 +6,13 @@ package xz
 
 import "io"
 
+// A uvarint byte carries seven bits of the value; its high bit says that
+// another byte follows.
+const (
+	uvarintMore    = 0x80
+	uvarintPayload = 0x7f
+)
+
 // putUint32LE puts the little-endian representation of x into the first
 // four bytes of p.
 func putUint32LE(p []byte, x uint32) {
@@ -37,8 +44,8 @@ func uint32LE(p []byte) uint32 {
 // putUvarint puts a uvarint representation of x into the byte slice.
 func putUvarint(p []byte, x uint64) int {
 	i := 0
-	for x >= 0x80 {
-		p[i] = byte(x) | 0x80
+	for x >= uvarintMore {
+		p[i] = byte(x) | uvarintMore
 		x >>= 7
 		i++
 	}
@@ -78,7 +85,7 @@ func readUvarint(r io.ByteReader) (x uint64, n int, err error) {
 		}
 
 		i++
-		if b < 0x80 {
+		if b < uvarintMore {
 			// A final byte of zero means the value fits in fewer bytes.
 			if i > 1 && b == 0 {
 				return x, i, errNonCanonicalUvarint
@@ -91,7 +98,7 @@ func readUvarint(r io.ByteReader) (x uint64, n int, err error) {
 			return x, i, errOverflowU64
 		}
 
-		x |= uint64(b&0x7f) << s
+		x |= uint64(b&uvarintPayload) << s
 		s += 7
 	}
 }

@@ -25,6 +25,9 @@ var (
 	errCounterOverflow = errors.New("xz: counter overflow")
 )
 
+// defaultDictCap is the dictionary capacity a zero DictCap selects.
+const defaultDictCap = 8 << 20
+
 // WriterConfig describes the parameters for an xz writer. The zero value
 // selects the defaults given for each field.
 //
@@ -220,7 +223,7 @@ func (c *WriterConfig) fill() {
 	}
 
 	if c.DictCap == 0 {
-		c.DictCap = 8 * 1024 * 1024
+		c.DictCap = defaultDictCap
 	}
 
 	if c.BufSize == 0 {

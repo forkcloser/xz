@@ -389,7 +389,7 @@ const maxDictCapCode = 40
 // The function decodes the dictionary capacity byte, but doesn't change
 // for the correct range of the given byte.
 func decodeDictCap(c byte) int64 {
-	return (2 | int64(c)&1) << (11 + (c>>1)&0x1f)
+	return (2 | int64(c)&1) << (11 + (c>>1)&0x1f) //nolint:mnd // the LZMA2 dictionary-size byte's formula
 }
 
 // DecodeDictCap decodes the encoded dictionary capacity. The function
@@ -410,7 +410,7 @@ func DecodeDictCap(c byte) (n int64, err error) {
 // code for the capacity that is greater or equal n. If n exceeds the
 // maximum support dictionary capacity, the maximum value is returned.
 func EncodeDictCap(n int64) byte {
-	a, b := byte(0), byte(40)
+	a, b := byte(0), byte(maxDictCapCode)
 	for a < b {
 		c := a + (b-a)>>1
 

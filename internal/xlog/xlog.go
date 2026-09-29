@@ -89,7 +89,7 @@ func itoa(buf *[]byte, i, wid int) {
 	for ; u > 0 || wid > 0; u /= 10 {
 		bp--
 		wid--
-		b[bp] = byte(u%10) + '0'
+		b[bp] = byte(u%10) + '0' //nolint:mnd // a decimal digit
 	}
 
 	*buf = append(*buf, b[bp:]...)
@@ -278,7 +278,7 @@ func (l *Logger) formatHeader(t time.Time, file string, line int) {
 
 			if l.flag&Lmicroseconds != 0 {
 				l.buf = append(l.buf, '.')
-				itoa(&l.buf, t.Nanosecond()/1e3, 6)
+				itoa(&l.buf, t.Nanosecond()/int(time.Microsecond), 6)
 			}
 
 			l.buf = append(l.buf, ' ')

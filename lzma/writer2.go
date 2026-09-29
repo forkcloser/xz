@@ -142,7 +142,7 @@ func (c *Writer2Config) fill() {
 	}
 
 	if c.DictCap == 0 {
-		c.DictCap = 8 * 1024 * 1024
+		c.DictCap = defaultDictCap
 	}
 
 	if c.BufSize == 0 {

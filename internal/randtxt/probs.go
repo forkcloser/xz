@@ -12,6 +12,9 @@ import (
 	"sort"
 )
 
+// letters is the size of the model's alphabet, A to Z.
+const letters = 'Z' - 'A' + 1
+
 // ngram stores an entry from the language model.
 type ngram struct {
 	s   string
@@ -135,7 +138,7 @@ func comapOfLM(lm ngrams) comap {
 		panic("lm is not sorted")
 	}
 
-	m := make(comap, 26*26)
+	m := make(comap, letters*letters)
 
 	for i := 0; i < len(lm); {
 		j := i
