@@ -52,7 +52,7 @@ func padLen(n int64) int {
 	return k
 }
 
-/*** Header ***/
+// The stream header.
 
 // headerMagic stores the magic bytes for the header.
 const headerMagic = "\xfd7zXZ\x00"
@@ -192,7 +192,7 @@ func (h *header) MarshalBinary() (data []byte, err error) {
 	return data, nil
 }
 
-/*** Footer ***/
+// The stream footer.
 
 // footerLen defines the length of the footer.
 const footerLen = 12
@@ -289,7 +289,7 @@ func (f *footer) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-/*** Block Header ***/
+// The block header.
 
 // blockHeader represents the content of an xz block header.
 type blockHeader struct {
@@ -639,7 +639,7 @@ func readFilters(r io.Reader, count int) (filters []filter, err error) {
 	return []filter{f}, err
 }
 
-/*** Index ***/
+// The index.
 
 // record describes a block in the xz file index.
 type record struct {
