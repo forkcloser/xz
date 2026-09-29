@@ -77,9 +77,14 @@ const (
 
 // Value is the interface to the value of a specific flag.
 type Value interface {
+	// Set parses the flag's argument and stores it.
 	Set(s string) error
+	// Update records the flag given without an argument: a bool becomes
+	// true, a counter counts one more.
 	Update()
+	// Get returns the stored value.
 	Get() any
+	// String formats the stored value.
 	String() string
 }
 
