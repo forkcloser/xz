@@ -168,7 +168,7 @@ func BenchmarkReaderPlainFile(b *testing.B) {
 	b.SetBytes(int64(len(plain)))
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		fh, err := os.Open(f.Name())
 		if err != nil {
 			b.Fatal(err)
@@ -204,7 +204,7 @@ func BenchmarkReaderBufioFile(b *testing.B) {
 	b.SetBytes(int64(len(plain)))
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		fh, err := os.Open(f.Name())
 		if err != nil {
 			b.Fatal(err)

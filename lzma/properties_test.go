@@ -20,7 +20,7 @@ func TestPropertiesForCodeRejectsLargeLCLP(t *testing.T) {
 
 	var accepted, rejected int
 
-	for code := 0; code <= 0xff; code++ {
+	for code := range 0x100 {
 		p, err := PropertiesForCode(byte(code))
 		if err != nil {
 			rejected++

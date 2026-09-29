@@ -45,7 +45,7 @@ func (tc *treeCodec) decode(d *rangeDecoder, rng, code uint32) (v, nrng, ncode u
 	probs := tc.probs
 	m := uint32(1)
 
-	for j := 0; j < int(tc.bits); j++ {
+	for range tc.bits {
 		var b uint32
 
 		b, rng, code = decodeBitArith(&probs[m], rng, code)
@@ -78,7 +78,7 @@ type treeReverseCodec struct {
 func (tc *treeReverseCodec) Encode(v uint32, e *rangeEncoder) (err error) {
 	m := uint32(1)
 
-	for i := uint(0); i < uint(tc.bits); i++ {
+	for i := range uint(tc.bits) {
 		b := (v >> i) & 1
 		if err := e.EncodeBit(b, &tc.probs[m]); err != nil {
 			return err
@@ -107,7 +107,7 @@ func (tc *treeReverseCodec) decode(d *rangeDecoder, rng, code uint32) (v, nrng, 
 	probs := tc.probs
 	m := uint32(1)
 
-	for j := uint(0); j < uint(tc.bits); j++ {
+	for j := range uint(tc.bits) {
 		var b uint32
 
 		b, rng, code = decodeBitArith(&probs[m], rng, code)
