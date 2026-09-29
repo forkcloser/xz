@@ -58,10 +58,7 @@ func cycle(t *testing.T, n int) {
 
 	var buf bytes.Buffer
 
-	w, err := newEncoder(&buf, state, encoderDict, eosMarker)
-	if err != nil {
-		t.Fatalf("newEncoder error %s", err)
-	}
+	w := newEncoder(&buf, state, encoderDict, eosMarker)
 
 	orig := []byte(testString)[:n]
 	t.Logf("len(orig) %d", len(orig))
@@ -147,10 +144,7 @@ func TestEncoderCycle2(t *testing.T) {
 	state := newState(props)
 	lbw := &limitedByteWriter{BW: buf, N: 100}
 
-	w, err := newEncoder(lbw, state, encoderDict, 0)
-	if err != nil {
-		t.Fatalf("NewEncoder error %s", err)
-	}
+	w := newEncoder(lbw, state, encoderDict, 0)
 
 	_, err = io.WriteString(w, txt)
 	if err != nil && !errors.Is(err, errLimit) {

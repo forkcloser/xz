@@ -127,10 +127,7 @@ func (c Writer2Config) NewWriter2(lzma2 io.Writer) (w *Writer2, err error) {
 		return nil, err
 	}
 
-	w.encoder, err = newEncoder(&w.lbw, cloneState(w.start), d, 0)
-	if err != nil {
-		return nil, err
-	}
+	w.encoder = newEncoder(&w.lbw, cloneState(w.start), d, 0)
 
 	return w, nil
 }
@@ -271,9 +268,7 @@ func (w *Writer2) flushChunk() error {
 	w.buf.Reset()
 
 	w.lbw.N = maxCompressed
-	if err = w.encoder.Reopen(&w.lbw); err != nil {
-		return err
-	}
+	w.encoder.Reopen(&w.lbw)
 
 	if err = w.cstate.next(w.ctype); err != nil {
 		return err

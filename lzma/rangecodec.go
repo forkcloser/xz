@@ -23,7 +23,7 @@ type rangeEncoder struct {
 const maxInt64 = 1<<63 - 1
 
 // newRangeEncoder creates a new range encoder.
-func newRangeEncoder(bw io.ByteWriter) (re *rangeEncoder, err error) {
+func newRangeEncoder(bw io.ByteWriter) *rangeEncoder {
 	lbw, ok := bw.(*limitedByteWriter)
 	if !ok {
 		lbw = &limitedByteWriter{BW: bw, N: maxInt64}
@@ -33,7 +33,7 @@ func newRangeEncoder(bw io.ByteWriter) (re *rangeEncoder, err error) {
 		lbw:      lbw,
 		nrange:   0xffffffff,
 		cacheLen: 1,
-	}, nil
+	}
 }
 
 // Available returns the number of bytes that still can be written. The
