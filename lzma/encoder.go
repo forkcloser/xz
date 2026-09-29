@@ -123,9 +123,6 @@ func iverson(ok bool) uint32 {
 	return 0
 }
 
-// eosMatch is a pseudo operation that indicates the end of the stream.
-var eosMatch = matchOp(maxDistance, minMatchLen)
-
 // Close terminates the LZMA stream. If requested the end-of-stream
 // marker will be written. If the byte writer limit has been or will be
 // reached during compression of the remaining data in the buffer the
@@ -137,7 +134,8 @@ func (e *encoder) Close() error {
 	}
 
 	if e.marker {
-		if err = e.writeMatch(eosMatch); err != nil {
+		// The end-of-stream marker is a match at the maximum distance.
+		if err = e.writeMatch(matchOp(maxDistance, minMatchLen)); err != nil {
 			return err
 		}
 	}

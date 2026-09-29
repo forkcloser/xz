@@ -44,11 +44,8 @@ func (h crc64Hash) Sum(b []byte) []byte {
 	return append(b, p[:]...)
 }
 
-// crc64Table is used to create a CRC-64 hash.
-var crc64Table = crc64.MakeTable(crc64.ECMA)
-
 // newCRC64 returns a CRC-64 hash that returns the 64-bit value in
 // little-endian encoding using the ECMA polynomial.
 func newCRC64() hash.Hash {
-	return crc64Hash{Hash64: crc64.New(crc64Table)}
+	return crc64Hash{Hash64: crc64.New(crc64.MakeTable(crc64.ECMA))}
 }

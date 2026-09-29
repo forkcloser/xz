@@ -25,15 +25,10 @@ const (
 	HashTable4 MatchAlgorithm = iota
 )
 
-// maStrings are used by the String method.
-var maStrings = map[MatchAlgorithm]string{
-	HashTable4: "HashTable4",
-}
-
 // String returns a string representation of the Matcher.
 func (a MatchAlgorithm) String() string {
-	if s, ok := maStrings[a]; ok {
-		return s
+	if a == HashTable4 {
+		return "HashTable4"
 	}
 
 	return "unknown"
@@ -45,7 +40,7 @@ var errUnsupportedMatchAlgorithm = errors.New(
 
 // verify checks whether the matcher value is supported.
 func (a MatchAlgorithm) verify() error {
-	if _, ok := maStrings[a]; !ok {
+	if a != HashTable4 {
 		return errUnsupportedMatchAlgorithm
 	}
 

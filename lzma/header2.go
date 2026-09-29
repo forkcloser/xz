@@ -46,24 +46,26 @@ const (
 	cLRND
 )
 
-// chunkTypeStrings provide a string representation for the chunk types.
-var chunkTypeStrings = [...]string{
-	cEOS:  "EOS",
-	cU:    "U",
-	cUD:   "UD",
-	cL:    "L",
-	cLR:   "LR",
-	cLRN:  "LRN",
-	cLRND: "LRND",
-}
-
 // String returns a string representation of the chunk type.
 func (c chunkType) String() string {
-	if !(cEOS <= c && c <= cLRND) {
-		return "unknown"
+	switch c {
+	case cEOS:
+		return "EOS"
+	case cU:
+		return "U"
+	case cUD:
+		return "UD"
+	case cL:
+		return "L"
+	case cLR:
+		return "LR"
+	case cLRN:
+		return "LRN"
+	case cLRND:
+		return "LRND"
 	}
 
-	return chunkTypeStrings[c]
+	return "unknown"
 }
 
 // Actual encodings for the chunk types in the value. Note that the high
