@@ -96,7 +96,7 @@ func TestCycle2(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWriter error %s", err)
 	}
-	// const txtlen = 1024
+
 	const txtlen = 2100000
 
 	_, _ = io.CopyN(buf, randtxt.NewReader(rand.NewSource(42)), txtlen)

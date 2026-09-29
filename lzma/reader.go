@@ -167,13 +167,9 @@ func (c ReaderConfig) NewReader(lzma io.Reader) (r *Reader, err error) {
 	if dictSize < MinDictCap {
 		dictSize = MinDictCap
 	}
-	// original code: disabled this because there is no point in increasing
-	// the dictionary above what is stated in the file.
-	/*
-		if int64(c.DictCap) > int64(dictSize) {
-			dictSize = int64(c.DictCap)
-		}
-	*/
+	// Upstream raises dictSize to c.DictCap when that is larger; this fork
+	// does not, as there is no point in a dictionary above what the file
+	// states.
 	size := r.header.Size
 	if size >= 0 && size < dictSize {
 		dictSize = size
@@ -213,7 +209,7 @@ func (c *ReaderConfig) fill() {
 		// set an upper limit of 2 GiB-1 for dictionary capacity
 		// to address the zero prefix security issue.
 		c.DictCap = (1 << 31) - 1
-		// original: c.DictCap = 8 * 1024 * 1024
+		// Upstream's default is 8 MiB.
 	}
 }
 
