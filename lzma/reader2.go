@@ -260,6 +260,9 @@ func (r *Reader2) startChunk() error {
 		// allocation unless the literal codec actually has to change size.
 		r.decoder.State.Properties = header.props
 		r.decoder.State.Reset()
+	default:
+		// cL continues with the state as it is; the end of stream and the
+		// uncompressed chunks returned above.
 	}
 
 	err = r.decoder.Reopen(br, size)

@@ -842,6 +842,8 @@ func (f *FlagSet) processExtraFlagArg(flag *Flag, i int) error {
 				f.removeArg(i)
 
 				return nil
+			default:
+				// NoArg returned at the top.
 			}
 		}
 	}
