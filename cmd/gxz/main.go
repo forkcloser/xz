@@ -113,7 +113,7 @@ func (o *options) Init() {
 	gflag.BoolVarP(&o.stdout, "stdout", "c", false, "")
 	gflag.BoolVarP(&o.decompress, "decompress", "d", false, "")
 	gflag.BoolVarP(&o.force, "force", "f", false, "")
-	gflag.StringVarP(&o.format, "format", "F", "auto", "")
+	gflag.StringVarP(&o.format, "format", "F", formatAuto, "")
 	gflag.BoolVarP(&o.keep, "keep", "k", false, "")
 	gflag.BoolVarP(&o.license, "license", "L", false, "")
 	gflag.BoolVarP(&o.version, "version", "V", false, "")
@@ -123,18 +123,26 @@ func (o *options) Init() {
 	gflag.StringVarP(&o.cpuprofile, "cpuprofile", "", "", "")
 }
 
+// The values of the format option once normalizeFormat has accepted it.
+const (
+	formatXZ   = "xz"
+	formatLZMA = "lzma"
+	formatAuto = "auto"
+)
+
 // normalizeFormat normalizes the format field of options. If the
-// function completes without error the format field will be "xz",
-// "lzma" or "auto". The latter only if the option decompress is true.
+// function completes without error the format field will be formatXZ,
+// formatLZMA or formatAuto. The latter only if the option decompress is
+// true.
 func normalizeFormat(o *options) error {
 	switch o.format {
-	case "xz", "lzma":
-	case "auto":
+	case formatXZ, formatLZMA:
+	case formatAuto:
 		if !o.decompress {
-			o.format = "xz"
+			o.format = formatXZ
 		}
 	case "alone":
-		o.format = "lzma"
+		o.format = formatLZMA
 	default:
 		return fmt.Errorf("%w: %q", errFormat, o.format)
 	}
@@ -156,15 +164,15 @@ func main() {
 
 	switch cmdName {
 	case "lzma", "glzma":
-		opts.format = "lzma"
+		opts.format = formatLZMA
 	case "lzcat", "glzcat":
-		opts.format = "lzma"
+		opts.format = formatLZMA
 		fallthrough
 	case "xzcat", "gxzcat":
 		opts.stdout = true
 		opts.decompress = true
 	case "unlzma", "unglzma":
-		opts.format = "lzma"
+		opts.format = formatLZMA
 		fallthrough
 	case "unxz", "ungxz":
 		opts.decompress = true
