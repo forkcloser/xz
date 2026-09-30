@@ -94,6 +94,8 @@ func NewReader(lzma io.Reader) (r *Reader, err error) {
 }
 
 // ErrDictSize reports about an error of the dictionary size.
+//
+//nolint:errname // upstream's exported name (GHSA-jc7w-c686-c4v9 fix); importers match it with errors.As
 type ErrDictSize struct {
 	ConfigDictCap  int
 	HeaderDictSize uint32
