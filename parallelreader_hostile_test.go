@@ -108,6 +108,7 @@ func readAllParallel(t *testing.T, file []byte) error {
 
 	var before, after runtime.MemStats
 
+	//revive:disable-next-line:call-to-gc the allocation budget is measured from a collected heap
 	runtime.GC()
 	runtime.ReadMemStats(&before)
 
@@ -356,6 +357,7 @@ func TestParallelReaderHostileRecordCountIsBoundedEarly(t *testing.T) {
 
 	var before, after runtime.MemStats
 
+	//revive:disable-next-line:call-to-gc the allocation budget is measured from a collected heap
 	runtime.GC()
 	runtime.ReadMemStats(&before)
 

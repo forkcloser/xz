@@ -75,7 +75,7 @@ func FuzzReader(f *testing.F) {
 		f.Add(seed)
 	}
 
-	f.Fuzz(func(t *testing.T, data []byte) {
+	f.Fuzz(func(_ *testing.T, data []byte) {
 		r, err := NewReader(bytes.NewReader(data))
 		if err != nil {
 			return
@@ -93,7 +93,7 @@ func FuzzSingleStreamReader(f *testing.F) {
 		f.Add(seed)
 	}
 
-	f.Fuzz(func(t *testing.T, data []byte) {
+	f.Fuzz(func(_ *testing.T, data []byte) {
 		r, err := ReaderConfig{SingleStream: true}.NewReader(bytes.NewReader(data))
 		if err != nil {
 			return

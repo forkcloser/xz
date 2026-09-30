@@ -169,9 +169,16 @@ func TestBlockHeader(t *testing.T) {
 			len(g.filters), len(h.filters))
 	}
 
-	glf := g.filters[0].(*lzmaFilter)
+	glf, ok := g.filters[0].(*lzmaFilter)
+	if !ok {
+		t.Fatalf("got filter %T; want *lzmaFilter", g.filters[0])
+	}
 
-	hlf := h.filters[0].(*lzmaFilter)
+	hlf, ok := h.filters[0].(*lzmaFilter)
+	if !ok {
+		t.Fatalf("want filter %T is not *lzmaFilter", h.filters[0])
+	}
+
 	if glf.dictCap != hlf.dictCap {
 		t.Errorf("got dictCap %d; want %d", glf.dictCap, hlf.dictCap)
 	}

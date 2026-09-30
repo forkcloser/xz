@@ -7,7 +7,10 @@ package hash
 // Roller provides an interface for rolling hashes. The hash value will become
 // valid after hash has been called Len times.
 type Roller interface {
+	// Len is the length of the byte sequence a hash is computed over.
 	Len() int
+	// RollByte adds the byte x to the sequence and returns the hash of its
+	// last Len bytes.
 	RollByte(x byte) uint64
 }
 

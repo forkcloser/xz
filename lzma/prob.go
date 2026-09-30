@@ -22,7 +22,7 @@ type prob uint16
 
 // Bits returns 1. One is the number of bits that can be encoded or decoded
 // with a single prob value.
-func (p prob) Bits() int {
+func (prob) Bits() int {
 	return 1
 }
 

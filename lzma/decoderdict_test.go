@@ -12,7 +12,7 @@ func TestNewDecoderDict(t *testing.T) {
 	t.Parallel()
 
 	if _, err := newDecoderDict(0); err == nil {
-		t.Fatalf("no error for zero dictionary capacity")
+		t.Fatal("no error for zero dictionary capacity")
 	}
 
 	if _, err := newDecoderDict(8); err != nil {

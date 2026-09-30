@@ -316,7 +316,7 @@ func (c *chunkState) next(ctype chunkType) error {
 		case cU:
 			*c = 'U'
 		case cL, cLR, cLRN, cLRND:
-			break
+			// An LZMA chunk continues LZMA mode.
 		default:
 			return errChunkType
 		}
@@ -326,7 +326,7 @@ func (c *chunkState) next(ctype chunkType) error {
 		case cEOS:
 			*c = 'T'
 		case cUD, cU:
-			break
+			// An uncompressed chunk does not satisfy the reset LZMA needs.
 		case cLRN, cLRND:
 			*c = 'L'
 		default:
@@ -340,7 +340,7 @@ func (c *chunkState) next(ctype chunkType) error {
 		case cUD:
 			*c = 'R'
 		case cU:
-			break
+			// Another uncompressed chunk stays uncompressed.
 		case cL, cLR, cLRN, cLRND:
 			*c = 'L'
 		default:
@@ -378,9 +378,9 @@ const maxDictCap = 1<<32 - 1
 // maxDictCapCode defines the maximum dictionary capacity code.
 const maxDictCapCode = 40
 
-// The function decodes the dictionary capacity byte, but doesn't change
-// for the correct range of the given byte.
-func decodeDictCap(c byte) int64 {
+// dictCapOfCode is the dictionary capacity a code stands for, without the
+// range check DecodeDictCap adds.
+func dictCapOfCode(c byte) int64 {
 	return (2 | int64(c)&1) << (11 + (c>>1)&0x1f) //nolint:mnd // the LZMA2 dictionary-size byte's formula
 }
 
@@ -395,7 +395,7 @@ func DecodeDictCap(c byte) (n int64, err error) {
 		return 0, corruptf("lzma: invalid dictionary size code")
 	}
 
-	return decodeDictCap(c), nil
+	return dictCapOfCode(c), nil
 }
 
 // EncodeDictCap encodes a dictionary capacity. The function returns the
@@ -406,7 +406,7 @@ func EncodeDictCap(n int64) byte {
 	for a < b {
 		c := a + (b-a)>>1
 
-		m := decodeDictCap(c)
+		m := dictCapOfCode(c)
 		if n <= m {
 			if n == m {
 				return c

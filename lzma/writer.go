@@ -91,11 +91,7 @@ func (c *WriterConfig) Verify() error {
 		return errEOSRequired
 	}
 
-	if err = c.Matcher.verify(); err != nil {
-		return err
-	}
-
-	return nil
+	return c.Matcher.verify()
 }
 
 // Writer writes an LZMA stream in the classic format.

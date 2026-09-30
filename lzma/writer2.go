@@ -60,11 +60,7 @@ func (c *Writer2Config) Verify() error {
 		return errBufSizeSmall
 	}
 
-	if err = c.Matcher.verify(); err != nil {
-		return err
-	}
-
-	return nil
+	return c.Matcher.verify()
 }
 
 // Writer2 supports the creation of an LZMA2 stream. But note that

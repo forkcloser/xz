@@ -55,6 +55,6 @@ func TestUvarIntCVE_2020_16845(t *testing.T) {
 
 	_, _, err := readUvarint(r)
 	if !errors.Is(err, errOverflowU64) {
-		t.Fatalf("readUvarint overflow not detected")
+		t.Fatal("readUvarint overflow not detected")
 	}
 }

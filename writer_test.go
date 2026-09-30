@@ -253,7 +253,7 @@ func BenchmarkWriter(b *testing.B) {
 		}
 
 		if err = w.Close(); err != nil {
-			b.Fatalf("w.Write(data)")
+			b.Fatal("w.Write(data)")
 		}
 	}
 

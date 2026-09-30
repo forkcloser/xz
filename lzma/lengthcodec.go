@@ -66,11 +66,7 @@ func (lc *lengthCodec) Encode(e *rangeEncoder, l, posState uint32,
 		return err
 	}
 
-	if err = lc.high.Encode(e, l-16); err != nil {
-		return err
-	}
-
-	return nil
+	return lc.high.Encode(e, l-16)
 }
 
 // init initializes a new length codec.

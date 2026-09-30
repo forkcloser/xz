@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -84,7 +85,7 @@ func testDecodeFile(t *testing.T, filename string, orig []byte) {
 	}
 
 	if !bytes.Equal(orig, decoded) {
-		t.Fatalf("decoded file differs from original")
+		t.Fatal("decoded file differs from original")
 	}
 }
 
@@ -175,7 +176,7 @@ func (w *wrapTest) testFile(t *testing.T, filename string, orig []byte) {
 
 	defer func() {
 		if err = f.Close(); err != nil {
-			log.Fatal(err)
+			t.Error(err)
 		}
 	}()
 
@@ -277,7 +278,7 @@ func TestReaderBadFiles(t *testing.T) {
 
 			decoded, err := io.ReadAll(l)
 			if err == nil {
-				t.Errorf("ReadAll: no error")
+				t.Error("ReadAll: no error")
 				t.Logf("%s", decoded)
 
 				return
@@ -304,29 +305,33 @@ func newRepReader(c byte, n int64) *io.LimitedReader {
 
 func newCodeReader(r io.Reader) *io.PipeReader {
 	pr, pw := io.Pipe()
+	// A failure here closes the pipe with it, so the reading test sees it;
+	// the goroutine cannot fail the test itself.
 	go func() {
 		bw := bufio.NewWriter(pw)
 
 		lw, err := NewWriter(bw)
 		if err != nil {
-			log.Fatalf("NewWriter error %s", err)
+			_ = pw.CloseWithError(fmt.Errorf("NewWriter: %w", err))
+			return
 		}
 
 		if _, err = io.Copy(lw, r); err != nil {
-			log.Fatalf("io.Copy error %s", err)
+			_ = pw.CloseWithError(fmt.Errorf("io.Copy: %w", err))
+			return
 		}
 
 		if err = lw.Close(); err != nil {
-			log.Fatalf("lw.Close error %s", err)
+			_ = pw.CloseWithError(fmt.Errorf("lw.Close: %w", err))
+			return
 		}
 
 		if err = bw.Flush(); err != nil {
-			log.Fatalf("bw.Flush() error %s", err)
+			_ = pw.CloseWithError(fmt.Errorf("bw.Flush: %w", err))
+			return
 		}
 
-		if err = pw.CloseWithError(io.EOF); err != nil {
-			log.Fatalf("pw.CloseWithError(io.EOF) error %s", err)
-		}
+		_ = pw.CloseWithError(io.EOF)
 	}()
 
 	return pr

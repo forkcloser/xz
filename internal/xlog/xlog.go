@@ -113,7 +113,7 @@ func (l *Logger) Output(calldepth, noflag int, v ...any) error {
 
 	s := fmt.Sprint(v...)
 
-	return l.output(calldepth+1, now, s)
+	return l.writeEntry(calldepth+1, now, s)
 }
 
 // Outputf works like output but formats the output like Printf.
@@ -129,7 +129,7 @@ func (l *Logger) Outputf(calldepth, noflag int, format string, v ...any) error {
 
 	s := fmt.Sprintf(format, v...)
 
-	return l.output(calldepth+1, now, s)
+	return l.writeEntry(calldepth+1, now, s)
 }
 
 // Panicf prints the message like Printf and calls panic. The printing
@@ -144,6 +144,7 @@ func Panicf(format string, v ...any) {
 // printing might be suppressed by the flag Lnofatal.
 func Fatal(v ...any) {
 	std.Output(2, Lnofatal, v...)
+	//revive:disable-next-line:deep-exit Fatal exits by contract, as log.Fatal does
 	os.Exit(1)
 }
 
@@ -151,6 +152,7 @@ func Fatal(v ...any) {
 // printing might be suppressed by the flag Lnofatal.
 func Fatalf(format string, v ...any) {
 	std.Outputf(2, Lnofatal, format, v...)
+	//revive:disable-next-line:deep-exit Fatalf exits by contract, as log.Fatalf does
 	os.Exit(1)
 }
 
@@ -223,7 +225,7 @@ func (l *Logger) SetPrefix(prefix string) {
 	l.prefix = prefix
 }
 
-func (l *Logger) output(calldepth int, now time.Time, s string) error {
+func (l *Logger) writeEntry(calldepth int, now time.Time, s string) error {
 	var (
 		file string
 		line int

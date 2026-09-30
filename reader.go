@@ -275,12 +275,12 @@ func (r *streamReader) Read(p []byte) (n int, err error) {
 		n += k
 
 		if err != nil {
-			if errors.Is(err, io.EOF) {
-				r.index = append(r.index, r.br.record())
-				r.br = nil
-			} else {
+			if !errors.Is(err, io.EOF) {
 				return n, err
 			}
+
+			r.index = append(r.index, r.br.record())
+			r.br = nil
 		}
 	}
 
@@ -361,13 +361,13 @@ type blockReader struct {
 // newBlockReader creates a new block reader. A non-nil cache lets the block
 // reuse the LZMA2 reader of the previous block.
 func (c *ReaderConfig) newBlockReader(xz io.Reader, h *blockHeader,
-	hlen int, hash hash.Hash, cache *lzma2Cache,
+	hlen int, check hash.Hash, cache *lzma2Cache,
 ) (br *blockReader, err error) {
 	br = &blockReader{
 		lxz:       countingReader{r: xz},
 		header:    h,
 		headerLen: hlen,
-		hash:      hash,
+		hash:      check,
 	}
 
 	fr, err := c.newFilterReader(&br.lxz, h.filters, cache)

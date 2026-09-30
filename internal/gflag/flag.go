@@ -77,9 +77,14 @@ const (
 
 // Value is the interface to the value of a specific flag.
 type Value interface {
+	// Set parses the flag's argument and stores it.
 	Set(s string) error
+	// Update records the flag given without an argument: a bool becomes
+	// true, a counter counts one more.
 	Update()
+	// Get returns the stored value.
 	Get() any
+	// String formats the stored value.
 	String() string
 }
 
@@ -113,7 +118,7 @@ func lineFlags(name, shorthands, defaultValue string) string {
 
 	if name != "" {
 		if buf.Len() > 0 {
-			fmt.Fprintf(buf, ", ")
+			fmt.Fprint(buf, ", ")
 		}
 
 		fmt.Fprint(buf, "--", name)
@@ -226,7 +231,7 @@ func Parse() {
 // defaultUsage provides the default usage information.
 func defaultUsage(f *FlagSet) {
 	if f.name == "" {
-		fmt.Fprintf(f.out(), "Usage:\n")
+		fmt.Fprint(f.out(), "Usage:\n")
 	} else {
 		fmt.Fprintf(f.out(), "Usage of %s:\n", f.name)
 	}
@@ -263,6 +268,7 @@ func (f *FlagSet) Parse(arguments []string) error {
 		case ContinueOnError:
 			return err
 		case ExitOnError:
+			//revive:disable-next-line:deep-exit ExitOnError asks for exactly this, as in package flag
 			os.Exit(2)
 		case PanicOnError:
 			panic(err)
