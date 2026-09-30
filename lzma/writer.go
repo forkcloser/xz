@@ -141,9 +141,7 @@ func (c WriterConfig) NewWriter(lzma io.Writer) (w *Writer, err error) {
 		flags = eosMarker
 	}
 
-	if w.e, err = newEncoder(w.bw, state, dict, flags); err != nil {
-		return nil, err
-	}
+	w.e = newEncoder(w.bw, state, dict, flags)
 
 	if err = w.writeHeader(); err != nil {
 		return nil, err

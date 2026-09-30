@@ -58,16 +58,11 @@ type encoder struct {
 // terminating end-of-stream marker must be written.
 func newEncoder(bw io.ByteWriter, state *state, dict *encoderDict,
 	flags encoderFlags,
-) (e *encoder, err error) {
-	re, err := newRangeEncoder(bw)
-	if err != nil {
-		return nil, err
-	}
-
-	e = &encoder{
+) *encoder {
+	e := &encoder{
 		dict:   dict,
 		state:  state,
-		re:     re,
+		re:     newRangeEncoder(bw),
 		marker: flags&eosMarker != 0,
 		start:  dict.Pos(),
 		margin: opLenMargin,
@@ -76,7 +71,7 @@ func newEncoder(bw io.ByteWriter, state *state, dict *encoderDict,
 		e.margin += 5
 	}
 
-	return e, nil
+	return e
 }
 
 // Write writes the bytes from p into the dictionary. If not enough
@@ -101,16 +96,10 @@ func (e *encoder) Write(p []byte) (n int, err error) {
 }
 
 // Reopen reopens the encoder with a new byte writer.
-func (e *encoder) Reopen(bw io.ByteWriter) error {
-	var err error
-	if e.re, err = newRangeEncoder(bw); err != nil {
-		return err
-	}
-
+func (e *encoder) Reopen(bw io.ByteWriter) {
+	e.re = newRangeEncoder(bw)
 	e.start = e.dict.Pos()
 	e.limit = false
-
-	return nil
 }
 
 // iverson implements the Iverson operator as proposed by Donald Knuth in his
