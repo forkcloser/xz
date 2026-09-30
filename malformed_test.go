@@ -10,7 +10,7 @@ import (
 	"hash/crc32"
 	"io"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 	"testing"
 
 	"github.com/forkcloser/xz/lzma"
@@ -161,11 +161,11 @@ func TestGarbageInputIsRejected(t *testing.T) {
 		"footer only":      {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'Y', 'Z'},
 		"magic then zeros": append(append([]byte{}, headerMagic...), make([]byte, 512)...),
 	}
-	rng := rand.New(rand.NewSource(11))
+	rng := rand.NewChaCha8([32]byte{11})
 
 	for i := range 8 {
 		p := make([]byte, 64*(i+1))
-		rng.Read(p)
+		_, _ = rng.Read(p)
 		cases[string(rune('a'+i))+" random"] = p
 	}
 

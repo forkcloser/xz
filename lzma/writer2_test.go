@@ -7,7 +7,7 @@ package lzma_test
 import (
 	"bytes"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"strings"
 	"testing"
 
@@ -99,7 +99,7 @@ func TestCycle2(t *testing.T) {
 
 	const txtlen = 2100000
 
-	_, _ = io.CopyN(buf, randtxt.NewReader(rand.NewSource(42)), txtlen)
+	_, _ = io.CopyN(buf, randtxt.NewReader(rand.NewPCG(42, 0)), txtlen)
 	txt := buf.String()
 	buf.Reset()
 
@@ -148,12 +148,12 @@ func TestCycle2(t *testing.T) {
 func TestWriter2SmallDictIncompressible(t *testing.T) {
 	t.Parallel()
 
-	rnd := rand.New(rand.NewSource(13))
+	rnd := rand.NewChaCha8([32]byte{13})
 
 	for _, dictCap := range []int{lzma.MinDictCap, 8192, 16384, 1 << 16} {
 		for _, size := range []int{5000, 10000, 100000} {
 			data := make([]byte, size)
-			rnd.Read(data)
+			_, _ = rnd.Read(data)
 
 			var buf bytes.Buffer
 

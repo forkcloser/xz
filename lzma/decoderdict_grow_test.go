@@ -6,7 +6,7 @@ package lzma //nolint:testpackage // white-box: tests the unexported dictionary'
 
 import (
 	"bytes"
-	"math/rand"
+	"math/rand/v2"
 	"testing"
 )
 
@@ -95,16 +95,17 @@ func testGrowMatchesEager(t *testing.T, dictCap, initial int) {
 
 		eager := eagerDecoderDict(dictCap)
 
-		rng := rand.New(rand.NewSource(seed))
+		src := rand.NewChaCha8([32]byte{byte(seed)})
+		rng := rand.New(src)
 
 		var gotOut, wantOut bytes.Buffer
 
 		drain := make([]byte, 4096)
 
 		for step := range 400 {
-			switch rng.Intn(10) {
+			switch rng.IntN(10) {
 			case 0, 1, 2, 3, 4: // literal
-				c := byte(rng.Intn(256))
+				c := byte(rng.IntN(256))
 				gErr := grow.WriteByte(c)
 
 				eErr := eager.WriteByte(c)
@@ -118,8 +119,8 @@ func testGrowMatchesEager(t *testing.T, dictCap, initial int) {
 					continue
 				}
 
-				dist := int64(1 + rng.Intn(dl))
-				length := 1 + rng.Intn(maxMatchLen)
+				dist := int64(1 + rng.IntN(dl))
+				length := 1 + rng.IntN(maxMatchLen)
 				gErr := grow.writeMatch(dist, length)
 
 				eErr := eager.writeMatch(dist, length)
@@ -128,8 +129,8 @@ func testGrowMatchesEager(t *testing.T, dictCap, initial int) {
 						dictCap, seed, step, dist, length, gErr, eErr)
 				}
 			case 8: // bulk write
-				p := make([]byte, rng.Intn(500))
-				rng.Read(p)
+				p := make([]byte, rng.IntN(500))
+				_, _ = src.Read(p)
 				gn, _ := grow.Write(p)
 
 				en, _ := eager.Write(p)
@@ -138,7 +139,7 @@ func testGrowMatchesEager(t *testing.T, dictCap, initial int) {
 						dictCap, seed, step, gn, en)
 				}
 			case 9: // reader drains some output
-				n := rng.Intn(len(drain))
+				n := rng.IntN(len(drain))
 				gn, _ := grow.Read(drain[:n])
 				gotOut.Write(drain[:gn])
 				en, _ := eager.Read(drain[:n])
@@ -186,7 +187,7 @@ func TestDecoderDictGrowWithReset(t *testing.T) {
 		}
 
 		eager := eagerDecoderDict(dictCap)
-		rng := rand.New(rand.NewSource(99))
+		rng := rand.New(rand.NewPCG(99, 0))
 		drain := make([]byte, 1024)
 
 		for step := range 3000 {
@@ -195,14 +196,14 @@ func TestDecoderDictGrowWithReset(t *testing.T) {
 				eager.Reset()
 			}
 
-			c := byte(rng.Intn(256))
+			c := byte(rng.IntN(256))
 			if err := grow.WriteByte(c); err == nil {
 				if err := eager.WriteByte(c); err != nil {
 					t.Fatalf("dictCap %d step %d: eager refused a byte the "+
 						"growing dictionary accepted", dictCap, step)
 				}
 			} else {
-				n := rng.Intn(len(drain))
+				n := rng.IntN(len(drain))
 				gn, _ := grow.Read(drain[:n])
 
 				en, _ := eager.Read(drain[:n])

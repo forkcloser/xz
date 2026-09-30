@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"os"
 	"runtime"
 	"testing"
@@ -18,7 +18,7 @@ import (
 // parallelTestData generates compressible data with literals, matches
 // and runs.
 func parallelTestData(n int) []byte {
-	rng := rand.New(rand.NewSource(7))
+	rng := rand.New(rand.NewPCG(7, 0))
 	words := []string{
 		"the ", "quick ", "brown ", "fox ", "jumps ",
 		"over ", "lazy ", "dog ", "0000000000000000", "\n",
@@ -26,7 +26,7 @@ func parallelTestData(n int) []byte {
 
 	var buf bytes.Buffer
 	for buf.Len() < n {
-		buf.WriteString(words[rng.Intn(len(words))])
+		buf.WriteString(words[rng.IntN(len(words))])
 	}
 
 	return buf.Bytes()[:n]

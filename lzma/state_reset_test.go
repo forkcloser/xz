@@ -5,7 +5,7 @@
 package lzma //nolint:testpackage // white-box: tests the unexported coder state
 
 import (
-	"math/rand"
+	"math/rand/v2"
 	"reflect"
 	"testing"
 )
@@ -13,10 +13,10 @@ import (
 // dirtyState runs enough probability updates over a state that every codec has
 // moved away from its initial values, so a Reset that misses a field shows up.
 func dirtyState(s *state, seed int64) {
-	rng := rand.New(rand.NewSource(seed))
+	rng := rand.New(rand.NewPCG(uint64(seed), 0))
 
 	touch := func(p *prob) {
-		if rng.Intn(2) == 0 {
+		if rng.IntN(2) == 0 {
 			p.inc()
 		} else {
 			p.dec()
@@ -76,7 +76,7 @@ func dirtyState(s *state, seed int64) {
 		touch(&s.distCodec.alignCodec.probs[j])
 	}
 
-	s.state = uint32(rng.Intn(states))
+	s.state = uint32(rng.IntN(states))
 	for i := range s.rep {
 		s.rep[i] = rng.Uint32()
 	}
