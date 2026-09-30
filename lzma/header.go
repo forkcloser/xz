@@ -85,7 +85,7 @@ func (h *Header) marshalBinary() (data []byte, err error) {
 		return nil, fmt.Errorf("%w: %d", errHeaderDictSize, h.DictSize)
 	}
 
-	data = make([]byte, 13)
+	data = make([]byte, HeaderLen)
 
 	// property byte
 	data[0] = h.Properties.Code()
@@ -148,7 +148,7 @@ func validDictSize(dictcap int) bool {
 		return true
 	}
 
-	for n := uint(10); n < 32; n++ {
+	for n := uint(10); n < 32; n++ { //nolint:mnd // header dictionary sizes are 2^n and 2^n+2^(n-1) for n from 10 up
 		if dictcap == 1<<n {
 			return true
 		}

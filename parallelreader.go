@@ -74,7 +74,7 @@ func (d *blockDesc) paddedSize() int64 {
 // maxLZMA2Expansion bounds how far one byte of a block can expand. The
 // smallest LZMA2 chunk that carries compressed data is six header bytes plus
 // at least one data byte, and a chunk decodes to at most 2 MiB.
-const maxLZMA2Expansion = (1 << 21) / 6
+const maxLZMA2Expansion = (2 << 20) / 6
 
 // checkUncompressedSize rejects index records whose uncompressed size cannot
 // possibly be produced by a block of the recorded unpadded size. The decode
@@ -478,7 +478,7 @@ func (d *parallelDecoder) start(workers, dictCap int) {
 	// Size it for the largest block of the file rather than always taking
 	// the maximum: for a file of small blocks the fixed size would make the
 	// read buffer several times the block it reads.
-	d.readBufSize = 1 << 10
+	d.readBufSize = 1 << 10 //nolint:mnd // 1 KiB, the smallest read buffer a worker starts with
 	for i := range d.blocks {
 		if p := d.blocks[i].paddedSize(); p > int64(d.readBufSize) {
 			d.readBufSize = int(min(p, blockReadBufSize))

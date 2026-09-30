@@ -102,7 +102,7 @@ func (s *state) updateStateLiteral() {
 	case s.state < 4:
 		s.state = 0
 		return
-	case s.state < 10:
+	case s.state < 10: //nolint:mnd // the specification's literal state transition, number for number
 		s.state -= 3
 		return
 	}

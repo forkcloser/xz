@@ -19,6 +19,9 @@ var (
 	errEOSRequired     = errors.New("lzma: EOS marker is required")
 )
 
+// defaultDictCap is the dictionary capacity a zero DictCap selects.
+const defaultDictCap = 8 << 20
+
 // MinDictCap and MaxDictCap provide the range of supported dictionary
 // capacities.
 const (
@@ -171,7 +174,7 @@ func (c *WriterConfig) fill() {
 	}
 
 	if c.DictCap == 0 {
-		c.DictCap = 8 * 1024 * 1024
+		c.DictCap = defaultDictCap
 	}
 
 	if c.BufSize == 0 {

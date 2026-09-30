@@ -4,6 +4,15 @@
 
 package lzma
 
+// The literal coder's sizes, from the LZMA specification: each literal
+// state has literalProbs probabilities, a bit tree over the eight bits plus
+// the match-byte variants; a symbol walking the tree reaches
+// literalSymbolEnd once all eight bits are in.
+const (
+	literalProbs     = 0x300
+	literalSymbolEnd = 0x100
+)
+
 // literalCodec supports the encoding of literal. It provides 768 probability
 // values per literal state. The upper 512 probabilities are used with the
 // context of a match bit.
@@ -16,8 +25,8 @@ type literalCodec struct {
 func (c *literalCodec) Encode(e *rangeEncoder, s byte,
 	state uint32, match byte, litState uint32,
 ) (err error) {
-	k := litState * 0x300
-	probs := c.probs[k : k+0x300]
+	k := litState * literalProbs
+	probs := c.probs[k : k+literalProbs]
 	symbol := uint32(1)
 	r := uint32(s)
 
@@ -39,13 +48,13 @@ func (c *literalCodec) Encode(e *rangeEncoder, s byte,
 				break
 			}
 
-			if symbol >= 0x100 {
+			if symbol >= literalSymbolEnd {
 				break
 			}
 		}
 	}
 
-	for symbol < 0x100 {
+	for symbol < literalSymbolEnd {
 		bit := (r >> 7) & 1
 		r <<= 1
 
@@ -68,7 +77,7 @@ func (c *literalCodec) init(lc, lp int) {
 		panic("lp out of range")
 	}
 
-	n := 0x300 << uint(lc+lp)
+	n := literalProbs << uint(lc+lp)
 	if cap(c.probs) < n {
 		c.probs = make([]prob, n)
 	}
@@ -101,8 +110,8 @@ func (c *literalCodec) deepcopy(src *literalCodec) {
 func (c *literalCodec) decode(d *rangeDecoder,
 	state uint32, match byte, litState, rng, code uint32,
 ) (s byte, nrng, ncode uint32) {
-	k := litState * 0x300
-	probs := c.probs[k : k+0x300]
+	k := litState * literalProbs
+	probs := c.probs[k : k+literalProbs]
 	symbol := uint32(1)
 
 	if state >= 7 {
@@ -132,13 +141,13 @@ func (c *literalCodec) decode(d *rangeDecoder,
 				break
 			}
 
-			if symbol >= 0x100 {
+			if symbol >= literalSymbolEnd {
 				break
 			}
 		}
 	}
 
-	for symbol < 0x100 {
+	for symbol < literalSymbolEnd {
 		var bit uint32
 
 		bit, rng, code = decodeBitArith(&probs[symbol], rng, code)
@@ -157,7 +166,7 @@ func (c *literalCodec) decode(d *rangeDecoder,
 		symbol = (symbol << 1) | bit
 	}
 
-	s = byte(symbol - 0x100)
+	s = byte(symbol - literalSymbolEnd)
 
 	return s, rng, code
 }

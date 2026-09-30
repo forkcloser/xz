@@ -69,7 +69,7 @@ type hashTable struct {
 // hashTableExponent derives the hash table exponent from the dictionary
 // capacity.
 func hashTableExponent(n uint32) int {
-	e := 30 - nlz32(n)
+	e := 30 - nlz32(n) //nolint:mnd // one less than the position of n's highest set bit
 	switch {
 	case e < minTableExponent:
 		e = minTableExponent

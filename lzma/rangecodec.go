@@ -6,6 +6,7 @@ package lzma
 
 import (
 	"io"
+	"math"
 )
 
 // rangeEncoder implements range encoding of single bits. The low value can
@@ -31,7 +32,7 @@ func newRangeEncoder(bw io.ByteWriter) *rangeEncoder {
 
 	return &rangeEncoder{
 		lbw:      lbw,
-		nrange:   0xffffffff,
+		nrange:   math.MaxUint32,
 		cacheLen: 1,
 	}
 }
@@ -183,9 +184,9 @@ func (b *byteSliceReader) ReadByte() (c byte, err error) {
 // from the reader and therefore may return an error.
 func (d *rangeDecoder) init(br io.ByteReader) error {
 	if bsr, ok := br.(*byteSliceReader); ok {
-		*d = rangeDecoder{buf: bsr.buf, pos: bsr.pos, nrange: 0xffffffff}
+		*d = rangeDecoder{buf: bsr.buf, pos: bsr.pos, nrange: math.MaxUint32}
 	} else {
-		*d = rangeDecoder{br: br, nrange: 0xffffffff}
+		*d = rangeDecoder{br: br, nrange: math.MaxUint32}
 	}
 
 	b := d.readByte()

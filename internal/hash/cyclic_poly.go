@@ -4,6 +4,8 @@
 
 package hash
 
+import "math/bits"
+
 // CyclicPoly provides a cyclic polynomial rolling hash.
 type CyclicPoly struct {
 	h uint64
@@ -14,7 +16,7 @@ type CyclicPoly struct {
 // ror rotates the unsigned 64-bit integer to right. The argument s must be
 // less than 64.
 func ror(x uint64, s uint) uint64 {
-	return (x >> s) | (x << (64 - s))
+	return bits.RotateLeft64(x, -int(s))
 }
 
 // NewCyclicPoly creates a new instance of the CyclicPoly structure. The

@@ -91,7 +91,7 @@ func (c Reader2Config) NewReader2(lzma2 io.Reader) (r *Reader2, err error) {
 // fill converts the zero values of the configuration to the default values.
 func (c *Reader2Config) fill() {
 	if c.DictCap == 0 {
-		c.DictCap = 8 * 1024 * 1024
+		c.DictCap = defaultDictCap
 	}
 }
 
