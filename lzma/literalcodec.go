@@ -166,6 +166,7 @@ func (c *literalCodec) decode(d *rangeDecoder,
 		symbol = (symbol << 1) | bit
 	}
 
+	// #nosec G115 -- the decoded symbol is 0x100 to 0x1ff
 	s = byte(symbol - literalSymbolEnd)
 
 	return s, rng, code

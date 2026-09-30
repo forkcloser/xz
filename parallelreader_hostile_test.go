@@ -6,6 +6,7 @@ package xz //nolint:testpackage // white-box: forges hostile indexes from unexpo
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"hash/crc32"
 	"io"
@@ -32,7 +33,7 @@ func uvarintBytes(x uint64) []byte {
 
 func le32Bytes(x uint32) []byte {
 	p := make([]byte, 4)
-	putUint32LE(p, x)
+	binary.LittleEndian.PutUint32(p, x)
 
 	return p
 }
@@ -80,10 +81,10 @@ func hostileStream(blockArea []byte, recs []hostileRecord, recCount int64) []byt
 	out.Write(idx.Bytes())
 
 	footer := make([]byte, footerLen)
-	putUint32LE(footer[4:], uint32(indexSize/4-1))
+	binary.LittleEndian.PutUint32(footer[4:], uint32(indexSize/4-1))
 	footer[9] = 0x01 // CRC32 check, matching the stream header flags
 	copy(footer[10:], footerMagic)
-	putUint32LE(footer, crc32.ChecksumIEEE(footer[4:10]))
+	binary.LittleEndian.PutUint32(footer, crc32.ChecksumIEEE(footer[4:10]))
 	out.Write(footer)
 
 	return out.Bytes()

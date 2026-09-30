@@ -52,6 +52,7 @@ func (dc *distCodec) Encode(e *rangeEncoder, dist, l uint32) (err error) {
 	if dist < startPosModel {
 		posSlot = dist
 	} else {
+		// #nosec G115 -- dist is at least startPosModel here, so nlz32 is at most 29
 		//nolint:mnd // one less than the position of dist's highest set bit, as the specification computes the slot
 		bits = uint32(30 - nlz32(dist))
 		posSlot = startPosModel - 2 + (bits << 1)
@@ -70,6 +71,7 @@ func (dc *distCodec) Encode(e *rangeEncoder, dist, l uint32) (err error) {
 		return tc.Encode(dist, e)
 	}
 
+	// #nosec G115 -- past endPosModel the slot has more bits than the align bits
 	dic := directCodec(bits - alignBits)
 	if err = dic.Encode(e, dist>>alignBits); err != nil {
 		return err
@@ -142,6 +144,7 @@ func (dc *distCodec) decode(d *rangeDecoder, l, rng, code uint32,
 
 	// posSlots use direct encoding and a single model for the four align
 	// bits.
+	// #nosec G115 -- past endPosModel the slot has more bits than the align bits
 	dic := directCodec(bits - alignBits)
 	u, rng, code = dic.decode(d, rng, code)
 	dist += u << alignBits

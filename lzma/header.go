@@ -5,6 +5,7 @@
 package lzma
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 )
@@ -13,53 +14,6 @@ import (
 var (
 	errHeaderDictSize = errors.New("lzma: DictCap out of range")
 )
-
-// uint32LE reads an uint32 integer from a byte slice
-func uint32LE(b []byte) uint32 {
-	x := uint32(b[3]) << 24
-	x |= uint32(b[2]) << 16
-	x |= uint32(b[1]) << 8
-	x |= uint32(b[0])
-
-	return x
-}
-
-// uint64LE converts the uint64 value stored as little endian to an uint64
-// value.
-func uint64LE(b []byte) uint64 {
-	x := uint64(b[7]) << 56
-	x |= uint64(b[6]) << 48
-	x |= uint64(b[5]) << 40
-	x |= uint64(b[4]) << 32
-	x |= uint64(b[3]) << 24
-	x |= uint64(b[2]) << 16
-	x |= uint64(b[1]) << 8
-	x |= uint64(b[0])
-
-	return x
-}
-
-// putUint32LE puts an uint32 integer into a byte slice that must have at least
-// a length of 4 bytes.
-func putUint32LE(b []byte, x uint32) {
-	b[0] = byte(x)
-	b[1] = byte(x >> 8)
-	b[2] = byte(x >> 16)
-	b[3] = byte(x >> 24)
-}
-
-// putUint64LE puts the uint64 value into the byte slice as little endian
-// value. The byte slice b must have at least place for 8 bytes.
-func putUint64LE(b []byte, x uint64) {
-	b[0] = byte(x)
-	b[1] = byte(x >> 8)
-	b[2] = byte(x >> 16)
-	b[3] = byte(x >> 24)
-	b[4] = byte(x >> 32)
-	b[5] = byte(x >> 40)
-	b[6] = byte(x >> 48)
-	b[7] = byte(x >> 56)
-}
 
 // noHeaderSize defines the value of the length field in the LZMA header.
 const noHeaderSize uint64 = 1<<64 - 1
@@ -91,7 +45,7 @@ func (h *Header) marshalBinary() (data []byte, err error) {
 	data[0] = h.Properties.Code()
 
 	// dictionary capacity
-	putUint32LE(data[1:5], h.DictSize)
+	binary.LittleEndian.PutUint32(data[1:5], h.DictSize)
 
 	// uncompressed size
 	var s uint64
@@ -101,7 +55,7 @@ func (h *Header) marshalBinary() (data []byte, err error) {
 		s = noHeaderSize
 	}
 
-	putUint64LE(data[5:], s)
+	binary.LittleEndian.PutUint64(data[5:], s)
 
 	return data, nil
 }
@@ -119,7 +73,7 @@ func (h *Header) unmarshalBinary(data []byte) error {
 	}
 
 	// dictionary capacity
-	h.DictSize = uint32LE(data[1:])
+	h.DictSize = binary.LittleEndian.Uint32(data[1:])
 	if int(h.DictSize) < 0 {
 		return unsupportedf(
 			"lzma: header dictionary size %d exceeds the address space",
@@ -128,10 +82,11 @@ func (h *Header) unmarshalBinary(data []byte) error {
 	}
 
 	// uncompressed size
-	s := uint64LE(data[5:])
+	s := binary.LittleEndian.Uint64(data[5:])
 	if s == noHeaderSize {
 		h.Size = -1
 	} else {
+		// #nosec G115 -- a size past 1<<63 wraps negative, which the next line rejects as corrupt
 		h.Size = int64(s)
 		if h.Size < 0 {
 			return corruptf("lzma: header uncompressed size out of int64 range")

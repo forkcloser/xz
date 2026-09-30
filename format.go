@@ -156,7 +156,7 @@ func (h *header) UnmarshalBinary(data []byte) error {
 	crc := crc32.NewIEEE()
 	crc.Write(data[6:8])
 
-	if uint32LE(data[8:]) != crc.Sum32() {
+	if binary.LittleEndian.Uint32(data[8:]) != crc.Sum32() {
 		return corruptf("xz: invalid checksum for file header")
 	}
 
@@ -187,7 +187,7 @@ func (h *header) MarshalBinary() (data []byte, err error) {
 
 	crc := crc32.NewIEEE()
 	crc.Write(data[6:8])
-	putUint32LE(data[8:], crc.Sum32())
+	binary.LittleEndian.PutUint32(data[8:], crc.Sum32())
 
 	return data, nil
 }
@@ -236,7 +236,7 @@ func (f *footer) MarshalBinary() (data []byte, err error) {
 
 	// backward size (index size)
 	s := (f.indexSize / 4) - 1
-	putUint32LE(data[4:], uint32(s))
+	binary.LittleEndian.PutUint32(data[4:], uint32(s))
 	// flags
 	data[9] = f.flags
 	// footer magic
@@ -245,7 +245,7 @@ func (f *footer) MarshalBinary() (data []byte, err error) {
 	// CRC-32
 	crc := crc32.NewIEEE()
 	crc.Write(data[4:10])
-	putUint32LE(data, crc.Sum32())
+	binary.LittleEndian.PutUint32(data, crc.Sum32())
 
 	return data, nil
 }
@@ -266,13 +266,13 @@ func (f *footer) UnmarshalBinary(data []byte) error {
 	crc := crc32.NewIEEE()
 	crc.Write(data[4:10])
 
-	if uint32LE(data) != crc.Sum32() {
+	if binary.LittleEndian.Uint32(data) != crc.Sum32() {
 		return corruptf("xz: footer checksum error")
 	}
 
 	var g footer
 	// backward size (index size)
-	g.indexSize = (int64(uint32LE(data[4:])) + 1) * 4
+	g.indexSize = (int64(binary.LittleEndian.Uint32(data[4:])) + 1) * 4
 
 	// flags
 	if data[8] != 0 {
@@ -399,6 +399,7 @@ func readSizeInBlockHeader(r io.ByteReader, present bool) (n int64, err error) {
 		return 0, corruptf("xz: size overflow in block header")
 	}
 
+	// #nosec G115 -- x is checked below 1<<63 just above
 	return int64(x), nil
 }
 
@@ -426,7 +427,7 @@ func (h *blockHeader) UnmarshalBinary(data []byte) error {
 	crc := crc32.NewIEEE()
 	crc.Write(data[:n])
 
-	if crc.Sum32() != uint32LE(data[n:]) {
+	if crc.Sum32() != binary.LittleEndian.Uint32(data[n:]) {
 		return corruptf("xz: checksum error for block header")
 	}
 
@@ -503,6 +504,7 @@ func (h *blockHeader) MarshalBinary() (data []byte, err error) {
 	buf.WriteByte(0)
 
 	// flags
+	// #nosec G115 -- the filter count is checked to be one to four
 	flags := byte(len(h.filters) - 1)
 	if h.compressedSize >= 0 {
 		flags |= compressedSizePresent
@@ -556,7 +558,7 @@ func (h *blockHeader) MarshalBinary() (data []byte, err error) {
 
 	crc := crc32.NewIEEE()
 	crc.Write(data[:len(data)-4])
-	putUint32LE(data[len(data)-4:], crc.Sum32())
+	binary.LittleEndian.PutUint32(data[len(data)-4:], crc.Sum32())
 
 	return data, nil
 }
@@ -656,6 +658,7 @@ func readRecord(r io.ByteReader) (rec record, n int, err error) {
 		return rec, n, err
 	}
 
+	// #nosec G115 -- a value past 1<<63 wraps negative, which the next line rejects as corrupt
 	rec.unpaddedSize = int64(u)
 	if rec.unpaddedSize < 0 {
 		return rec, n, corruptf("xz: unpadded size negative")
@@ -668,6 +671,7 @@ func readRecord(r io.ByteReader) (rec record, n int, err error) {
 		return rec, n, err
 	}
 
+	// #nosec G115 -- a value past 1<<63 wraps negative, which the next line rejects as corrupt
 	rec.uncompressedSize = int64(u)
 	if rec.uncompressedSize < 0 {
 		return rec, n, corruptf("xz: uncompressed size negative")
@@ -680,7 +684,9 @@ func readRecord(r io.ByteReader) (rec record, n int, err error) {
 func (rec *record) MarshalBinary() (data []byte, err error) {
 	// maximum length of a uvarint is 10
 	p := make([]byte, 20)
+	// #nosec G115 -- record sizes are never negative: checked where they are read and built
 	n := putUvarint(p, uint64(rec.unpaddedSize))
+	// #nosec G115 -- record sizes are never negative: checked where they are read and built
 	n += putUvarint(p[n:], uint64(rec.uncompressedSize))
 
 	return p[:n], nil
@@ -735,7 +741,7 @@ func writeIndex(w io.Writer, index []record) (n int64, err error) {
 	}
 
 	// crc32 checksum
-	putUint32LE(p, crc.Sum32())
+	binary.LittleEndian.PutUint32(p, crc.Sum32())
 	k, err = w.Write(p[:4])
 	n += int64(k)
 
@@ -771,6 +777,7 @@ func readIndexBody(r io.Reader, expectedRecordLen, maxRecords int) (records []re
 		return nil, n, err
 	}
 
+	// #nosec G115 -- the next line rejects a count that does not survive the conversion
 	recLen := int(u)
 	if recLen < 0 || uint64(recLen) != u {
 		return nil, n, corruptf("xz: record number overflow")
@@ -833,7 +840,7 @@ func readIndexBody(r io.Reader, expectedRecordLen, maxRecords int) (records []re
 		return records, n, err
 	}
 
-	if uint32LE(p) != s {
+	if binary.LittleEndian.Uint32(p) != s {
 		return nil, n, corruptf("xz: wrong checksum for index")
 	}
 

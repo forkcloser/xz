@@ -13,34 +13,6 @@ const (
 	uvarintPayload = 0x7f
 )
 
-// putUint32LE puts the little-endian representation of x into the first
-// four bytes of p.
-func putUint32LE(p []byte, x uint32) {
-	p[0] = byte(x)
-	p[1] = byte(x >> 8)
-	p[2] = byte(x >> 16)
-	p[3] = byte(x >> 24)
-}
-
-// putUint64LE puts the little-endian representation of x into the first
-// eight bytes of p.
-func putUint64LE(p []byte, x uint64) {
-	p[0] = byte(x)
-	p[1] = byte(x >> 8)
-	p[2] = byte(x >> 16)
-	p[3] = byte(x >> 24)
-	p[4] = byte(x >> 32)
-	p[5] = byte(x >> 40)
-	p[6] = byte(x >> 48)
-	p[7] = byte(x >> 56)
-}
-
-// uint32LE converts a little endian representation to an uint32 value.
-func uint32LE(p []byte) uint32 {
-	return uint32(p[0]) | uint32(p[1])<<8 | uint32(p[2])<<16 |
-		uint32(p[3])<<24
-}
-
 // putUvarint puts a uvarint representation of x into the byte slice.
 func putUvarint(p []byte, x uint64) int {
 	i := 0

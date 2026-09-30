@@ -6,6 +6,7 @@ package xz //nolint:testpackage // white-box: forges malformed streams from unex
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"hash/crc32"
 	"io"
@@ -438,7 +439,7 @@ func TestBlockHeaderPaddingIsCorrupt(t *testing.T) {
 	hlen := (int(full[hdrOff]) + 1) * 4
 	bad := append([]byte{}, full...)
 	bad[hdrOff+hlen-5] ^= 0x40 // last padding byte
-	putUint32LE(bad[hdrOff+hlen-4:],
+	binary.LittleEndian.PutUint32(bad[hdrOff+hlen-4:],
 		crc32.ChecksumIEEE(bad[hdrOff:hdrOff+hlen-4]))
 
 	r, err := NewReader(bytes.NewReader(bad))

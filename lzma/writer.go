@@ -157,8 +157,9 @@ func (c WriterConfig) NewWriter(lzma io.Writer) (w *Writer, err error) {
 func (c *WriterConfig) header() Header {
 	h := Header{
 		Properties: *c.Properties,
-		DictSize:   uint32(c.DictCap),
-		Size:       -1,
+		// #nosec G115 -- DictCap is verified to be MinDictCap to MaxDictCap, 1<<32 - 1
+		DictSize: uint32(c.DictCap),
+		Size:     -1,
 	}
 	if c.SizeInHeader {
 		h.Size = c.Size

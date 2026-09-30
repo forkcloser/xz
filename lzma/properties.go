@@ -74,6 +74,7 @@ func PropertiesForCode(code byte) (p Properties, err error) {
 // Code converts the properties to a byte. The function assumes that
 // the properties components are all in range.
 func (p Properties) Code() byte {
+	// #nosec G115 -- properties in range give at most (4*5+4)*9+8 = 224
 	return byte((p.PB*5+p.LP)*9 + p.LC)
 }
 
