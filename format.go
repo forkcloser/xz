@@ -581,6 +581,8 @@ type filter interface {
 
 // readFilter reads a block filter from the block header. At this point
 // in time only the LZMA2 filter is supported.
+//
+//nolint:iface // a factory keyed on the filter ID, where the format's other filters (delta, BCJ) would go
 func readFilter(r io.Reader) (f filter, err error) {
 	br := lzma.ByteReader(r)
 
