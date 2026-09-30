@@ -149,8 +149,8 @@ func main() {
 	xlog.SetFlags(0)
 
 	// initialize flags
-	gflag.CommandLine = gflag.NewFlagSet(cmdName, gflag.ExitOnError)
-	gflag.Usage = func() { usage(os.Stderr); os.Exit(1) }
+	gflag.CommandLine.Init(cmdName, gflag.ExitOnError)
+	gflag.CommandLine.Usage = func() { usage(os.Stderr); os.Exit(1) }
 	opts := options{}
 	opts.Init()
 
