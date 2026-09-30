@@ -567,6 +567,8 @@ const (
 )
 
 // filter represents a filter in the block header.
+//
+//nolint:interfacebloat // a filter is encoded in the header (id, un/marshal), built for each direction, and ordered (last)
 type filter interface {
 	id() uint64
 	UnmarshalBinary(data []byte) error
