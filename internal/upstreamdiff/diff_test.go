@@ -7,7 +7,7 @@ package upstreamdiff
 import (
 	"bytes"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"os"
 	"testing"
 
@@ -22,15 +22,16 @@ import (
 // the checkout has it.
 func corpora(tb testing.TB) map[string][]byte {
 	tb.Helper()
-	rng := rand.New(rand.NewSource(1))
+	src := rand.NewChaCha8([32]byte{1})
+	rng := rand.New(src)
 	random := make([]byte, 1<<18)
-	rng.Read(random)
+	_, _ = src.Read(random)
 
 	var text bytes.Buffer
 	words := []string{"the ", "quick ", "brown ", "fox ", "jumps ", "over ",
 		"lazy ", "dog ", "0000000000000000", "\n"}
 	for text.Len() < 1<<18 {
-		text.WriteString(words[rng.Intn(len(words))])
+		text.WriteString(words[rng.IntN(len(words))])
 	}
 
 	c := map[string][]byte{

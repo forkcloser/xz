@@ -5,7 +5,7 @@
 package hash //nolint:testpackage // white-box: defines the benchmark input cyclic_poly_test.go uses
 
 import (
-	"math/rand"
+	"math/rand/v2"
 	"testing"
 )
 
@@ -33,7 +33,7 @@ func TestRabinKarpSimple(t *testing.T) {
 }
 
 func makeBenchmarkBytes(n int) []byte {
-	rnd := rand.New(rand.NewSource(42))
+	rnd := rand.New(rand.NewPCG(42, 0))
 
 	p := make([]byte, n)
 	for i := range p {

@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"testing"
 
 	"github.com/forkcloser/xz/lzma"
@@ -245,7 +245,7 @@ func TestWriterErrorIsSticky(t *testing.T) {
 	// Incompressible, so the encoder's output outgrows the 4 KiB buffer in
 	// front of the writer during Write.
 	rnd := make([]byte, 1<<20)
-	rand.New(rand.NewSource(1)).Read(rnd)
+	_, _ = rand.NewChaCha8([32]byte{1}).Read(rnd)
 
 	if _, err = w.Write(rnd); !errors.Is(err, ioErr) {
 		t.Fatalf("Write gave %v; want the writer's error", err)

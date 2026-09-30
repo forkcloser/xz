@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"io"
 	"log"
-	"math/rand"
+	"math/rand/v2"
 	"os"
 	"testing"
 
@@ -128,7 +128,7 @@ func TestWriter2(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	_, _ = io.CopyN(&buf, randtxt.NewReader(rand.NewSource(41)), txtlen)
+	_, _ = io.CopyN(&buf, randtxt.NewReader(rand.NewPCG(41, 0)), txtlen)
 	txt := buf.String()
 
 	buf.Reset()
@@ -181,7 +181,7 @@ func TestWriterNoneCheck(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	_, _ = io.CopyN(&buf, randtxt.NewReader(rand.NewSource(41)), txtlen)
+	_, _ = io.CopyN(&buf, randtxt.NewReader(rand.NewPCG(41, 0)), txtlen)
 	txt := buf.String()
 
 	buf.Reset()

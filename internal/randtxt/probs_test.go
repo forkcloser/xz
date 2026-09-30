@@ -7,14 +7,14 @@ package randtxt //nolint:testpackage // white-box: tests the unexported trigram 
 import (
 	"bufio"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"testing"
 )
 
 func TestReader(t *testing.T) {
 	t.Parallel()
 
-	lr := io.LimitReader(NewReader(rand.NewSource(13)), 195)
+	lr := io.LimitReader(NewReader(rand.NewPCG(13, 0)), 195)
 	pretty := NewGroupReader(lr)
 
 	scanner := bufio.NewScanner(pretty)

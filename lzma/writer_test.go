@@ -10,7 +10,7 @@ import (
 	"errors"
 	"io"
 	"log"
-	"math/rand"
+	"math/rand/v2"
 	"os"
 	"testing"
 
@@ -78,7 +78,7 @@ func TestWriterLongData(t *testing.T) {
 		size = 82237
 	)
 
-	r := io.LimitReader(randtxt.NewReader(rand.NewSource(seed)), size)
+	r := io.LimitReader(randtxt.NewReader(rand.NewPCG(seed, 0)), size)
 
 	txt, err := io.ReadAll(r)
 	if err != nil {
@@ -239,7 +239,7 @@ func BenchmarkReader(b *testing.B) {
 		size = 50000
 	)
 
-	r := io.LimitReader(randtxt.NewReader(rand.NewSource(seed)), size)
+	r := io.LimitReader(randtxt.NewReader(rand.NewPCG(seed, 0)), size)
 
 	txt, err := io.ReadAll(r)
 	if err != nil {
@@ -286,7 +286,7 @@ func BenchmarkWriter(b *testing.B) {
 		size = 50000
 	)
 
-	r := io.LimitReader(randtxt.NewReader(rand.NewSource(seed)), size)
+	r := io.LimitReader(randtxt.NewReader(rand.NewPCG(seed, 0)), size)
 
 	txt, err := io.ReadAll(r)
 	if err != nil {

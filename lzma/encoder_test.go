@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"testing"
 
 	"github.com/forkcloser/xz/internal/randtxt"
@@ -123,7 +123,7 @@ func TestEncoderCycle2(t *testing.T) {
 
 	const txtlen = 50000
 
-	_, _ = io.CopyN(buf, randtxt.NewReader(rand.NewSource(42)), txtlen)
+	_, _ = io.CopyN(buf, randtxt.NewReader(rand.NewPCG(42, 0)), txtlen)
 	txt := buf.String()
 	buf.Reset()
 
