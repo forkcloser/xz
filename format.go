@@ -50,7 +50,7 @@ func padLen(n int64) int {
 /*** Header ***/
 
 // headerMagic stores the magic bytes for the header.
-var headerMagic = []byte{0xfd, '7', 'z', 'X', 'Z', 0x00}
+const headerMagic = "\xfd7zXZ\x00"
 
 // HeaderLen provides the length of the xz file header.
 const HeaderLen = 12
@@ -77,22 +77,20 @@ func verifyFlags(flags byte) error {
 	}
 }
 
-// flagstrings maps flag values to strings.
-var flagstrings = map[byte]string{
-	None:   "None",
-	CRC32:  "CRC-32",
-	CRC64:  "CRC-64",
-	SHA256: "SHA-256",
-}
-
 // flagString returns the string representation for the given flags.
 func flagString(flags byte) string {
-	s, ok := flagstrings[flags]
-	if !ok {
-		return "invalid"
+	switch flags {
+	case None:
+		return "None"
+	case CRC32:
+		return "CRC-32"
+	case CRC64:
+		return "CRC-64"
+	case SHA256:
+		return "SHA-256"
 	}
 
-	return s
+	return "invalid"
 }
 
 // newHashFunc returns a function that creates hash instances for the
@@ -145,7 +143,7 @@ func (h *header) UnmarshalBinary(data []byte) error {
 	}
 
 	// magic header
-	if !bytes.Equal(headerMagic, data[:6]) {
+	if string(data[:6]) != headerMagic {
 		return errHeaderMagic
 	}
 
@@ -195,7 +193,7 @@ func (h *header) MarshalBinary() (data []byte, err error) {
 const footerLen = 12
 
 // footerMagic contains the footer magic bytes.
-var footerMagic = []byte{'Y', 'Z'}
+const footerMagic = "YZ"
 
 // footer represents the content of the xz file footer.
 type footer struct {
@@ -255,7 +253,7 @@ func (f *footer) UnmarshalBinary(data []byte) error {
 	}
 
 	// magic bytes
-	if !bytes.Equal(data[10:], footerMagic) {
+	if string(data[10:]) != footerMagic {
 		return corruptf("xz: footer magic invalid")
 	}
 

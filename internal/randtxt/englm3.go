@@ -10,6 +10,8 @@ package randtxt
 //
 // The Reader type is using this model to create a random stream of text
 // that is distributed like English text.
+//
+//nolint:gochecknoglobals // the trigram model, read only
 var englm3 = ngrams{
 	{"AAA", -2.012237880410764e+01, -8.489658213678448e+00},
 	{"AAB", -1.802964169811005e+01, -6.396921107680856e+00},

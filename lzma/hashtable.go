@@ -38,10 +38,6 @@ const (
 	maxTableExponent = 20
 )
 
-// newRoller contains the function used to create an instance of the
-// hash.Roller.
-var newRoller = func(n int) hash.Roller { return hash.NewCyclicPoly(n) }
-
 // hashTable stores the hash table including the rolling hash method.
 //
 // We implement chained hashing into a circular buffer. Each entry in
@@ -107,8 +103,8 @@ func newHashTable(capacity, wordLen int) (t *hashTable, err error) {
 		mask:    (uint64(1) << uint(exp)) - 1,
 		hoff:    -int64(wordLen),
 		wordLen: wordLen,
-		wr:      newRoller(wordLen),
-		hr:      newRoller(wordLen),
+		wr:      hash.NewCyclicPoly(wordLen),
+		hr:      hash.NewCyclicPoly(wordLen),
 	}
 
 	return t, nil

@@ -155,7 +155,7 @@ func TestGarbageInputIsRejected(t *testing.T) {
 	cases := map[string][]byte{
 		"empty":            {},
 		"one byte":         {0xfd},
-		"header prefix":    headerMagic,
+		"header prefix":    []byte(headerMagic),
 		"all zeros":        make([]byte, 4096),
 		"header only":      append(append([]byte{}, headerMagic...), 0, 0, 0, 0, 0, 0),
 		"footer only":      {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'Y', 'Z'},
