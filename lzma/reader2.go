@@ -174,6 +174,8 @@ func (r *Reader2) EOS() bool {
 }
 
 // startChunk parses a new chunk.
+//
+//nolint:gocognit // a chunk header and the LZMA2 state transition it implies, then its buffer
 func (r *Reader2) startChunk() error {
 	r.chunkReader = nil
 	header := &r.hdr

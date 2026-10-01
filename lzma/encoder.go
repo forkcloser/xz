@@ -181,6 +181,8 @@ func (e *encoder) writeOp(op operation) error {
 }
 
 // writeMatch writes a repetition operation into the operation stream.
+//
+//nolint:gocognit // encodes a match in the format's order: the rep choices, length, distance
 func (e *encoder) writeMatch(m operation) error {
 	var err error
 

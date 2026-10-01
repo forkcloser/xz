@@ -150,6 +150,76 @@ func normalizeFormat(o *options) error {
 	return nil
 }
 
+// defaultsFor sets the options the name gxz was invoked as implies: lzcat,
+// unxz and the like.
+func (o *options) defaultsFor(cmdName string) {
+	switch cmdName {
+	case "lzma", "glzma":
+		o.format = formatLZMA
+	case "lzcat", "glzcat":
+		o.format = formatLZMA
+		fallthrough
+	case "xzcat", "gxzcat":
+		o.stdout = true
+		o.decompress = true
+	case "unlzma", "unglzma":
+		o.format = formatLZMA
+		fallthrough
+	case "unxz", "ungxz":
+		o.decompress = true
+	}
+}
+
+// printInfo prints what -h, -L or -V asked for, and reports whether it
+// printed anything: those options end the program.
+func (o *options) printInfo() bool {
+	switch {
+	case o.help:
+		usage(os.Stdout)
+	case o.license:
+		licenses(os.Stdout)
+	case o.version:
+		xlog.Printf("version %s\n", version())
+	default:
+		return false
+	}
+
+	return true
+}
+
+// logFlags adds to flags the suppressions -v and -q ask for.
+func logFlags(flags int, o *options) int {
+	switch {
+	case o.verbose <= 0:
+		flags |= xlog.Lnoprint | xlog.Lnodebug
+	case o.verbose == 1:
+		flags |= xlog.Lnodebug
+	}
+
+	switch {
+	case o.quiet >= 2:
+		flags |= xlog.Lnoprint | xlog.Lnowarn | xlog.Lnodebug
+		flags |= xlog.Lnopanic | xlog.Lnofatal
+	case o.quiet == 1:
+		flags |= xlog.Lnoprint | xlog.Lnowarn | xlog.Lnodebug
+	}
+
+	return flags
+}
+
+// startCPUProfile starts writing a CPU profile to path, or ends the program
+// if it cannot.
+func startCPUProfile(path string) {
+	f, err := os.Create(path)
+	if err != nil {
+		xlog.Fatal(err)
+	}
+
+	if err = pprof.StartCPUProfile(f); err != nil {
+		xlog.Fatal(err)
+	}
+}
+
 func main() {
 	// setup logger
 	cmdName := filepath.Base(os.Args[0])
@@ -161,68 +231,17 @@ func main() {
 	gflag.CommandLine.Usage = func() { usage(os.Stderr); os.Exit(1) }
 	opts := options{}
 	opts.Init()
-
-	switch cmdName {
-	case "lzma", "glzma":
-		opts.format = formatLZMA
-	case "lzcat", "glzcat":
-		opts.format = formatLZMA
-		fallthrough
-	case "xzcat", "gxzcat":
-		opts.stdout = true
-		opts.decompress = true
-	case "unlzma", "unglzma":
-		opts.format = formatLZMA
-		fallthrough
-	case "unxz", "ungxz":
-		opts.decompress = true
-	}
-
+	opts.defaultsFor(cmdName)
 	gflag.Parse()
 
-	if opts.help {
-		usage(os.Stdout)
+	if opts.printInfo() {
 		os.Exit(0)
 	}
 
-	if opts.license {
-		licenses(os.Stdout)
-		os.Exit(0)
-	}
-
-	if opts.version {
-		xlog.Printf("version %s\n", version())
-		os.Exit(0)
-	}
-
-	flags := xlog.Flags()
-
-	switch {
-	case opts.verbose <= 0:
-		flags |= xlog.Lnoprint | xlog.Lnodebug
-	case opts.verbose == 1:
-		flags |= xlog.Lnodebug
-	}
-
-	switch {
-	case opts.quiet >= 2:
-		flags |= xlog.Lnoprint | xlog.Lnowarn | xlog.Lnodebug
-		flags |= xlog.Lnopanic | xlog.Lnofatal
-	case opts.quiet == 1:
-		flags |= xlog.Lnoprint | xlog.Lnowarn | xlog.Lnodebug
-	}
-
-	xlog.SetFlags(flags)
+	xlog.SetFlags(logFlags(xlog.Flags(), &opts))
 
 	if opts.cpuprofile != "" {
-		f, err := os.Create(opts.cpuprofile)
-		if err != nil {
-			xlog.Fatal(err)
-		}
-
-		if err = pprof.StartCPUProfile(f); err != nil {
-			xlog.Fatal(err)
-		}
+		startCPUProfile(opts.cpuprofile)
 	}
 
 	if err := normalizeFormat(&opts); err != nil {

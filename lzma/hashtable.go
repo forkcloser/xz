@@ -151,6 +151,8 @@ func (t *hashTable) Matches(p []byte, positions []int64) int {
 // NextOp identifies the next operation using the hash table.
 //
 // TODO: Use all repetitions to find matches.
+//
+//nolint:gocognit // one search in three commented phases: candidate positions, their distances, the longest match
 func (t *hashTable) NextOp(rep [4]uint32) operation {
 	// get positions
 	data := t.dict.data[:maxMatchLen]

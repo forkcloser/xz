@@ -760,6 +760,8 @@ func (f *FlagSet) usage() {
 }
 
 // parseArg parses the argument i.
+//
+//nolint:gocognit // one argument's long, short and valued forms, as package flag parses them
 func (f *FlagSet) parseArg(i int) (next int, err error) {
 	arg := f.args[i]
 	if len(arg) < 2 || arg[0] != '-' {

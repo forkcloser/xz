@@ -107,6 +107,8 @@ func (c *literalCodec) deepcopy(src *literalCodec) {
 // decodeBitArith and the renormalization byte read is hand-inlined, so the
 // loops are free of calls and error branches; read errors are sticky on the
 // decoder and checked once per operation.
+//
+//nolint:gocognit // range and code threaded through the literal loops (PERF.md steps 5 and 7)
 func (c *literalCodec) decode(d *rangeDecoder,
 	state uint32, match byte, litState, rng, code uint32,
 ) (s byte, nrng, ncode uint32) {

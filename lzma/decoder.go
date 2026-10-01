@@ -109,6 +109,8 @@ func (d *decoder) Decompressed() int64 {
 // decompress fills the dictionary unless no space for new data is
 // available. If the end of the LZMA stream has been reached io.EOF will
 // be returned.
+//
+//nolint:gocognit // the decode loop, errors checked once per operation (PERF.md steps 6 and 7)
 func (d *decoder) decompress() error {
 	if d.eos {
 		return io.EOF
@@ -199,6 +201,8 @@ func (d *decoder) apply(op operation) error {
 // The codecs report no per-call errors; input failures are sticky on the
 // rangeDecoder (rd.err) and are checked by the caller (decompress) after each
 // operation.
+//
+//nolint:gocognit // one operation's bits hand-inlined into one function, measured in PERF.md steps 7 and 9
 func (d *decoder) readOp() (op operation, err error) {
 	// Value of the end of stream (EOS) marker
 	const eosDist = 1<<32 - 1

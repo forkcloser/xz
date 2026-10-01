@@ -300,125 +300,18 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 			break
 		}
 
-		// footer
-		if pos < HeaderLen+footerLen {
-			return nil, 0, corruptf("xz: stream truncated")
-		}
-
-		fdata := make([]byte, footerLen)
-		if err = readFullAt(xz, fdata, pos-footerLen); err != nil {
+		var (
+			descs     []blockDesc
+			headerPos int64
+		)
+		if descs, headerPos, err = parseStream(xz, pos); err != nil {
 			return nil, 0, err
-		}
-
-		var f footer
-		if err = f.UnmarshalBinary(fdata); err != nil {
-			return nil, 0, err
-		}
-
-		// index
-		indexStart := pos - footerLen - f.indexSize
-		if indexStart < HeaderLen {
-			return nil, 0, corruptf("xz: index size exceeds stream")
-		}
-
-		ir := bufio.NewReader(io.NewSectionReader(xz, indexStart, f.indexSize))
-
-		c, err := ir.ReadByte()
-		if err != nil {
-			return nil, 0, indexEOF(err)
-		}
-
-		if c != 0 {
-			return nil, 0, corruptf("xz: index indicator missing")
-		}
-		// The records are only read incrementally, so a hostile count is
-		// bounded by the index bytes present — but every two bytes of index
-		// become a record, and later a block descriptor, before the per-record
-		// bounds below reject them. A block occupies at least minBlockSize
-		// bytes of the stream, so the stream itself bounds how many records
-		// can be genuine; reject a count past that before reading any.
-		records, n, err := readIndexBody(ir, -1, int((indexStart-HeaderLen)/minBlockSize))
-		if err != nil {
-			return nil, 0, indexEOF(err)
-		}
-
-		if n+1 != f.indexSize {
-			return nil, 0, corruptf("xz: index size does not match footer")
-		}
-
-		// stream header
-		//
-		// The blocks have to fit between the stream header and the index, so
-		// every partial sum is bounded by indexStart. Accumulating without
-		// that bound lets a hostile index wrap blocksLen negative, which puts
-		// headerPos at or above pos and makes the enclosing loop re-parse the
-		// same footer forever.
-		var blocksLen int64
-
-		for _, rec := range records {
-			if rec.unpaddedSize <= 0 {
-				return nil, 0, corruptf("xz: invalid unpadded size in index")
-			}
-
-			if err = checkUncompressedSize(rec); err != nil {
-				return nil, 0, err
-			}
-			// remaining is in [0, indexStart], so neither comparison can
-			// overflow, and the first one keeps the addition in range.
-			remaining := indexStart - blocksLen
-			if rec.unpaddedSize > remaining {
-				return nil, 0, corruptf("xz: blocks exceed stream size")
-			}
-
-			padded := rec.unpaddedSize + int64(padLen(rec.unpaddedSize))
-			if padded > remaining {
-				return nil, 0, corruptf("xz: blocks exceed stream size")
-			}
-
-			blocksLen += padded
-		}
-
-		headerPos := indexStart - blocksLen - HeaderLen
-		if headerPos < 0 {
-			return nil, 0, corruptf("xz: blocks exceed stream size")
-		}
-
-		hdata := make([]byte, HeaderLen)
-		if err = readFullAt(xz, hdata, headerPos); err != nil {
-			return nil, 0, err
-		}
-
-		var h header
-		if err = h.UnmarshalBinary(hdata); err != nil {
-			return nil, 0, err
-		}
-
-		if h.flags != f.flags {
-			return nil, 0, corruptf("xz: stream header and footer flags differ")
-		}
-
-		newHash, err := newHashFunc(h.flags)
-		if err != nil {
-			return nil, 0, err
-		}
-
-		descs := make([]blockDesc, len(records))
-
-		off := headerPos + HeaderLen
-		for i, rec := range records {
-			descs[i] = blockDesc{
-				offset:           off,
-				unpaddedSize:     rec.unpaddedSize,
-				uncompressedSize: rec.uncompressedSize,
-				newHash:          newHash,
-			}
-			off += descs[i].paddedSize()
 		}
 
 		streams = append(streams, descs)
 		// The walk is backwards, so pos must strictly decrease for the loop to
-		// terminate. That follows from the bounds above, but state it here so
-		// termination is checkable locally and survives future edits.
+		// terminate. That follows from the bounds in parseStream, but state it
+		// here so termination is checkable locally and survives future edits.
 		if headerPos >= pos {
 			return nil, 0, corruptf("xz: stream does not precede its index")
 		}
@@ -429,7 +322,161 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 	if len(streams) == 0 {
 		return nil, 0, corruptf("xz: no streams found")
 	}
-	// streams were found back to front
+
+	return joinStreams(streams)
+}
+
+// parseStream reads the stream that ends at pos back to front: its footer,
+// its index, and its header. It returns the stream's blocks and the position
+// of its header.
+func parseStream(xz io.ReaderAt, pos int64) (descs []blockDesc, headerPos int64, err error) {
+	// footer
+	if pos < HeaderLen+footerLen {
+		return nil, 0, corruptf("xz: stream truncated")
+	}
+
+	fdata := make([]byte, footerLen)
+	if err = readFullAt(xz, fdata, pos-footerLen); err != nil {
+		return nil, 0, err
+	}
+
+	var f footer
+	if err = f.UnmarshalBinary(fdata); err != nil {
+		return nil, 0, err
+	}
+
+	// index
+	indexStart := pos - footerLen - f.indexSize
+	if indexStart < HeaderLen {
+		return nil, 0, corruptf("xz: index size exceeds stream")
+	}
+
+	records, err := readStreamIndex(xz, indexStart, f.indexSize)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// stream header
+	blocksLen, err := blocksLength(records, indexStart)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	headerPos = indexStart - blocksLen - HeaderLen
+	if headerPos < 0 {
+		return nil, 0, corruptf("xz: blocks exceed stream size")
+	}
+
+	newHash, err := readStreamHeader(xz, headerPos, f.flags)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	descs = make([]blockDesc, len(records))
+
+	off := headerPos + HeaderLen
+	for i, rec := range records {
+		descs[i] = blockDesc{
+			offset:           off,
+			unpaddedSize:     rec.unpaddedSize,
+			uncompressedSize: rec.uncompressedSize,
+			newHash:          newHash,
+		}
+		off += descs[i].paddedSize()
+	}
+
+	return descs, headerPos, nil
+}
+
+// readStreamIndex reads the index of indexSize bytes at indexStart.
+func readStreamIndex(xz io.ReaderAt, indexStart, indexSize int64) ([]record, error) {
+	ir := bufio.NewReader(io.NewSectionReader(xz, indexStart, indexSize))
+
+	c, err := ir.ReadByte()
+	if err != nil {
+		return nil, indexEOF(err)
+	}
+
+	if c != 0 {
+		return nil, corruptf("xz: index indicator missing")
+	}
+	// The records are only read incrementally, so a hostile count is
+	// bounded by the index bytes present — but every two bytes of index
+	// become a record, and later a block descriptor, before the per-record
+	// bounds below reject them. A block occupies at least minBlockSize
+	// bytes of the stream, so the stream itself bounds how many records
+	// can be genuine; reject a count past that before reading any.
+	records, n, err := readIndexBody(ir, -1, int((indexStart-HeaderLen)/minBlockSize))
+	if err != nil {
+		return nil, indexEOF(err)
+	}
+
+	if n+1 != indexSize {
+		return nil, corruptf("xz: index size does not match footer")
+	}
+
+	return records, nil
+}
+
+// blocksLength sums the padded sizes of the blocks the records describe.
+//
+// The blocks have to fit between the stream header and the index, so every
+// partial sum is bounded by indexStart. Accumulating without that bound lets
+// a hostile index wrap the sum negative, which puts the header position at or
+// above the stream's end and makes parseBlocks re-parse the same footer
+// forever.
+func blocksLength(records []record, indexStart int64) (int64, error) {
+	var blocksLen int64
+
+	for _, rec := range records {
+		if rec.unpaddedSize <= 0 {
+			return 0, corruptf("xz: invalid unpadded size in index")
+		}
+
+		if err := checkUncompressedSize(rec); err != nil {
+			return 0, err
+		}
+		// remaining is in [0, indexStart], so neither comparison can
+		// overflow, and the first one keeps the addition in range.
+		remaining := indexStart - blocksLen
+		if rec.unpaddedSize > remaining {
+			return 0, corruptf("xz: blocks exceed stream size")
+		}
+
+		padded := rec.unpaddedSize + int64(padLen(rec.unpaddedSize))
+		if padded > remaining {
+			return 0, corruptf("xz: blocks exceed stream size")
+		}
+
+		blocksLen += padded
+	}
+
+	return blocksLen, nil
+}
+
+// readStreamHeader reads the stream header at headerPos, checks its flags
+// against the footer's, and returns the constructor of the stream's check.
+func readStreamHeader(xz io.ReaderAt, headerPos int64, flags byte) (func() hash.Hash, error) {
+	hdata := make([]byte, HeaderLen)
+	if err := readFullAt(xz, hdata, headerPos); err != nil {
+		return nil, err
+	}
+
+	var h header
+	if err := h.UnmarshalBinary(hdata); err != nil {
+		return nil, err
+	}
+
+	if h.flags != flags {
+		return nil, corruptf("xz: stream header and footer flags differ")
+	}
+
+	return newHashFunc(h.flags)
+}
+
+// joinStreams lays the streams, found back to front, out front to back, and
+// totals their uncompressed sizes.
+func joinStreams(streams [][]blockDesc) (blocks []blockDesc, total int64, err error) {
 	for _, stream := range slices.Backward(streams) {
 		for _, d := range stream {
 			// Each size is already bounded against its own block, but the
@@ -628,6 +675,8 @@ const initialBlockBufSize = 1 << 20
 // caller can recycle it whether decoding succeeds, fails or panics.
 // decodeBlock verifies the block check and that header, compressed size
 // and uncompressed size agree with the index record.
+//
+//nolint:gocognit // one block's header, data and sizes, each failure classified in place
 func (d *parallelDecoder) decodeBlock(bd *blockDesc, bufp *[]byte, s *workerScratch) ([]byte, error) {
 	sr := io.NewSectionReader(d.xz, bd.offset, bd.paddedSize())
 	s.xr.Reset(sr)
@@ -751,6 +800,8 @@ func (r *ParallelReader) Read(p []byte) (n int, err error) {
 // WriteTo writes the whole remaining uncompressed data stream to w. It
 // avoids the intermediate copy of the Read interface by handing the
 // decoded block buffers directly to the writer.
+//
+//nolint:gocognit // delivers blocks in order, each end or error classified where it happens
 func (r *ParallelReader) WriteTo(w io.Writer) (n int64, err error) {
 	// An exhausted reader has nothing left to write, which is success, not
 	// failure: io.Copy does not report io.EOF for an ordinary reader, and a
