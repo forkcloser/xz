@@ -118,6 +118,8 @@ func newHashFunc(flags byte) (newHash func() hash.Hash, err error) {
 }
 
 // header provides the actual content of the xz file header: the flags.
+//
+//nolint:recvcheck // String takes a value, so values and pointers print alike; the binary codecs need the pointer
 type header struct {
 	flags byte
 }
@@ -201,6 +203,8 @@ const footerLen = 12
 const footerMagic = "YZ"
 
 // footer represents the content of the xz file footer.
+//
+//nolint:recvcheck // String takes a value, so values and pointers print alike; the binary codecs need the pointer
 type footer struct {
 	indexSize int64
 	flags     byte
@@ -292,6 +296,8 @@ func (f *footer) UnmarshalBinary(data []byte) error {
 // The block header.
 
 // blockHeader represents the content of an xz block header.
+//
+//nolint:recvcheck // String takes a value, so values and pointers print alike; the binary codecs need the pointer
 type blockHeader struct {
 	compressedSize   int64
 	uncompressedSize int64

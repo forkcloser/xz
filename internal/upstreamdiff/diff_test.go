@@ -11,10 +11,11 @@ import (
 	"os"
 	"testing"
 
-	fork "github.com/forkcloser/xz"
-	forklzma "github.com/forkcloser/xz/lzma"
 	upstream "github.com/ulikunitz/xz"
 	upstreamlzma "github.com/ulikunitz/xz/lzma"
+
+	fork "github.com/forkcloser/xz"
+	forklzma "github.com/forkcloser/xz/lzma"
 )
 
 // corpora returns the inputs both sides are driven with: the shapes a
@@ -28,8 +29,10 @@ func corpora(tb testing.TB) map[string][]byte {
 	_, _ = src.Read(random)
 
 	var text bytes.Buffer
-	words := []string{"the ", "quick ", "brown ", "fox ", "jumps ", "over ",
-		"lazy ", "dog ", "0000000000000000", "\n"}
+	words := []string{
+		"the ", "quick ", "brown ", "fox ", "jumps ", "over ",
+		"lazy ", "dog ", "0000000000000000", "\n",
+	}
 	for text.Len() < 1<<18 {
 		text.WriteString(words[rng.IntN(len(words))])
 	}

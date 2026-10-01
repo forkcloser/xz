@@ -7,7 +7,7 @@ package xz_test
 import (
 	"bytes"
 	"io"
-	"log"
+	"log" //nolint:depguard // the examples show calling code, which reports through package log
 	"math/rand/v2"
 	"os"
 	"testing"

@@ -189,6 +189,7 @@ type Reader struct {
 // NewReader creates a new reader. The argument src must create a uniformly
 // distributed stream of random values.
 func NewReader(src rand.Source) *Reader {
+	// #nosec G404 -- the caller's seeded source: benchmark text has to be reproducible
 	rnd := rand.New(src)
 	i := pcdf.SearchProb(rnd.Float64())
 

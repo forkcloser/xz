@@ -1,0 +1,92 @@
+# This project's carve-outs from the Go lint baseline (.limen/lint-go.yaml):
+# the baseline's sections, in its shape, holding only what this project adds,
+# changes or takes out (book/per-language.md, "one baseline, per-project
+# carve-outs"). `just do lint go` renders the two on every run.
+golangci:
+  linters:
+    disable:
+      # A codec is written in the names of the format it implements: p for
+      # the buffer a Read or Write fills, n for the byte count, c and b for a
+      # byte, lc, lp and pb for the LZMA properties, rep0 to rep3 for the
+      # match distances. Spelled out, the code stops reading like the xz and
+      # LZMA specifications it is checked against. Forks may disable a linter
+      # when limen has the data; it does.
+      - varnamelen
+    exclusions:
+      rules:
+        # randtxt's language model is a table of English trigrams: "TEH" and
+        # "YUO" are trigrams the corpus contains, not typos.
+        - path: ^internal/randtxt/englm3\.go$
+          linters:
+            - misspell
+        # A test's failure fixtures are dynamic errors on purpose: each one
+        # is the error a fake reader or writer returns, compared by identity.
+        - path: _test\.go
+          linters:
+            - err113
+    settings:
+      errcheck:
+        exclude-functions:
+          # The package logger writes to standard error; a failure there has
+          # no better handler than the one it would have reported to.
+          - (*github.com/forkcloser/xz/internal/xlog.Logger).Output
+          - (*github.com/forkcloser/xz/internal/xlog.Logger).Outputf
+      wrapcheck:
+        # A list here replaces wrapcheck's own, so its defaults come first.
+        ignore-sigs:
+          - .Errorf(
+          - errors.New(
+          - errors.Unwrap(
+          - errors.Join(
+          - .Wrap(
+          - .Wrapf(
+          - .WithMessage(
+          - .WithMessagef(
+          - .WithStack(
+          # The codec's I/O is passed through untouched, as errors.go
+          # promises: an error from the caller's reader or writer is theirs,
+          # it must not match ErrCorrupt, and io.EOF must come back as io.EOF,
+          # which callers compare with ==.
+          - .Read(
+          - .ReadAt(
+          - .ReadByte(
+          - .Write(
+          - .WriteByte(
+          - .Close(
+          # bufio.Writer.Flush is the buffered file's write: its error is the
+          # file's *os.PathError, which names the operation and the path.
+          - .Flush(
+          - io.ReadFull(
+          - io.Copy(
+          - io.CopyN(
+          - fmt.Fprint
+          # strconv's *NumError already names the function and the input.
+          - strconv.Parse
+        ignore-package-globs:
+          # This module's own packages: their errors are already classified
+          # (ErrCorrupt, ErrUnsupported) and say what they refuse.
+          - github.com/forkcloser/xz
+          - github.com/forkcloser/xz/*
+          # os errors are *PathError and *LinkError: the operation and the
+          # path are already in them.
+          - os
+      exhaustive:
+        # The LZMA2 chunk-state machine, the chunk reader and writer and
+        # gflag's argument handling end their switches in a default that
+        # says what every other value does, out-of-range ones included,
+        # which a list of the enum's names could not cover.
+        default-signifies-exhaustive: true
+      depguard:
+        rules:
+          main:
+            allow:
+              # Terminal detection for gxz's progress output (internal/term).
+              - golang.org/x/sys/unix
+              - golang.org/x/sys/windows
+
+nilaway:
+  exclude-errors-in-files:
+    # NilAway reads p[n:] in Writer.Write as a panic on a nil p, although n
+    # is 0 there and slicing nil to [0:] is legal; TestParallelReaderEmpty
+    # writes nil. NilAway has no per-line suppression, so the file carries it.
+    - writer.go

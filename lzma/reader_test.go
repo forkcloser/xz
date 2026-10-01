@@ -11,7 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log" //nolint:depguard // the examples show calling code, which reports through package log
 	"os"
 	"path/filepath"
 	"testing"
