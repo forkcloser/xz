@@ -255,7 +255,7 @@ func TestCheckTypesAgainstXZ(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			cmd := exec.Command(xzBin, "-dc")
+			cmd := exec.CommandContext(t.Context(), xzBin, "-dc")
 			cmd.Stdin = bytes.NewReader(buf.Bytes())
 
 			var out, stderr bytes.Buffer
@@ -305,7 +305,7 @@ func TestReadXZProducedFiles(t *testing.T) {
 		t.Run(args[0], func(t *testing.T) {
 			t.Parallel()
 
-			cmd := exec.Command(xzBin, append(args, src)...)
+			cmd := exec.CommandContext(t.Context(), xzBin, append(args, src)...)
 
 			var out bytes.Buffer
 
