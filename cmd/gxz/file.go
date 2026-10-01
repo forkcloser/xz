@@ -262,6 +262,7 @@ func newWriter(path string, perm os.FileMode, opts *options,
 		}
 
 		tmp := tmpName(name, opts.decompress)
+		// #nosec G304 -- the temporary file beside the output the user named
 		if w.f, err = os.OpenFile(tmp,
 			os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm); err != nil {
 			return nil, err
@@ -383,6 +384,7 @@ func openFile(path string, opts *options) (f *os.File, err error) {
 		}
 	}
 
+	// #nosec G304 -- the file the user asked gxz to process
 	if f, err = os.Open(path); err != nil {
 		return nil, err
 	}

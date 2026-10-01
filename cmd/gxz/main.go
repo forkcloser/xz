@@ -210,6 +210,7 @@ func logFlags(flags int, o *options) int {
 // startCPUProfile starts writing a CPU profile to path, or ends the program
 // if it cannot.
 func startCPUProfile(path string) {
+	// #nosec G304 -- the path the user gave -cpuprofile
 	f, err := os.Create(path)
 	if err != nil {
 		xlog.Fatal(err)
