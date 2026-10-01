@@ -3,10 +3,12 @@
 import '.limen/just/main.just'
 
 # The FIRST recipe defined here becomes `just`'s default.
-lint: do::lint::go::default do::lint::go::bce do::lint::go::escape do::lint::go::deadcode do::lint::default
+lint: do::lint::go::default do::lint::go::deadcode do::lint::default
 fix: do::fix::go::default do::fix::default
 test: do::test::go::unit do::test::go::race test-upstreamdiff
-bench: do::test::go::bench
+# The security workflow runs `just security`.
+security: do::security::default
+bench: do::perf::go::bench
 
 # The differential test against upstream (ulikunitz/xz) lives in its own
 # module so the library never depends on upstream: the root go.mod stays free
