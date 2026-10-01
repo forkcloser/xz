@@ -9,7 +9,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"log"
+	"log" //nolint:depguard // the examples show calling code, which reports through package log
 	"math/rand/v2"
 	"os"
 	"testing"
