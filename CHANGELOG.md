@@ -11,6 +11,8 @@ path.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-05
+
 ### Fixed
 
 - A reader that returns `(0, nil)`, which `io.Reader` allows, no longer
