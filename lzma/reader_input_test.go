@@ -7,6 +7,7 @@ package lzma_test
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"slices"
@@ -221,5 +222,19 @@ func BenchmarkReaderBufioFile(b *testing.B) {
 		}
 
 		_ = fh.Close()
+	}
+}
+
+// emptyReader returns (0, nil) forever.
+type emptyReader struct{}
+
+func (emptyReader) Read([]byte) (int, error) { return 0, nil }
+
+func TestByteReaderNoProgress(t *testing.T) {
+	t.Parallel()
+
+	_, err := lzma.ByteReader(emptyReader{}).ReadByte()
+	if !errors.Is(err, io.ErrNoProgress) {
+		t.Fatalf("ReadByte on a reader that never progresses: %v, want io.ErrNoProgress", err)
 	}
 }

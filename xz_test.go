@@ -31,3 +31,54 @@ func TestPanic(t *testing.T) {
 		return
 	}
 }
+
+// stutterReader returns (0, nil) before every real read, which io.Reader
+// permits.
+type stutterReader struct {
+	r    io.Reader
+	skip bool
+}
+
+func (s *stutterReader) Read(p []byte) (int, error) {
+	s.skip = !s.skip
+	if s.skip {
+		return 0, nil
+	}
+
+	return s.r.Read(p)
+}
+
+func TestReaderZeroNilReads(t *testing.T) {
+	t.Parallel()
+
+	payload := bytes.Repeat([]byte("hello world "), 1000)
+
+	var buf bytes.Buffer
+
+	w, err := xz.NewWriter(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = w.Write(payload); err != nil {
+		t.Fatal(err)
+	}
+
+	if err = w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := xz.NewReader(&stutterReader{r: bytes.NewReader(buf.Bytes())})
+	if err != nil {
+		t.Fatalf("NewReader: %v", err)
+	}
+
+	got, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if !bytes.Equal(got, payload) {
+		t.Fatal("decoded data differs from the payload")
+	}
+}

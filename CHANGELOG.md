@@ -11,6 +11,13 @@ path.
 
 ## [Unreleased]
 
+### Fixed
+
+- A reader that returns `(0, nil)`, which `io.Reader` allows, no longer
+  fails `xz.NewReader` with "breader.ReadByte: no data": `lzma.ByteReader`
+  retries such reads and returns `io.ErrNoProgress` only after 100 in a
+  row (from upstream v0.5.17).
+
 ## [1.0.0] - 2026-09-12
 
 ### Added

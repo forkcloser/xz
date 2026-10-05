@@ -4,15 +4,11 @@
 
 package lzma
 
-import (
-	"errors"
-	"io"
-)
+import "io"
 
-// errNoData is an underlying reader that returned neither a byte nor an error.
-var (
-	errNoData = errors.New("breader.ReadByte: no data")
-)
+// maxEmptyReads bounds ReadByte's retries on a reader that keeps returning
+// (0, nil): io.Reader allows it and asks callers to retry, not to fail.
+const maxEmptyReads = 100
 
 // breader provides the ReadByte function for a Reader. It doesn't read
 // more data from the reader than absolutely necessary.
@@ -34,15 +30,17 @@ func ByteReader(r io.Reader) io.ByteReader {
 }
 
 // ReadByte read byte function.
-func (r *breader) ReadByte() (c byte, err error) {
-	n, err := r.Read(r.p)
-	if n < 1 {
-		if err == nil {
-			err = errNoData
+func (r *breader) ReadByte() (byte, error) {
+	for range maxEmptyReads {
+		n, err := r.Read(r.p)
+		if n > 0 {
+			return r.p[0], nil
 		}
 
-		return 0, err
+		if err != nil {
+			return 0, err
+		}
 	}
 
-	return r.p[0], nil
+	return 0, io.ErrNoProgress
 }
