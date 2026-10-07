@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"io"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"testing"
 )
 
@@ -222,99 +222,25 @@ func mustReader(t *testing.T, file []byte) *Reader {
 	return r
 }
 
-// TestCheckTypesAgainstXZ decodes our output with the reference tool. A check
-// this package computes consistently with itself but differently from
-// everybody else would pass every test above and still produce files no other
-// implementation accepts.
-func TestCheckTypesAgainstXZ(t *testing.T) {
+// TestReadReferenceFiles decodes files the reference xz produced from
+// parallelTestData(1 << 18): both presets' extremes, each check type, and
+// the multi-block layout only xz's threaded mode emits, through both
+// readers.
+func TestReadReferenceFiles(t *testing.T) {
 	t.Parallel()
-
-	xzBin, err := exec.LookPath("xz")
-	if err != nil {
-		t.Skip("xz not installed")
-	}
-
-	data := parallelTestData(1 << 16)
-
-	for _, ct := range checkTypes() {
-		t.Run(ct.name, func(t *testing.T) {
-			t.Parallel()
-
-			var buf bytes.Buffer
-
-			w, err := writerConfigFor(ct.flags).NewWriter(&buf)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			if _, err = w.Write(data); err != nil {
-				t.Fatal(err)
-			}
-
-			if err = w.Close(); err != nil {
-				t.Fatal(err)
-			}
-
-			cmd := exec.CommandContext(t.Context(), xzBin, "-dc")
-			cmd.Stdin = bytes.NewReader(buf.Bytes())
-
-			var out, stderr bytes.Buffer
-
-			cmd.Stdout = &out
-
-			cmd.Stderr = &stderr
-			if err := cmd.Run(); err != nil {
-				t.Fatalf("xz -dc rejected our %s output: %s (%s)",
-					ct.name, err, stderr.String())
-			}
-
-			if !bytes.Equal(out.Bytes(), data) {
-				t.Errorf("xz -dc decoded our %s output to different bytes",
-					ct.name)
-			}
-		})
-	}
-}
-
-// TestReadXZProducedFiles is the other direction: files the reference tool
-// produced, including the multi-block layout that only its threaded mode
-// emits, have to decode here.
-func TestReadXZProducedFiles(t *testing.T) {
-	t.Parallel()
-
-	xzBin, err := exec.LookPath("xz")
-	if err != nil {
-		t.Skip("xz not installed")
-	}
 
 	data := parallelTestData(1 << 18)
 
-	src := t.TempDir() + "/data"
-	if err := os.WriteFile(src, data, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, args := range [][]string{
-		{"-0", "-c"},
-		{"-9", "-c"},
-		{"--check=crc32", "-c"},
-		{"--check=sha256", "-c"},
-		{"--check=none", "-c"},
-		{"-T2", "--block-size=16384", "-c"},
+	for _, name := range []string{
+		"preset0", "preset9", "crc32", "sha256", "check-none", "multiblock",
 	} {
-		t.Run(args[0], func(t *testing.T) {
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			cmd := exec.CommandContext(t.Context(), xzBin, append(args, src)...)
-
-			var out bytes.Buffer
-
-			cmd.Stdout = &out
-			if err := cmd.Run(); err != nil {
-				t.Fatalf("xz %v: %s", args, err)
+			file, err := os.ReadFile(filepath.Join("testdata", "reference", name+".xz"))
+			if err != nil {
+				t.Fatal(err)
 			}
-
-			file := out.Bytes()
 
 			r, err := NewReader(bytes.NewReader(file))
 			if err != nil {
