@@ -16,7 +16,6 @@ import (
 	"syscall"
 
 	"github.com/forkcloser/xz"
-	"github.com/forkcloser/xz/internal/xlog"
 	"github.com/forkcloser/xz/lzma"
 )
 
@@ -550,25 +549,17 @@ func userError(err error) error {
 	return &userPathError{Path: pe.Path, Err: pe.Err}
 }
 
-func printErr(err error) {
-	if err != nil {
-		xlog.Warn(userError(err))
-	}
-}
-
 // processFile process the file with the given path applying the
-// provided options.
+// provided options. It prints nothing; main reports the error it returns.
 func processFile(path string, opts *options) (err error) {
 	r, err := newReader(path, opts)
 	if err != nil {
-		printErr(err)
 		return err
 	}
 	defer func() { _ = r.Close() }()
 
 	w, err := newWriter(path, r.Perm(), opts)
 	if err != nil {
-		printErr(err)
 		return err
 	}
 
@@ -577,8 +568,6 @@ func processFile(path string, opts *options) (err error) {
 	quitSignalHandler := signalHandler(w)
 	if _, err = io.Copy(w, r); err != nil {
 		close(quitSignalHandler)
-		printErr(err)
-
 		return err
 	}
 
@@ -586,16 +575,10 @@ func processFile(path string, opts *options) (err error) {
 	w.SetSuccess()
 
 	if err = w.Close(); err != nil {
-		printErr(err)
 		return err
 	}
 
 	r.SetSuccess()
 
-	if err = r.Close(); err != nil {
-		printErr(err)
-		return err
-	}
-
-	return nil
+	return r.Close()
 }

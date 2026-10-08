@@ -19,7 +19,6 @@ import (
 
 	"github.com/forkcloser/xz/internal/gflag"
 	"github.com/forkcloser/xz/internal/term"
-	"github.com/forkcloser/xz/internal/xlog"
 )
 
 const (
@@ -40,7 +39,7 @@ in place).
   -k, --keep        keep (don't delete) input files
   -L, --license     display software license
   -q, --quiet       suppress all warnings
-  -v, --verbose     verbose mode
+  -v, --verbose     accepted for compatibility; has no effect
   -V, --version     display version string
   -z, --compress    force compression
   -0 ... -9         compression preset; default is 6
@@ -57,7 +56,7 @@ func usage(w io.Writer) {
 	fmt.Fprint(w, usageStr)
 }
 
-func licenses(w io.Writer) {
+func licenses(w io.Writer) error {
 	out := `
 github.com/forkcloser/xz -- xz for Go
 ====================================
@@ -67,9 +66,9 @@ github.com/forkcloser/xz -- xz for Go
 Go Programming Language
 =======================
 
-The gxz program contains the packages gflag and xlog that are
-extensions of packages from the Go standard library. The packages may
-contain code from those packages.
+The gxz program contains the package gflag that is an extension of
+a package from the Go standard library. The package may contain code
+from that package.
 
 {{.go}}
 `
@@ -77,7 +76,7 @@ contain code from those packages.
 
 	tmpl, err := template.New("licenses").Parse(out)
 	if err != nil {
-		xlog.Panicf("error %s parsing licenses template", err)
+		panic(fmt.Sprintf("error %s parsing licenses template", err))
 	}
 
 	lmap := map[string]string{
@@ -85,8 +84,10 @@ contain code from those packages.
 		"go": strings.TrimSpace(goLicense),
 	}
 	if err = tmpl.Execute(w, lmap); err != nil {
-		xlog.Fatalf("error %s writing licenses template", err)
+		return fmt.Errorf("error %w writing licenses template", err)
 	}
+
+	return nil
 }
 
 type options struct {
@@ -106,7 +107,7 @@ type options struct {
 
 func (o *options) Init() {
 	if o.preset != 0 {
-		xlog.Panicf("options are already initialized")
+		panic("options are already initialized")
 	}
 
 	gflag.BoolVarP(&o.help, "help", "h", false, "")
@@ -172,60 +173,62 @@ func (o *options) defaultsFor(cmdName string) {
 
 // printInfo prints what -h, -L or -V asked for, and reports whether it
 // printed anything: those options end the program.
-func (o *options) printInfo() bool {
+func (o *options) printInfo(cmdName string) (bool, error) {
 	switch {
 	case o.help:
 		usage(os.Stdout)
 	case o.license:
-		licenses(os.Stdout)
+		if err := licenses(os.Stdout); err != nil {
+			return true, err
+		}
 	case o.version:
-		xlog.Printf("version %s\n", version())
+		fmt.Fprintf(os.Stdout, "%s version %s\n", cmdName, version())
 	default:
-		return false
+		return false, nil
 	}
 
-	return true
+	return true, nil
 }
 
-// logFlags adds to flags the suppressions -v and -q ask for.
-func logFlags(flags int, o *options) int {
-	switch {
-	case o.verbose <= 0:
-		flags |= xlog.Lnoprint | xlog.Lnodebug
-	case o.verbose == 1:
-		flags |= xlog.Lnodebug
-	}
-
-	switch {
-	case o.quiet >= 2:
-		flags |= xlog.Lnoprint | xlog.Lnowarn | xlog.Lnodebug
-		flags |= xlog.Lnopanic | xlog.Lnofatal
-	case o.quiet == 1:
-		flags |= xlog.Lnoprint | xlog.Lnowarn | xlog.Lnodebug
-	}
-
-	return flags
+// reporter prints gxz's messages to standard error, each on a line of its
+// own after the command name, and holds back what -q asks, as xz does:
+// given once, the warnings (gxz has none today); given twice, the errors
+// too.
+type reporter struct {
+	cmdName string
+	quiet   int
 }
 
-// startCPUProfile starts writing a CPU profile to path, or ends the program
-// if it cannot.
-func startCPUProfile(path string) {
+// fail prints an error unless -q was given twice. It returns: the caller
+// ends the program.
+func (r *reporter) fail(v any) {
+	if r.quiet >= 2 { // -qq, the second level xz defines
+		return
+	}
+
+	// Standard error is where a failure would be reported; there is no
+	// better place for one of its own.
+	_, _ = fmt.Fprintf(os.Stderr, "%s: %v\n", r.cmdName, v)
+}
+
+// startCPUProfile starts writing a CPU profile to path.
+func startCPUProfile(path string) error {
 	// #nosec G304 -- the path the user gave -cpuprofile
 	f, err := os.Create(path)
 	if err != nil {
-		xlog.Fatal(err)
+		return err
 	}
 
 	if err = pprof.StartCPUProfile(f); err != nil {
-		xlog.Fatal(err)
+		return fmt.Errorf("starting the CPU profile: %w", err)
 	}
+
+	return nil
 }
 
 func main() {
-	// setup logger
 	cmdName := filepath.Base(os.Args[0])
-	xlog.SetPrefix(cmdName + ": ")
-	xlog.SetFlags(0)
+	rep := reporter{cmdName: cmdName}
 
 	// initialize flags
 	gflag.CommandLine.Init(cmdName, gflag.ExitOnError)
@@ -235,19 +238,29 @@ func main() {
 	opts.defaultsFor(cmdName)
 	gflag.Parse()
 
-	if opts.printInfo() {
+	done, err := opts.printInfo(cmdName)
+	if err != nil {
+		rep.fail(err)
+		os.Exit(1)
+	}
+
+	if done {
 		os.Exit(0)
 	}
 
-	xlog.SetFlags(logFlags(xlog.Flags(), &opts))
+	rep.quiet = opts.quiet
 
 	if opts.cpuprofile != "" {
-		startCPUProfile(opts.cpuprofile)
+		if err := startCPUProfile(opts.cpuprofile); err != nil {
+			rep.fail(err)
+			os.Exit(1)
+		}
 	}
 
 	if err := normalizeFormat(&opts); err != nil {
 		pprof.StopCPUProfile()
-		xlog.Fatal(err)
+		rep.fail(err)
+		os.Exit(1)
 	}
 
 	var args []string
@@ -262,14 +275,19 @@ func main() {
 	if opts.stdout && !opts.decompress && !opts.force &&
 		term.IsTerminal(os.Stdout.Fd()) {
 		pprof.StopCPUProfile()
-		xlog.Fatal(`Compressed data will not be written to a terminal
+		rep.fail(`Compressed data will not be written to a terminal
 Use -f to force compression. For help type gxz -h.`)
+		os.Exit(1)
 	}
 
 	exit := 0
 
 	for _, arg := range args {
 		if err := processFile(arg, &opts); err != nil {
+			// An error, not a warning: the file was not processed and the
+			// exit status says so, so -q alone does not hide it.
+			rep.fail(userError(err))
+
 			exit = 1
 		}
 	}
