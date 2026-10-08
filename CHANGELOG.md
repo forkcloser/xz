@@ -11,6 +11,8 @@ path.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-10-08
+
 ### Changed
 
 - `gxz -V` prints the version to standard output, as `-h` and `-L` print
