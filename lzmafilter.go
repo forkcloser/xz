@@ -5,7 +5,6 @@
 package xz
 
 import (
-	"fmt"
 	"io"
 
 	"github.com/forkcloser/xz/lzma"
@@ -21,11 +20,6 @@ const (
 // block header.
 type lzmaFilter struct {
 	dictCap int64
-}
-
-// String returns a representation of the LZMA filter.
-func (f lzmaFilter) String() string {
-	return fmt.Sprintf("LZMA dict cap %#x", f.dictCap)
 }
 
 // MarshalBinary converts the lzmaFilter in its encoded representation.

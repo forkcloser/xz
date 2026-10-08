@@ -26,7 +26,6 @@ import (
 	"io"
 	"slices"
 
-	"github.com/forkcloser/xz/internal/xlog"
 	"github.com/forkcloser/xz/lzma"
 )
 
@@ -224,10 +223,6 @@ func (c ReaderConfig) newStreamReader(xz io.Reader, cache *lzma2Cache) (r *strea
 		return nil, err
 	}
 
-	if xlog.DebugEnabled() {
-		xlog.Debugf("xz header %s", r.h)
-	}
-
 	if r.newHash, err = newHashFunc(r.h.flags); err != nil {
 		return nil, err
 	}
@@ -262,10 +257,6 @@ func (r *streamReader) Read(p []byte) (n int, err error) {
 				}
 
 				return n, err
-			}
-
-			if xlog.DebugEnabled() {
-				xlog.Debugf("block %v", *bh)
 			}
 
 			r.br, err = r.newBlockReader(r.xz, bh,
@@ -321,10 +312,6 @@ func (r *streamReader) readTail() error {
 	var f footer
 	if err = f.UnmarshalBinary(p); err != nil {
 		return err
-	}
-
-	if xlog.DebugEnabled() {
-		xlog.Debugf("xz footer %s", f)
 	}
 
 	if f.flags != r.h.flags {

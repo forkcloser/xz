@@ -7,8 +7,6 @@ package lzma
 import (
 	"errors"
 	"io"
-
-	"github.com/forkcloser/xz/internal/xlog"
 )
 
 // errNoProgress is a decoder that returned neither data nor an error.
@@ -187,10 +185,6 @@ func (r *Reader2) startChunk() error {
 		}
 
 		return err
-	}
-
-	if xlog.DebugEnabled() {
-		xlog.Debugf("chunk header %v", header)
 	}
 
 	if err = r.cstate.next(header.ctype); err != nil {

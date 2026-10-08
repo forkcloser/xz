@@ -149,12 +149,6 @@ type chunkHeader struct {
 	props        Properties
 }
 
-// String returns a string representation of the chunk header.
-func (h *chunkHeader) String() string {
-	return fmt.Sprintf("%s %d %d %s", h.ctype, h.uncompressed,
-		h.compressed, &h.props)
-}
-
 // UnmarshalBinary reads the content of the chunk header from the data
 // slice. The slice must have the correct length.
 func (h *chunkHeader) UnmarshalBinary(data []byte) error {

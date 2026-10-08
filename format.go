@@ -9,7 +9,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"hash"
 	"hash/crc32"
 	"io"
@@ -82,22 +81,6 @@ func verifyFlags(flags byte) error {
 	}
 }
 
-// flagString returns the string representation for the given flags.
-func flagString(flags byte) string {
-	switch flags {
-	case None:
-		return "None"
-	case CRC32:
-		return "CRC-32"
-	case CRC64:
-		return "CRC-64"
-	case SHA256:
-		return "SHA-256"
-	}
-
-	return "invalid"
-}
-
 // newHashFunc returns a function that creates hash instances for the
 // hash method encoded in flags.
 func newHashFunc(flags byte) (newHash func() hash.Hash, err error) {
@@ -118,8 +101,6 @@ func newHashFunc(flags byte) (newHash func() hash.Hash, err error) {
 }
 
 // header provides the actual content of the xz file header: the flags.
-//
-//nolint:recvcheck // String takes a value, so values and pointers print alike; the binary codecs need the pointer
 type header struct {
 	flags byte
 }
@@ -135,11 +116,6 @@ func ValidHeader(data []byte) bool {
 	err := h.UnmarshalBinary(data)
 
 	return err == nil
-}
-
-// String returns a string representation of the flags.
-func (h header) String() string {
-	return flagString(h.flags)
 }
 
 // UnmarshalBinary reads header from the provided data slice.
@@ -203,16 +179,9 @@ const footerLen = 12
 const footerMagic = "YZ"
 
 // footer represents the content of the xz file footer.
-//
-//nolint:recvcheck // String takes a value, so values and pointers print alike; the binary codecs need the pointer
 type footer struct {
 	indexSize int64
 	flags     byte
-}
-
-// String prints a string representation of the footer structure.
-func (f footer) String() string {
-	return fmt.Sprintf("%s index size %d", flagString(f.flags), f.indexSize)
 }
 
 // Minimum and maximum for the size of the index (backward size).
@@ -296,47 +265,10 @@ func (f *footer) UnmarshalBinary(data []byte) error {
 // The block header.
 
 // blockHeader represents the content of an xz block header.
-//
-//nolint:recvcheck // String takes a value, so values and pointers print alike; the binary codecs need the pointer
 type blockHeader struct {
 	compressedSize   int64
 	uncompressedSize int64
 	filters          []filter
-}
-
-// String converts the block header into a string.
-func (h blockHeader) String() string {
-	var buf bytes.Buffer
-
-	first := true
-
-	if h.compressedSize >= 0 {
-		fmt.Fprintf(&buf, "compressed size %d", h.compressedSize)
-
-		first = false
-	}
-
-	if h.uncompressedSize >= 0 {
-		if !first {
-			buf.WriteString(" ")
-		}
-
-		fmt.Fprintf(&buf, "uncompressed size %d", h.uncompressedSize)
-
-		first = false
-	}
-
-	for _, f := range h.filters {
-		if !first {
-			buf.WriteString(" ")
-		}
-
-		fmt.Fprintf(&buf, "filter %s", f)
-
-		first = false
-	}
-
-	return buf.String()
 }
 
 // Masks for the block flags.

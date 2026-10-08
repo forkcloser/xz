@@ -25,12 +25,6 @@ golangci:
           linters:
             - err113
     settings:
-      errcheck:
-        exclude-functions:
-          # The package logger writes to standard error; a failure there has
-          # no better handler than the one it would have reported to.
-          - (*github.com/forkcloser/xz/internal/xlog.Logger).Output
-          - (*github.com/forkcloser/xz/internal/xlog.Logger).Outputf
       wrapcheck:
         # A list here replaces wrapcheck's own, so its defaults come first.
         ignore-sigs:

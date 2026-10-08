@@ -11,6 +11,21 @@ path.
 
 ## [Unreleased]
 
+### Changed
+
+- `gxz -V` prints the version to standard output, as `-h` and `-L` print
+  theirs, rather than to standard error after the command name.
+- `gxz -q` hides warnings only: a file that could not be processed is an
+  error (the exit status is 1) and is still reported; `-qq` hides it too, as
+  xz does. It used to be hidden by a single `-q`.
+
+### Removed
+
+- The debug dump of xz headers, block headers, footers and LZMA2 chunk
+  headers that `gxz -vv` wrote to standard error, and `internal/xlog`, the
+  logger behind it: the library writes nothing to standard error. `gxz`
+  still accepts `-v` and ignores it.
+
 ## [1.0.1] - 2026-10-05
 
 ### Fixed
