@@ -14,12 +14,11 @@ history and not extended. Read against this fork's tree:
   `gospell`, `xb` (the tool is removed from this fork; `gxz -V` reads the
   module version from the build), `doc/relnotes`, `make-docs` and the
   `main`/`dev` merge. This fork works through pull requests into `main`; the
-  release procedure is `RELEASING.md` and the user-facing history is
-  `CHANGELOG.md`.
+  release procedure is `RELEASING.md` and the user-facing history is the
+  release notes.
 - **Dropped here:** v0.6 item 2, "fix binary tree matcher". The matcher
   never produced decodable streams for most inputs and was quadratic on
-  repeated words; this fork removed it (`CHANGELOG.md`) rather than ship it
-  at 1.0. A working match finder would come back as a new `MatchAlgorithm`
+  repeated words; this fork removed it rather than ship it at 1.0. A working match finder would come back as a new `MatchAlgorithm`
   value.
 - **Still open:** everything else, including the other v0.6 encoder items
   and the match-finder ideas. What stands between this fork and 1.0.0 is tracked in
