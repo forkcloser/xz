@@ -27,8 +27,10 @@ neither is the exact text of error messages — match errors with
 
 This here is a friendly fork of https://github.com/ulikunitz/xz, taken at
 upstream v0.5.15; v0.5.16's `IsTerminal` fallback for platforms without
-terminal detection is ported. [`CHANGELOG.md`](./CHANGELOG.md) lists what a
-user migrating from upstream will notice.
+terminal detection is ported. What a user migrating from upstream will notice
+is listed in the 1.0.0 section of the changelog the fork kept until 1.0.2
+(`git show v1.0.2:CHANGELOG.md`); from there on, the
+[releases](https://github.com/forkcloser/xz/releases) carry the notes.
 
 Upstream is not dormant — but its `master` is. Development moved to the `v2`
 branch, which is a *different module*: `github.com/ulikunitz/xz/v2`, in a

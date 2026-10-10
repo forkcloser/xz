@@ -6,8 +6,9 @@ workflow: nothing is built or uploaded, and `gxz` is installed with
 `go install github.com/forkcloser/xz/cmd/gxz@<tag>`, which stamps the tag
 into `gxz -V` through the build info.
 
-1. `CHANGELOG.md`: move the *Unreleased* entries under the new version with
-   today's date. Every behaviour a user could notice belongs there.
+1. The release notes are the titles of the pull requests the release merges:
+   check that each says what changed for a user, and that one that breaks a
+   consumer carries the `breaking` label.
 2. `just lint && just test` on a clean tree, and CI green on `main` for the
    commit to be tagged (all five verify legs and the fuzz job).
 3. Tag and push with the shared recipe, as a repository admin (the
@@ -20,8 +21,10 @@ into `gxz -V` through the build info.
 4. Check what the proxy sees: `go list -m github.com/forkcloser/xz@vX.Y.Z`
    from outside the tree, then `go install github.com/forkcloser/xz/cmd/gxz@vX.Y.Z`
    and `gxz -V`, which must print `vX.Y.Z`.
-5. Publish the GitHub release from the tag with the changelog entry as its
-   body, so the tag has a human-readable page.
+5. Publish the GitHub release from the tag with the generated notes, so the
+   tag has a human-readable page:
+
+       gh release create vX.Y.Z --verify-tag --generate-notes
 
 Versioning follows semantic versioning against the stability contract in the
 README: within v1, only additive changes in minor releases, fixes in patch
