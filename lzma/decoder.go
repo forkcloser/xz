@@ -28,6 +28,9 @@ type decoder struct {
 	eos bool
 	// EOS marker found
 	eosMarker bool
+	// err is the first failure or the clean end, returned by every Read
+	// once the dictionary has been drained.
+	err error
 }
 
 // newDecoder creates a new decoder instance. The parameter size provides
@@ -62,6 +65,7 @@ func (d *decoder) Reopen(br io.ByteReader, size int64) error {
 	d.start = d.Dict.pos()
 	d.size = size
 	d.eos = false
+	d.err = nil
 
 	return nil
 }
@@ -76,18 +80,15 @@ var (
 )
 
 // Read reads data from the buffer. If no more data is available io.EOF is
-// returned.
+// returned. An error is final: what was decoded before it is handed out
+// with it, and every later Read returns it again with no data, so a caller
+// that reads on never sees a failed stream as a complete one.
 func (d *decoder) Read(p []byte) (n int, err error) {
-	var k int
 	for {
 		// Read of decoder dict never returns an error.
-		k, err = d.Dict.Read(p[n:])
+		k, err := d.Dict.Read(p[n:])
 		if err != nil {
 			panic(fmt.Errorf("dictionary read error %w", err))
-		}
-
-		if k == 0 && d.eos {
-			return n, io.EOF
 		}
 
 		n += k
@@ -95,9 +96,11 @@ func (d *decoder) Read(p []byte) (n int, err error) {
 			return n, nil
 		}
 
-		if err = d.decompress(); err != nil && !errors.Is(err, io.EOF) {
-			return n, err
+		if d.err != nil {
+			return n, d.err
 		}
+
+		d.err = d.decompress()
 	}
 }
 
@@ -117,6 +120,12 @@ func (d *decoder) decompress() error {
 	}
 
 	for d.Dict.Available() >= maxMatchLen {
+		// The declared size may already be reached: a stream of size zero
+		// holds no operation at all, only the range coder's flush.
+		if d.size >= 0 && d.Decompressed() >= d.size {
+			return d.sizeReached()
+		}
+
 		op, err := d.readOp()
 		// The range decoder records input failures as a sticky error
 		// instead of reporting them per byte (the decode loops are free
@@ -150,36 +159,39 @@ func (d *decoder) decompress() error {
 		if err = d.apply(op); err != nil {
 			return err
 		}
-
-		if d.size >= 0 && d.Decompressed() >= d.size {
-			d.eos = true
-			if d.Decompressed() > d.size {
-				return errSize
-			}
-
-			if !d.rd.possiblyAtEnd() {
-				_, err = d.readOp()
-				if d.rd.err != nil {
-					err = d.rd.err
-				}
-
-				switch {
-				case err == nil:
-					return errSize
-				case errors.Is(err, io.EOF):
-					return io.ErrUnexpectedEOF
-				case errors.Is(err, errEOS):
-					// The end-of-stream marker: the stream ended where it should.
-				default:
-					return err
-				}
-			}
-
-			return io.EOF
-		}
 	}
 
 	return nil
+}
+
+// sizeReached ends the stream at its declared size: the range coder must be
+// at its end, or hold the end-of-stream marker an encoder may add after the
+// last operation.
+func (d *decoder) sizeReached() error {
+	d.eos = true
+	if d.Decompressed() > d.size {
+		return errSize
+	}
+
+	if !d.rd.possiblyAtEnd() {
+		_, err := d.readOp()
+		if d.rd.err != nil {
+			err = d.rd.err
+		}
+
+		switch {
+		case err == nil:
+			return errSize
+		case errors.Is(err, io.EOF):
+			return io.ErrUnexpectedEOF
+		case errors.Is(err, errEOS):
+			// The end-of-stream marker: the stream ended where it should.
+		default:
+			return err
+		}
+	}
+
+	return io.EOF
 }
 
 // apply takes the operation and transforms the decoder dictionary accordingly.

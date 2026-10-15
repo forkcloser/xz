@@ -47,9 +47,9 @@ func (h *Header) marshalBinary() (data []byte, err error) {
 	// dictionary capacity
 	binary.LittleEndian.PutUint32(data[1:5], h.DictSize)
 
-	// uncompressed size
+	// uncompressed size; zero is a size, only a negative one is unknown
 	var s uint64
-	if h.Size > 0 {
+	if h.Size >= 0 {
 		s = uint64(h.Size)
 	} else {
 		s = noHeaderSize

@@ -112,6 +112,10 @@ func (r *Reader2) Reset(z io.Reader) {
 	r.err = nil
 	r.cstate = start
 	r.dict.Reset()
+	// What the previous sequence decoded and the caller never read is not
+	// the new sequence's: the in-stream dictionary resets keep it readable,
+	// this one drops it.
+	_, _ = r.dict.buf.Discard(r.dict.buf.Buffered())
 
 	if err := r.startChunk(); err != nil {
 		r.err = err
@@ -239,7 +243,7 @@ func (r *Reader2) startChunk() error {
 
 		r.decoder, err = newDecoder(br, state, r.dict, size)
 		if err != nil {
-			return err
+			return chunkStartError(err)
 		}
 
 		r.chunkReader = r.decoder
@@ -263,12 +267,24 @@ func (r *Reader2) startChunk() error {
 
 	err = r.decoder.Reopen(br, size)
 	if err != nil {
-		return err
+		return chunkStartError(err)
 	}
 
 	r.chunkReader = r.decoder
 
 	return nil
+}
+
+// chunkStartError is a decoder's refusal to start on a compressed chunk
+// that is in memory in full: running out of bytes there is a chunk shorter
+// than the range coder's five, which the header promised, not the input
+// ending.
+func chunkStartError(err error) error {
+	if errors.Is(err, io.ErrUnexpectedEOF) {
+		return corruptf("lzma: compressed chunk shorter than the range coder's first five bytes")
+	}
+
+	return err
 }
 
 // uncompressedReader is used to read uncompressed chunks.
