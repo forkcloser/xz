@@ -28,6 +28,8 @@ var (
 //
 //nolint:recvcheck // NewParallelReader copies the config, so it works on a literal; Verify takes the pointer
 type ParallelReaderConfig struct {
+	// DictCap is the floor for the dictionary, as ReaderConfig.DictCap: a
+	// block header asking for more gets more.
 	DictCap int
 	Workers int
 }
@@ -115,8 +117,9 @@ func checkUncompressedSize(rec record) error {
 // Only files consisting of multiple blocks — as produced for example by
 // xz with a block size limit or in multi-threaded mode, or by this
 // package's writer with WriterConfig.BlockSize — decode with real
-// concurrency; a single-block file decodes on one worker. Memory usage
-// is proportional to Workers times the uncompressed block size.
+// concurrency; a single-block file decodes on one worker. Memory in flight
+// is a bounded number of uncompressed blocks, about twice Workers plus a
+// few: the decoded queue, the block being read, and the buffer pool.
 //
 // The ParallelReader verifies the block checks, the block sizes against
 // the index, and the header, footer and index checksums of every
@@ -584,9 +587,7 @@ func (d *parallelDecoder) dispatch() {
 
 // workerScratch is the per-worker reusable decode machinery: the buffered
 // reader over the block's section of the file and the LZMA2 reader with its
-// decoder state and dictionary. Both used to be rebuilt for every block —
-// about 110 allocations plus a 256 KiB read buffer per block, on exactly the
-// multi-block files the parallel reader exists for.
+// decoder state and dictionary, reset per block rather than rebuilt.
 type workerScratch struct {
 	xr *bufio.Reader
 	lz lzma2Cache
@@ -689,21 +690,16 @@ func (d *parallelDecoder) decodeBlock(bd *blockDesc, bufp *[]byte, s *workerScra
 
 	h, hlen, err := readBlockHeader(s.xr)
 	if err != nil {
-		// The sequential reader treats an index indicator as "the blocks
-		// are over" — there it is a legitimate outcome. Here the offset
-		// came from the index itself, which promised a block at this
-		// position; finding the index indicator instead means the index
-		// and the block area disagree, and that is corruption. Left as
-		// the bare sentinel it matched neither ErrCorrupt nor anything
-		// else a caller could classify.
+		// The offset came from the index, which promised a block here;
+		// the index indicator instead means the index and the block area
+		// disagree, which is corruption, not the end of the blocks it is
+		// for the sequential reader.
 		if errors.Is(err, errIndexIndicator) {
 			return nil, corruptf("xz: index indicator where the index places block at offset %d", bd.offset)
 		}
-		// The section reader ends where the index says the block ends.
-		// Running out of bytes inside the header means the header claims
-		// more than the block holds: that is corruption of the file, and
-		// left as a bare io.EOF it read as the end of the stream (see
-		// nextBlock), so the reader returned a truncated file as complete.
+		// The section reader ends where the index says the block ends,
+		// so running out of bytes inside the header is a header claiming
+		// more than the block holds, never the end of the stream.
 		if errors.Is(err, io.EOF) {
 			return nil, corruptf("xz: block header at offset %d runs past the end of the block", bd.offset)
 		}
