@@ -320,6 +320,17 @@ func readBlockHeader(r io.Reader) (h *blockHeader, n int, err error) {
 	return h, n, nil
 }
 
+// headerFieldError is a field that could not be read from a block header
+// whose CRC-32 held: running out of the header's bytes is a field running
+// past the header's end, which is the header's fault, never a short input.
+func headerFieldError(err error) error {
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return corruptf("xz: block header field runs past the header's end")
+	}
+
+	return err
+}
+
 // readSizeInBlockHeader reads the uncompressed or compressed size
 // fields in the block header. The present value informs the function
 // whether the respective field is actually present in the header.
@@ -384,7 +395,7 @@ func (h *blockHeader) UnmarshalBinary(data []byte) error {
 		r, flags&compressedSizePresent != 0,
 	)
 	if err != nil {
-		return err
+		return headerFieldError(err)
 	}
 
 	// Uncompressed size
@@ -392,12 +403,12 @@ func (h *blockHeader) UnmarshalBinary(data []byte) error {
 		r, flags&uncompressedSizePresent != 0,
 	)
 	if err != nil {
-		return err
+		return headerFieldError(err)
 	}
 
 	h.filters, err = readFilters(r, int(flags&filterCountMask)+1)
 	if err != nil {
-		return err
+		return headerFieldError(err)
 	}
 
 	// Check padding

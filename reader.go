@@ -110,8 +110,13 @@ func (c ReaderConfig) NewReader(xz io.Reader) (r *Reader, err error) {
 		xz:           xz,
 	}
 	if r.sr, err = c.newStreamReader(xz, &r.lz); err != nil {
-		if errors.Is(err, io.EOF) {
+		switch {
+		case errors.Is(err, io.EOF):
 			err = io.ErrUnexpectedEOF
+		case errors.Is(err, errPadding):
+			// Padding is between streams or after the last; a file that
+			// opens with it holds no stream where one must be.
+			err = corruptf("xz: stream padding before the first stream")
 		}
 
 		return nil, err
@@ -197,7 +202,16 @@ func (c ReaderConfig) newStreamReader(xz io.Reader, cache *lzma2Cache) (r *strea
 	}
 
 	data := make([]byte, HeaderLen)
-	if _, err = io.ReadFull(xz, data[:4]); err != nil {
+
+	k, err := io.ReadFull(xz, data[:4])
+	if err != nil {
+		if errors.Is(err, io.ErrUnexpectedEOF) && allZeros(data[:k]) {
+			// Padding comes in whole groups of four zero bytes; fewer at
+			// the end is the file's fault, where a non-zero byte starts a
+			// stream header and running out inside it is the input ending.
+			return nil, corruptf("xz: stream padding is not a multiple of four bytes")
+		}
+
 		return nil, err
 	}
 
@@ -397,8 +411,12 @@ func (br *blockReader) Read(p []byte) (n int, err error) {
 		return n, err
 	}
 
-	if br.uncompressedSize() < u || br.compressedSize() < c {
-		return n, io.ErrUnexpectedEOF
+	if br.uncompressedSize() < u {
+		return n, corruptf("xz: wrong uncompressed size for block")
+	}
+
+	if br.compressedSize() < c {
+		return n, corruptf("xz: wrong compressed size for block")
 	}
 
 	s := br.hash.Size()
