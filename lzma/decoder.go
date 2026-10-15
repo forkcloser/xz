@@ -31,6 +31,9 @@ type decoder struct {
 	// err is the first failure or the clean end, returned by every Read
 	// once the dictionary has been drained.
 	err error
+	// noEOSMarker refuses the end-of-stream marker: an LZMA2 chunk is
+	// delimited by its sizes and liblzma rejects a marker inside one.
+	noEOSMarker bool
 }
 
 // newDecoder creates a new decoder instance. The parameter size provides
@@ -186,12 +189,21 @@ func (d *decoder) sizeReached() error {
 			return io.ErrUnexpectedEOF
 		case errors.Is(err, errEOS):
 			// The end-of-stream marker: the stream ended where it should.
+			if d.noEOSMarker {
+				return corruptf("lzma: end-of-stream marker inside an LZMA2 chunk")
+			}
 		default:
 			return err
 		}
 	}
 
 	return io.EOF
+}
+
+// unconsumed is how many bytes of an in-memory chunk the range decoder has
+// not read; a streaming decoder reports none.
+func (d *decoder) unconsumed() int {
+	return len(d.rd.buf) - d.rd.pos
 }
 
 // apply takes the operation and transforms the decoder dictionary accordingly.
