@@ -10,14 +10,8 @@ import "errors"
 // dictionary.
 //
 // HashTable4, a hash table over four-byte words, is the only algorithm and
-// the zero value, so the field can be left unset. Upstream also declared a
-// BinaryTree matcher; it emitted matches at distances the decoder does not
-// have (its own reader rejected its output for most inputs), compressed
-// text to half its size where the hash table reaches a fraction of a
-// percent, and degraded quadratically on repeated words. Upstream's roadmap
-// lists "fix binary tree matcher" as open. It was removed before 1.0 rather
-// than shipped as a working option; a working one can be added as a new
-// value.
+// the zero value, so the field can be left unset; another algorithm is a
+// new value, never a change to this one.
 type MatchAlgorithm byte
 
 // Supported matcher algorithms.

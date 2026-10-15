@@ -18,9 +18,9 @@ var (
 // dictionary is used as reader buffer.
 //
 // The buffer starts small and grows towards dictCap as data is decoded, so it
-// only ever costs what the stream actually produces. The declared dictionary
-// capacity of an xz block is attacker controlled and reaches 4 GiB, and
-// allocating it up front turned a 104-byte file into a 4 GiB allocation.
+// only ever costs what the stream actually produces: the declared dictionary
+// capacity of an xz block is attacker controlled and reaches 4 GiB, so it is
+// never allocated up front.
 type decoderDict struct {
 	buf  buffer
 	head int64
@@ -112,9 +112,10 @@ func (d *decoderDict) Available() int { return d.buf.Available() }
 // Read reads data from the buffer contained in the decoder dictionary.
 func (d *decoderDict) Read(p []byte) (n int, err error) { return d.buf.Read(p) }
 
-// writeMatch writes the match at the top of the dictionary. The given
-// distance must point in the current dictionary and the length must not
-// exceed the maximum length 273 supported in LZMA.
+// writeMatch writes the match at the top of the dictionary. A distance
+// before the start of the dictionary or a length outside 1 to 273 is the
+// stream's fault, reported as ErrCorrupt; the decoder relies on that check,
+// since a match is decoded from untrusted bytes.
 //
 // The error value ErrNoSpace indicates that no space is available in
 // the dictionary for writing. You need to read from the dictionary

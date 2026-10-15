@@ -69,9 +69,6 @@ func (c *Writer2Config) Verify() error {
 // to the stream. So you may be able to concatenate the output of two
 // writers as long the output of the first writer has only been flushed
 // but not closed.
-//
-// Any change to the fields Properties, DictCap must be done before the
-// first call to Write, Flush or Close.
 type Writer2 struct {
 	w io.Writer
 

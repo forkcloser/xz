@@ -28,9 +28,9 @@ var (
 //
 //nolint:recvcheck // NewReader copies the config, so it works on a literal; Verify and fill take the pointer
 type ReaderConfig struct {
-	// DictCap is an upper limit for a .lzma file's dictionary size (upstream
-	// introduced the limit in v0.5.14). It helps to mitigate problems with
-	// mangled headers; a header declaring more is rejected with ErrDictSize.
+	// DictCap is an upper limit for a .lzma file's dictionary size, not a
+	// size: a header declaring more is rejected with ErrDictSize, so a
+	// mangled header cannot drive the allocation.
 	DictCap int
 }
 
@@ -57,10 +57,9 @@ func (c *ReaderConfig) Verify() error {
 // are problems with the stream, but the dictionary has already been allocated
 // and this might consume a lot of memory.
 //
-// Built-in mitigations (introduced upstream in v0.5.14):
+// What bounds that:
 //
-//   - The [ReaderConfig] DictCap field is now interpreted as a limit for the
-//     dictionary size.
+//   - The [ReaderConfig] DictCap field is a limit for the dictionary size.
 //   - The default is 2 Gigabytes minus 1 byte (2^31-1 bytes).
 //   - Users can check with the [Reader.Header] method what the actual values are in
 //     their LZMA files and set a smaller limit using [ReaderConfig].
@@ -96,7 +95,7 @@ func NewReader(lzma io.Reader) (r *Reader, err error) {
 
 // ErrDictSize reports about an error of the dictionary size.
 //
-//nolint:errname // upstream's exported name (GHSA-jc7w-c686-c4v9 fix); importers match it with errors.As
+//nolint:errname // an exported name importers match with errors.As
 type ErrDictSize struct {
 	ConfigDictCap  int
 	HeaderDictSize uint32
@@ -171,9 +170,8 @@ func (c ReaderConfig) NewReader(lzma io.Reader) (r *Reader, err error) {
 	if dictSize < MinDictCap {
 		dictSize = MinDictCap
 	}
-	// Upstream raises dictSize to c.DictCap when that is larger; this fork
-	// does not, as there is no point in a dictionary above what the file
-	// states.
+	// The dictionary is what the file states and no larger: DictCap is a
+	// ceiling, never a size to grow to.
 	size := r.header.Size
 	if size >= 0 && size < dictSize {
 		dictSize = size
@@ -211,10 +209,9 @@ func (c ReaderConfig) NewReader(lzma io.Reader) (r *Reader, err error) {
 // fill converts the zero values of the configuration to the default values.
 func (c *ReaderConfig) fill() {
 	if c.DictCap == 0 {
-		// set an upper limit of 2 GiB-1 for dictionary capacity
-		// to address the zero prefix security issue.
+		// A ceiling, not a size: a header inflated by a byte in front of
+		// the stream still cannot ask for more than 2 GiB-1.
 		c.DictCap = math.MaxInt32
-		// Upstream's default is 8 MiB.
 	}
 }
 

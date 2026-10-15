@@ -40,7 +40,7 @@ func initProbSlice(p []prob) {
 // make every codec allocate again. LZMA2 chunks can reset the coder state, so
 // that turned a stream of small resetting chunks into a stream of allocations.
 // Every field is either assigned below or re-initialized by one of the codec
-// init calls; TestStateResetReusesWithoutDrift checks that none is missed.
+// init calls; a field added to state is one or the other, never left over.
 func (s *state) Reset() {
 	p := s.Properties
 	s.rep = [4]uint32{}
