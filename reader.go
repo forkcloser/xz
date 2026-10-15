@@ -88,6 +88,7 @@ type streamReader struct {
 	h       header
 	index   []record
 	lz      *lzma2Cache
+	hdr     [maxBlockHeaderLen]byte
 }
 
 // NewReader creates a new xz reader using the default parameters.
@@ -250,7 +251,7 @@ func (c ReaderConfig) newStreamReader(xz io.Reader, cache *lzma2Cache) (r *strea
 func (r *streamReader) Read(p []byte) (n int, err error) {
 	for n < len(p) {
 		if r.br == nil {
-			bh, hlen, err := readBlockHeader(r.xz)
+			bh, hlen, err := readBlockHeader(r.xz, &r.hdr)
 			if err != nil {
 				if errors.Is(err, errIndexIndicator) {
 					if err = r.readTail(); err != nil {

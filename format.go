@@ -283,37 +283,40 @@ const (
 // instead of an expected block header indicator.
 var errIndexIndicator = errors.New("xz: found index indicator")
 
-// readBlockHeader reads the block header.
-func readBlockHeader(r io.Reader) (h *blockHeader, n int, err error) {
-	var buf bytes.Buffer
-	buf.Grow(20)
+// maxBlockHeaderLen is the longest block header the size byte can state.
+const maxBlockHeaderLen = 256 * 4
 
+// readBlockHeader reads the block header into buf, which the caller owns
+// across blocks: UnmarshalBinary parses through a bytes.Reader handed to
+// functions as an interface, which the compiler cannot see through, so the
+// array under it escapes, and a local one would be allocated and zeroed per
+// block. It returns how many bytes it read, header or not, so a caller
+// counting the stream stays exact.
+func readBlockHeader(r io.Reader, buf *[maxBlockHeaderLen]byte) (h *blockHeader, n int, err error) {
 	// block header size
-	z, err := io.CopyN(&buf, r, 1)
-
-	n = int(z)
+	n, err = io.ReadFull(r, buf[:1])
 	if err != nil {
 		return nil, n, err
 	}
 
-	s := buf.Bytes()[0]
+	s := buf[0]
 	if s == 0 {
 		return nil, n, errIndexIndicator
 	}
 
 	// read complete header
 	headerLen := (int(s) + 1) * 4
-	buf.Grow(headerLen - 1)
-	z, err = io.CopyN(&buf, r, int64(headerLen-1))
 
-	n += int(z)
+	k, err := io.ReadFull(r, buf[1:headerLen])
+
+	n += k
 	if err != nil {
 		return nil, n, err
 	}
 
 	// unmarshal block header
 	h = new(blockHeader)
-	if err = h.UnmarshalBinary(buf.Bytes()); err != nil {
+	if err = h.UnmarshalBinary(buf[:headerLen]); err != nil {
 		return nil, n, err
 	}
 
@@ -373,10 +376,7 @@ func (h *blockHeader) UnmarshalBinary(data []byte) error {
 	n := headerLen - 4
 
 	// Check CRC-32
-	crc := crc32.NewIEEE()
-	crc.Write(data[:n])
-
-	if crc.Sum32() != binary.LittleEndian.Uint32(data[n:]) {
+	if crc32.ChecksumIEEE(data[:n]) != binary.LittleEndian.Uint32(data[n:]) {
 		return corruptf("xz: checksum error for block header")
 	}
 

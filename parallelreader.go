@@ -589,8 +589,9 @@ func (d *parallelDecoder) dispatch() {
 // reader over the block's section of the file and the LZMA2 reader with its
 // decoder state and dictionary, reset per block rather than rebuilt.
 type workerScratch struct {
-	xr *bufio.Reader
-	lz lzma2Cache
+	xr  *bufio.Reader
+	lz  lzma2Cache
+	hdr [maxBlockHeaderLen]byte
 }
 
 // worker decodes blocks until the job channel is closed. The scratch is
@@ -688,7 +689,7 @@ func (d *parallelDecoder) decodeBlock(bd *blockDesc, bufp *[]byte, s *workerScra
 	sr := io.NewSectionReader(d.xz, bd.offset, bd.paddedSize())
 	s.xr.Reset(sr)
 
-	h, hlen, err := readBlockHeader(s.xr)
+	h, hlen, err := readBlockHeader(s.xr, &s.hdr)
 	if err != nil {
 		// The offset came from the index, which promised a block here;
 		// the index indicator instead means the index and the block area
@@ -700,7 +701,7 @@ func (d *parallelDecoder) decodeBlock(bd *blockDesc, bufp *[]byte, s *workerScra
 		// The section reader ends where the index says the block ends,
 		// so running out of bytes inside the header is a header claiming
 		// more than the block holds, never the end of the stream.
-		if errors.Is(err, io.EOF) {
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 			return nil, corruptf("xz: block header at offset %d runs past the end of the block", bd.offset)
 		}
 
