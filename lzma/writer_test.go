@@ -158,8 +158,8 @@ func TestWriter_Size(t *testing.T) {
 		q[0]++
 	}
 
-	if err = w.Close(); !errors.Is(err, errSize) {
-		t.Fatalf("expected errSize, but got %v", err)
+	if err = w.Close(); !errors.Is(err, errSizeShort) || errors.Is(err, ErrCorrupt) {
+		t.Fatalf("expected errSizeShort and no corruption, but got %v", err)
 	}
 
 	n, err := w.Write(q)

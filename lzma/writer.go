@@ -104,6 +104,8 @@ type Writer struct {
 	// return it from then on rather than continue on an encoder whose
 	// dictionary was partly consumed by the failed operation.
 	err error
+	// closed is set by Close: a second Close must not write a second end.
+	closed bool
 }
 
 // NewWriter creates a new LZMA writer for the classic format. The
@@ -201,6 +203,10 @@ func (w *Writer) Write(p []byte) (n int, err error) {
 		return 0, w.err
 	}
 
+	if w.closed {
+		return 0, errClosed
+	}
+
 	if w.h.Size >= 0 {
 		m := w.h.Size
 
@@ -224,20 +230,30 @@ func (w *Writer) Write(p []byte) (n int, err error) {
 	return n, err
 }
 
+// errSizeShort is a Close before the size the header declares was written.
+var errSizeShort = errors.New("lzma: fewer bytes written than the header's size")
+
 // Close closes the writer stream. It ensures that all data from the
 // buffer will be compressed and the LZMA stream will be finished. After a
-// failed Write it returns that error and writes nothing.
+// failed Write it returns that error and writes nothing; a second Close
+// writes nothing and reports the writer closed.
 func (w *Writer) Close() error {
 	if w.err != nil {
 		return w.err
 	}
 
+	if w.closed {
+		return errClosed
+	}
+
 	if w.h.Size >= 0 {
 		n := w.e.Compressed() + int64(w.e.dict.Buffered())
 		if n != w.h.Size {
-			return errSize
+			return errSizeShort
 		}
 	}
+
+	w.closed = true
 
 	err := w.e.Close()
 	if w.buf != nil {

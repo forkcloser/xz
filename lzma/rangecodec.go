@@ -5,6 +5,7 @@
 package lzma
 
 import (
+	"errors"
 	"io"
 	"math"
 )
@@ -195,7 +196,7 @@ func (d *rangeDecoder) init(br io.ByteReader) error {
 
 	b := d.readByte()
 	if d.err != nil {
-		return d.err
+		return d.initErr()
 	}
 
 	if b != 0 {
@@ -207,7 +208,7 @@ func (d *rangeDecoder) init(br io.ByteReader) error {
 	}
 
 	if d.err != nil {
-		return d.err
+		return d.initErr()
 	}
 
 	if d.code >= d.nrange {
@@ -215,6 +216,17 @@ func (d *rangeDecoder) init(br io.ByteReader) error {
 	}
 
 	return nil
+}
+
+// initErr is the error of an init that ran out of input: the five bytes are
+// part of the stream, so their absence is a stream cut short, never a clean
+// end. The sticky error stays io.EOF, which the decode loop maps the same way.
+func (d *rangeDecoder) initErr() error {
+	if errors.Is(d.err, io.EOF) {
+		return io.ErrUnexpectedEOF
+	}
+
+	return d.err
 }
 
 // newRangeDecoder initializes a range decoder. It reads five bytes from the
