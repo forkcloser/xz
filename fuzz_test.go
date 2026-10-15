@@ -13,10 +13,7 @@ import (
 
 // This package decodes untrusted input, so the failure mode that matters is
 // not a wrong answer but a panic, a hang, or an allocation large enough to
-// take the process down. Every one of those has happened here: the audit
-// found a 44-byte file that panicked on a worker goroutine, a 40-byte file
-// that reserved 16 TiB, and a 104-byte file that spun forever. TODO.md records
-// an earlier one found by fuzzing in 2021.
+// take the process down.
 //
 // The rule these targets enforce is simply that malformed input produces an
 // error. Run them with, for example:

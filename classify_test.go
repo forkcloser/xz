@@ -13,7 +13,7 @@ import (
 	"github.com/forkcloser/xz/lzma"
 )
 
-// The README promises that every error meaning "this input is not valid xz"
+// The package promises that every error meaning "this input is not valid xz"
 // matches ErrCorrupt, that a stream cut short is io.ErrUnexpectedEOF, and
 // that an I/O error from the underlying reader comes back as it went in.
 // These tests hold the package to that across the whole file, payload

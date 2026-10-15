@@ -57,10 +57,9 @@ func (f *lzmaFilter) UnmarshalBinary(data []byte) error {
 func (lzmaFilter) id() uint64 { return lzmaFilterID }
 
 // lzma2Cache carries an LZMA2 reader across the blocks of an xz file. Every
-// block is decoded by a fresh chunk sequence, so without reuse each block
-// rebuilt the decoder, its probability models and the dictionary — about 110
-// allocations per block, on exactly the multi-block files the parallel
-// reader exists for. The zero value is ready for use.
+// block is a fresh chunk sequence, and Reset keeps the decoder, its
+// probability models and the dictionary instead of rebuilding them per
+// block. The zero value is ready for use.
 type lzma2Cache struct {
 	r *lzma.Reader2
 }

@@ -16,8 +16,7 @@ import (
 //
 // The distinction that matters in practice is between a file that is not a
 // valid xz stream and a transport that failed underneath us: the first means
-// reject the input, the second means the read may be worth retrying. Telling
-// them apart used to require matching on message text.
+// reject the input, the second means the read may be worth retrying.
 var (
 	// ErrCorrupt reports that the data being read is not a valid xz stream:
 	// bad magic, a failed checksum, sizes that disagree, a reserved field
@@ -26,7 +25,7 @@ var (
 	// does not match.
 	ErrCorrupt = errors.New("xz: corrupt input")
 
-	// ErrClosed reports that a reader was used after Close.
+	// ErrClosed reports that a reader or writer was used after Close.
 	ErrClosed = errors.New("xz: already closed")
 
 	// ErrUnsupported reports a stream this package cannot decode even though

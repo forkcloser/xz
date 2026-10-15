@@ -415,13 +415,9 @@ func (h *blockHeader) UnmarshalBinary(data []byte) error {
 	// Since headerLen is a multiple of 4 we don't need to check
 	// alignment.
 	k := r.Len()
-	// The standard spec says that the padding should have not more
-	// than 3 bytes. However we found paddings of 4 or 5 in the
-	// wild. See https://github.com/ulikunitz/xz/pull/11 and
-	// https://github.com/ulikunitz/xz/issues/15 (upstream).
-	//
-	// The only reasonable approach seems to be to ignore the
-	// padding size. We still check that all padding bytes are zero.
+	// Header padding is whatever the declared header size leaves after
+	// the fields, of any length; only its bytes being zero is checked.
+	// The 0-3 byte rule is the block padding's, after the data.
 	if !allZeros(data[n-k : n]) {
 		return corruptf("xz: non-zero block header padding")
 	}
@@ -633,7 +629,7 @@ func readRecord(r io.ByteReader) (rec record, n int, err error) {
 
 // MarshalBinary converts an index record in its binary encoding.
 func (rec *record) MarshalBinary() (data []byte, err error) {
-	// maximum length of a uvarint is 10
+	// two uvarints of at most nine bytes each
 	p := make([]byte, 20)
 	// #nosec G115 -- record sizes are never negative: checked where they are read and built
 	n := putUvarint(p, uint64(rec.unpaddedSize))

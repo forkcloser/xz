@@ -269,7 +269,8 @@ func (w *Writer) Write(p []byte) (n int, err error) {
 
 // Close closes the writer and adds the footer to the Writer. Close
 // doesn't close the underlying writer. After a failed Write it returns that
-// error and writes nothing.
+// error and writes nothing; a second Close writes nothing and returns an
+// error matching ErrClosed.
 func (w *Writer) Close() error {
 	if w.err != nil {
 		return w.err
@@ -446,7 +447,7 @@ func (bw *blockWriter) Close() error {
 	return nil
 }
 
-// record returns the record for the current stream. Call Close before
+// record returns the index record for the current block. Call Close before
 // calling this method.
 func (bw *blockWriter) record() record {
 	return record{bw.unpaddedSize(), bw.uncompressedSize()}
@@ -478,17 +479,13 @@ func (bw *blockWriter) compressedSize() int64 {
 	return bw.cxz.n
 }
 
-// writeHeader writes the header. If the function is called after Close
-// the commpressedSize and uncompressedSize fields will be filled.
+// writeHeader writes the header before the block's data, so the sizes are
+// not yet known and stay out of it; the index carries them.
 func (bw *blockWriter) writeHeader(w io.Writer) error {
 	h := blockHeader{
 		compressedSize:   -1,
 		uncompressedSize: -1,
 		filters:          bw.filters,
-	}
-	if bw.closed {
-		h.compressedSize = bw.compressedSize()
-		h.uncompressedSize = bw.uncompressedSize()
 	}
 
 	data, err := h.MarshalBinary()
