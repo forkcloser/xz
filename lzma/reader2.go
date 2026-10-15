@@ -305,13 +305,20 @@ type uncompressedReader struct {
 	Dict *decoderDict
 	eof  bool
 	err  error
+	// scratch carries one read from the chunk into the dictionary; it is
+	// the reader's, so a fill allocates nothing.
+	scratch []byte
 }
+
+// scratchSize is the most one fill moves into the dictionary.
+const scratchSize = 32 << 10
 
 // newUncompressedReader initializes a new uncompressedReader.
 func newUncompressedReader(r io.Reader, dict *decoderDict, size int64) *uncompressedReader {
 	ur := &uncompressedReader{
-		lr:   io.LimitedReader{R: r, N: size},
-		Dict: dict,
+		lr:      io.LimitedReader{R: r, N: size},
+		Dict:    dict,
+		scratch: make([]byte, scratchSize),
 	}
 
 	return ur
@@ -355,10 +362,22 @@ func (ur *uncompressedReader) Read(p []byte) (n int, err error) {
 	return n, err
 }
 
-// fill reads uncompressed data into the dictionary.
+// fill reads uncompressed data into the dictionary: one read of the chunk,
+// as much as the dictionary has room for.
 func (ur *uncompressedReader) fill() error {
 	if !ur.eof {
-		n, err := io.CopyN(ur.Dict, &ur.lr, int64(ur.Dict.Available()))
+		p := ur.scratch[:min(ur.Dict.Available(), len(ur.scratch))]
+
+		n, err := ur.lr.Read(p)
+		if n > 0 {
+			// The dictionary has room for n: p was cut to Available.
+			_, _ = ur.Dict.Write(p[:n])
+		}
+
+		if err == nil {
+			return nil
+		}
+
 		if !errors.Is(err, io.EOF) {
 			return err
 		}
