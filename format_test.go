@@ -144,7 +144,9 @@ func TestBlockHeader(t *testing.T) {
 
 	r := bytes.NewReader(data)
 
-	g, n, err := readBlockHeader(r)
+	var hdr [maxBlockHeaderLen]byte
+
+	g, n, err := readBlockHeader(r, &hdr)
 	if err != nil {
 		t.Fatalf("readBlockHeader error %s", err)
 	}
