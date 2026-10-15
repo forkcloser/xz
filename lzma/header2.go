@@ -190,8 +190,14 @@ func (h *chunkHeader) UnmarshalBinary(data []byte) error {
 	}
 
 	h.props, err = PropertiesForCode(data[5])
+	if err != nil {
+		// A properties byte a chunk cannot carry is the chunk's fault:
+		// liblzma reports it as a data error, where the same byte at the
+		// head of a classic stream is a format it does not support.
+		return corruptf("lzma: chunk header properties: %v", err)
+	}
 
-	return err
+	return nil
 }
 
 // MarshalBinary encodes the chunk header value. The function checks

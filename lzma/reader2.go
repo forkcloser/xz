@@ -143,7 +143,7 @@ func (r *Reader2) Read(p []byte) (n int, err error) {
 		if err != nil {
 			switch {
 			case errors.Is(err, io.EOF):
-				err = r.startChunk()
+				err = r.nextChunk()
 				if err == nil {
 					continue
 				}
@@ -173,6 +173,17 @@ func (r *Reader2) Read(p []byte) (n int, err error) {
 // end-of-stream chunk.
 func (r *Reader2) EOS() bool {
 	return r.cstate == stop
+}
+
+// nextChunk moves on from a chunk that ended to the next one's header.
+func (r *Reader2) nextChunk() error {
+	if r.chunkReader == r.decoder && r.decoder.unconsumed() > 0 {
+		// liblzma refuses a chunk whose data ends before its size field
+		// says: the bytes left are not padding.
+		return corruptf("lzma: compressed chunk has %d bytes after its data", r.decoder.unconsumed())
+	}
+
+	return r.startChunk()
 }
 
 // startChunk parses a new chunk.
@@ -246,6 +257,7 @@ func (r *Reader2) startChunk() error {
 			return chunkStartError(err)
 		}
 
+		r.decoder.noEOSMarker = true
 		r.chunkReader = r.decoder
 
 		return nil
