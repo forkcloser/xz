@@ -5,8 +5,6 @@ build
 lzma/writer.txt
 lzma/reader.txt
 
-cmd/gxz/gxz
-
 # test executables
 *.test
 
