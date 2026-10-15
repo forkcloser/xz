@@ -141,13 +141,15 @@ type ParallelReader struct {
 	size int64
 
 	// Owned by the reading goroutine.
-	started bool
-	cur     []byte
-	curPos  int
+	cur    []byte
+	curPos int
 
-	// err is reachable from Close, so it is the one field that needs a lock.
-	mu  sync.Mutex
-	err error
+	// err and started are reachable from Close, which may run on another
+	// goroutine, so the lock covers both: a Close that finds the workers
+	// started waits for them, one that does not forbids their start.
+	mu      sync.Mutex
+	err     error
+	started bool
 }
 
 // parallelDecoder is the part of the parallel reader that the dispatcher
@@ -164,6 +166,9 @@ type parallelDecoder struct {
 	// Read that has not started the workers yet.
 	done      chan struct{}
 	closeOnce sync.Once
+	// workers counts the worker goroutines, so Close can wait for the block
+	// each has in hand: after Close returns, nothing reads the source.
+	workers sync.WaitGroup
 
 	queue   chan *blockWork
 	jobs    chan *blockWork
@@ -548,6 +553,9 @@ func (d *parallelDecoder) start(workers, dictCap int) {
 	d.jobs = make(chan *blockWork)
 
 	d.bufPool = make(chan []byte, cap(d.queue)+1)
+
+	d.workers.Add(workers)
+
 	for range workers {
 		go d.worker()
 	}
@@ -598,6 +606,8 @@ type workerScratch struct {
 // created on the first job, so a worker that never receives one — more
 // workers than blocks — allocates nothing.
 func (d *parallelDecoder) worker() {
+	defer d.workers.Done()
+
 	var s *workerScratch
 	for w := range d.jobs {
 		if s == nil {
@@ -771,12 +781,8 @@ func (d *parallelDecoder) decodeBlock(bd *blockDesc, bufp *[]byte, s *workerScra
 // Read reads the uncompressed data stream. The blocks are decoded
 // concurrently but delivered in order.
 func (r *ParallelReader) Read(p []byte) (n int, err error) {
-	if err = r.getErr(); err != nil {
+	if err = r.begin(); err != nil {
 		return 0, err
-	}
-
-	if !r.started {
-		r.start()
 	}
 
 	for n < len(p) {
@@ -810,16 +816,12 @@ func (r *ParallelReader) WriteTo(w io.Writer) (n int64, err error) {
 	// failure: io.Copy does not report io.EOF for an ordinary reader, and a
 	// caller checking err would otherwise see a fully drained stream as an
 	// error.
-	if err = r.getErr(); err != nil {
+	if err = r.begin(); err != nil {
 		if errors.Is(err, io.EOF) {
 			return 0, nil
 		}
 
 		return 0, err
-	}
-
-	if !r.started {
-		r.start()
 	}
 
 	for {
@@ -866,17 +868,33 @@ func (d *parallelDecoder) stop() {
 	d.closeOnce.Do(func() { close(d.done) })
 }
 
-// Close stops the background workers. It must be called when the reader is
-// abandoned before io.EOF was reached; it is a no-op otherwise. The error is
-// always nil.
+// Close stops the background workers and returns once they have stopped:
+// each finishes the block it has in hand, so Close may take the time of
+// one block, and after it returns nothing reads the source. It must be
+// called when the reader is abandoned before io.EOF was reached, and may be
+// called after; the error is always nil.
 //
 // Unlike Read and WriteTo, Close may be called from another goroutine, and
 // doing so cancels a read that is waiting on a block. A reader that already
 // reached io.EOF keeps reporting io.EOF rather than the close.
 func (r *ParallelReader) Close() error {
 	r.dec.stop()
+
+	r.mu.Lock()
 	// Only takes effect if the reader was not already finished or failed.
-	_ = r.setErr(errReaderClosed)
+	if r.err == nil {
+		r.err = errReaderClosed
+	}
+
+	started := r.started
+	r.mu.Unlock()
+
+	// The workers were started under the same lock, so their count was
+	// added before this wait, as the WaitGroup requires; a reader closed
+	// before its first read starts none.
+	if started {
+		r.dec.workers.Wait()
+	}
 
 	return nil
 }
@@ -925,8 +943,22 @@ func (r *ParallelReader) nextBlock() error {
 	}
 }
 
-// start launches the dispatcher and the decode workers.
-func (r *ParallelReader) start() {
+// begin returns the error the reader is in, or starts the dispatcher and
+// the decode workers on the first call. Starting and Close's check of
+// whether anything started share the lock, so a Close from another
+// goroutine either finds the workers to wait for or forbids their start.
+func (r *ParallelReader) begin() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.err != nil {
+		return r.err
+	}
+
+	if r.started {
+		return nil
+	}
+
 	r.started = true
 	// Workers and DictCap are promoted fields, so they are writable between
 	// construction and the first read. Re-apply the floor here: zero workers
@@ -936,14 +968,8 @@ func (r *ParallelReader) start() {
 	}
 
 	r.dec.start(r.Workers, r.DictCap)
-}
 
-// getErr returns the error the reader is in, or nil.
-func (r *ParallelReader) getErr() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	return r.err
+	return nil
 }
 
 // setErr records the first error the reader saw and returns the error it will
