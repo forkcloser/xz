@@ -297,6 +297,12 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 		}
 
 		if pos == 0 {
+			if len(streams) > 0 {
+				// Padding is between streams or after the last; at the
+				// start of the file it stands where a stream must be.
+				return nil, 0, corruptf("xz: stream padding before the first stream")
+			}
+
 			break
 		}
 
