@@ -188,9 +188,15 @@ func (d *decoder) sizeReached() error {
 		case errors.Is(err, io.EOF):
 			return io.ErrUnexpectedEOF
 		case errors.Is(err, errEOS):
-			// The end-of-stream marker: the stream ended where it should.
+			// The end-of-stream marker: the stream ended where it should,
+			// and the range coder must end with it, as after a marker the
+			// size did not announce.
 			if d.noEOSMarker {
 				return corruptf("lzma: end-of-stream marker inside an LZMA2 chunk")
+			}
+
+			if !d.rd.possiblyAtEnd() {
+				return errDataAfterEOS
 			}
 		default:
 			return err
