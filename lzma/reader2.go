@@ -35,8 +35,8 @@ func (c *Reader2Config) Verify() error {
 
 // Reader2 supports the reading of LZMA2 chunk sequences. Note that the
 // first chunk should have a dictionary reset and the first compressed
-// chunk a properties reset. The chunk sequence may not be terminated by
-// an end-of-stream chunk.
+// chunk a properties reset. A sequence that ends without an end-of-stream
+// chunk is reported as io.ErrUnexpectedEOF.
 type Reader2 struct {
 	r   io.Reader
 	err error

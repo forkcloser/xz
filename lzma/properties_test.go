@@ -11,10 +11,8 @@ import "testing"
 // 0x300<<12 probabilities — 6 MiB that every property-resetting chunk
 // reallocates and refills, turning a small file into hours of memset.
 //
-// The limit is not ours: the reference implementation applies it when decoding
-// the properties byte of both LZMA and LZMA2 streams, and this package's
-// writer has always refused to emit anything above it. Only the decoder was
-// missing the check.
+// The limit is liblzma's (LZMA_LCLP_MAX); the LZMA SDK's decoder has none,
+// so the stream is refused as unsupported rather than corrupt.
 func TestPropertiesForCodeRejectsLargeLCLP(t *testing.T) {
 	t.Parallel()
 

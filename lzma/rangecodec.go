@@ -290,11 +290,10 @@ func decodeBitArith(p *prob, rng, code uint32) (bit, nrng, ncode uint32) {
 // streaming fallback) it records a sticky error on the decoder and returns
 // zero bytes; see the rangeDecoder documentation.
 //
-// The decode loops do not call readByte: its cost model price (the cold
-// readByteSlow call alone counts 57 of the 80 budget) keeps it from inlining,
-// so the loops hand-inline the in-memory fast path and call readByteSlow
-// directly on the cold branch. It is kept for the non-hot readers
-// (initialization).
+// The decode loops do not call readByte: the cold readByteSlow call alone
+// keeps it from inlining, so the loops hand-inline the in-memory fast path
+// and call readByteSlow directly on the cold branch. It is kept for the
+// non-hot readers (initialization).
 func (d *rangeDecoder) readByte() byte {
 	pos := d.pos
 	if pos >= len(d.buf) {

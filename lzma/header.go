@@ -116,13 +116,12 @@ func validDictSize(dictcap int) bool {
 	return false
 }
 
-// ValidHeader checks for a valid LZMA file header. It allows only
-// dictionary sizes of 2^n or 2^n+2^(n-1) with n >= 10 or 2^32-1. If
-// there is an explicit size it must not exceed 256 GiB. The length of
-// the data argument must be HeaderLen.
-//
-// This function should be disregarded because there is no guarantee that LZMA
-// files follow the constraints.
+// ValidHeader reports whether data, which must be HeaderLen bytes, reads as
+// the header of an LZMA file written by a usual encoder: a dictionary size
+// of 2^n or 2^n+2^(n-1) with n >= 10, or 2^32-1, and an explicit size, if
+// any, of at most 256 GiB. It is a heuristic for telling the format of a
+// file with no magic: a valid LZMA file with another dictionary size is
+// refused, and NewReader is the check for the file itself.
 func ValidHeader(data []byte) bool {
 	var h Header
 	if err := h.unmarshalBinary(data); err != nil {
