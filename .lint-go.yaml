@@ -65,18 +65,11 @@ golangci:
           # path are already in them.
           - os
       exhaustive:
-        # The LZMA2 chunk-state machine, the chunk reader and writer and
-        # gflag's argument handling end their switches in a default that
-        # says what every other value does, out-of-range ones included,
-        # which a list of the enum's names could not cover.
+        # The LZMA2 chunk-state machine and the chunk reader and writer end
+        # their switches in a default that says what every other value does,
+        # out-of-range ones included, which a list of the enum's names could
+        # not cover.
         default-signifies-exhaustive: true
-      depguard:
-        rules:
-          main:
-            allow:
-              # Terminal detection for gxz's progress output (internal/term).
-              - golang.org/x/sys/unix
-              - golang.org/x/sys/windows
 
 nilaway:
   exclude-errors-in-files:

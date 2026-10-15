@@ -1,9 +1,9 @@
 # Package xz
 
 This Go language package supports the reading and writing of xz
-compressed streams. It includes also a gxz command for compressing and
-decompressing data. The package is completely written in Go and doesn't
-have any dependency on any C code.
+compressed streams. The package is completely written in Go and doesn't
+have any dependency on any C code. The command-line tool built on it is
+[forkcloser/compress](https://github.com/forkcloser/compress)'s `xz`.
 
 Compression speed and ratio do not match the xz tool, whose algorithms
 have been tuned over a long time. Decompression is a different story: see
@@ -173,27 +173,6 @@ func main() {
 ## Documentation
 
 You can find the full documentation at [pkg.go.dev](https://pkg.go.dev/github.com/forkcloser/xz).
-
-## Using the gxz compression tool
-
-The package includes a gxz command line utility for compression and
-decompression.
-
-Use following command for installation:
-
-    $ go install github.com/forkcloser/xz/cmd/gxz@latest
-
-`gxz -V` prints the module version it was built from. Binaries are not
-published as release assets; `go install` is the supported way to get one.
-
-To test it call the following command.
-
-    $ gxz bigfile
-
-After some time a much smaller file bigfile.xz will replace bigfile.
-To decompress it use the following command.
-
-    $ gxz -d bigfile.xz
 
 ## Security & Vulnerabilities
 
