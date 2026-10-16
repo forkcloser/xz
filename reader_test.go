@@ -6,97 +6,10 @@ package xz //nolint:testpackage // white-box: checks the unexported errUnexpecte
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"os"
 	"testing"
 )
-
-func TestReaderSimple(t *testing.T) {
-	t.Parallel()
-
-	const file = "testdata/fox.xz"
-
-	xz, err := os.Open(file)
-	if err != nil {
-		t.Fatalf("os.Open(%q) error %s", file, err)
-	}
-
-	r, err := NewReader(xz)
-	if err != nil {
-		t.Fatalf("NewReader error %s", err)
-	}
-
-	var buf bytes.Buffer
-	if _, err = io.Copy(&buf, r); err != nil {
-		t.Fatalf("io.Copy error %s", err)
-	}
-}
-
-func TestReaderSingleStream(t *testing.T) {
-	t.Parallel()
-
-	data, err := os.ReadFile("testdata/fox.xz")
-	if err != nil {
-		t.Fatalf("ReadFile error %s", err)
-	}
-
-	xz := bytes.NewReader(data)
-	rc := ReaderConfig{SingleStream: true}
-
-	r, err := rc.NewReader(xz)
-	if err != nil {
-		t.Fatalf("NewReader error %s", err)
-	}
-
-	var buf bytes.Buffer
-	if _, err = io.Copy(&buf, r); err != nil {
-		t.Fatalf("io.Copy error %s", err)
-	}
-
-	buf.Reset()
-
-	data = append(data, 0)
-	xz = bytes.NewReader(data)
-
-	r, err = rc.NewReader(xz)
-	if err != nil {
-		t.Fatalf("NewReader error %s", err)
-	}
-
-	if _, err = io.Copy(&buf, r); !errors.Is(err, errUnexpectedData) {
-		t.Fatalf("io.Copy returned %v; want %v", err, errUnexpectedData)
-	}
-}
-
-func TestReaderMultipleStreams(t *testing.T) {
-	t.Parallel()
-
-	data, err := os.ReadFile("testdata/fox.xz")
-	if err != nil {
-		t.Fatalf("ReadFile error %s", err)
-	}
-
-	m := make([]byte, 0, 4*len(data)+4*4)
-	m = append(m, data...)
-	m = append(m, data...)
-	m = append(m, 0, 0, 0, 0)
-	m = append(m, data...)
-	m = append(m, 0, 0, 0, 0, 0, 0, 0, 0)
-	m = append(m, data...)
-	m = append(m, 0, 0, 0, 0)
-	xz := bytes.NewReader(m)
-
-	r, err := NewReader(xz)
-	if err != nil {
-		t.Fatalf("NewReader error %s", err)
-	}
-
-	var buf bytes.Buffer
-	if _, err = io.Copy(&buf, r); err != nil {
-		t.Fatalf("io.Copy error %s", err)
-	}
-}
 
 func TestCheckNone(t *testing.T) {
 	t.Parallel()

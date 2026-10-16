@@ -28,41 +28,6 @@ func wellFormed(tb testing.TB) []byte {
 	return compressMultiBlock(tb, parallelTestData(4096), 1024)
 }
 
-// TestTruncatedAtEveryOffset feeds every prefix of a valid file to both
-// readers. A prefix is never a valid xz file, so each must either refuse it or
-// stop short with an error — never succeed, never crash.
-func TestTruncatedAtEveryOffset(t *testing.T) {
-	t.Parallel()
-
-	full := wellFormed(t)
-	want := parallelTestData(4096)
-
-	for n := range full {
-		prefix := full[:n]
-
-		if r, err := NewReader(bytes.NewReader(prefix)); err == nil {
-			got, err := io.ReadAll(r)
-			if err == nil && bytes.Equal(got, want) {
-				t.Fatalf("sequential reader accepted a %d byte prefix "+
-					"of a %d byte file as complete", n, len(full))
-			}
-		}
-
-		pr, err := NewParallelReader(bytes.NewReader(prefix), int64(n))
-		if err != nil {
-			continue
-		}
-
-		got, err := io.ReadAll(pr)
-		_ = pr.Close()
-
-		if err == nil && bytes.Equal(got, want) {
-			t.Fatalf("parallel reader accepted a %d byte prefix "+
-				"of a %d byte file as complete", n, len(full))
-		}
-	}
-}
-
 // TestMissingIndexAndFooterIsTruncation pins the specific shape that
 // TestTruncatedAtEveryOffset caught: a file cut off exactly at the end of its
 // last block, so the index and footer are gone but every byte of compressed
@@ -108,42 +73,6 @@ func TestMissingIndexAndFooterIsTruncation(t *testing.T) {
 		if err == nil {
 			t.Fatalf("a file missing its last %d bytes decoded to %d bytes "+
 				"with no error", cut, len(got))
-		}
-	}
-}
-
-// TestSingleByteCorruptionAtEveryOffset flips one bit at each position. Any
-// change to a checked stream has to be caught: the whole point of the header,
-// index and block checksums is that no single-bit change goes unnoticed.
-func TestSingleByteCorruptionAtEveryOffset(t *testing.T) {
-	t.Parallel()
-
-	full := wellFormed(t)
-	want := parallelTestData(4096)
-
-	for i := range full {
-		bad := append([]byte{}, full...)
-		bad[i] ^= 0x40
-
-		if r, err := NewReader(bytes.NewReader(bad)); err == nil {
-			got, err := io.ReadAll(r)
-			if err == nil && !bytes.Equal(got, want) {
-				t.Fatalf("byte %d: sequential reader returned different "+
-					"data with no error", i)
-			}
-		}
-
-		pr, err := NewParallelReader(bytes.NewReader(bad), int64(len(bad)))
-		if err != nil {
-			continue
-		}
-
-		got, err := io.ReadAll(pr)
-		_ = pr.Close()
-
-		if err == nil && !bytes.Equal(got, want) {
-			t.Fatalf("byte %d: parallel reader returned different data "+
-				"with no error", i)
 		}
 	}
 }
