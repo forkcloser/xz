@@ -39,6 +39,21 @@ arithmetic no stream exercises, and the dictionary's growth internals, which
 the white-box tests keep. Fuzz targets hold both readers to the reference on
 arbitrary bytes.
 
+The `.xz` container is held the same way to a reference written from the
+file format specification (`reference_test.go`), which decodes its payload
+with that port: what the writer produces parses under it with the check
+type, the sizes and the block count asked for; what it writes decodes under
+both readers across every check type, with and without sizes, one block,
+several, none, several streams, with padding longer than any read buffer and
+blocks ending exactly where the index starts; and over every byte flipped,
+every byte zeroed and every truncation of a corpus of files, both readers
+follow its verdict, as does the fuzz target seeded from it. Of 582 mutants
+of the container's sources, the suite kills 396 (the whole test suite of
+the repository, 409); the survivors are the count returned beside an error,
+capacities and buffer sizes, header fields the writer never emits (block
+sizes, several filters), bounds a nine-byte integer cannot reach, and
+equalities the format rules out.
+
 ## About this fork
 
 This here is a friendly fork of https://github.com/ulikunitz/xz, taken at

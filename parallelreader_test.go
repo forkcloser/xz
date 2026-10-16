@@ -11,7 +11,6 @@ import (
 	"math/rand/v2"
 	"os"
 	"runtime"
-	"slices"
 	"testing"
 	"time"
 )
@@ -78,114 +77,6 @@ func testParallelRead(t *testing.T, xz, want []byte, workers int) {
 	if !bytes.Equal(got, want) {
 		t.Fatal("decoded data differs from original")
 	}
-}
-
-func TestParallelReaderMultiBlock(t *testing.T) {
-	t.Parallel()
-
-	data := parallelTestData(1 << 20)
-
-	xz := compressMultiBlock(t, data, 64<<10)
-	for _, workers := range []int{0, 1, 4} {
-		testParallelRead(t, xz, data, workers)
-	}
-}
-
-func TestParallelReaderSingleBlock(t *testing.T) {
-	t.Parallel()
-
-	data := parallelTestData(1 << 18)
-	xz := compressMultiBlock(t, data, 0) // default: one block
-	testParallelRead(t, xz, data, 4)
-}
-
-func TestParallelReaderMultiStream(t *testing.T) {
-	t.Parallel()
-
-	a := parallelTestData(1 << 19)
-	b := parallelTestData(1 << 18)
-	xza := compressMultiBlock(t, a, 32<<10)
-	xzb := compressMultiBlock(t, b, 32<<10)
-	// concatenated streams with stream padding in between
-	pad := make([]byte, 8)
-	file := slices.Concat(xza, pad, xzb)
-	testParallelRead(t, file, slices.Concat(a, b), 3)
-}
-
-func TestParallelReaderEmpty(t *testing.T) {
-	t.Parallel()
-
-	xz := compressMultiBlock(t, nil, 64<<10)
-	testParallelRead(t, xz, nil, 2)
-}
-
-func TestParallelReaderWriteTo(t *testing.T) {
-	t.Parallel()
-
-	data := parallelTestData(1 << 20)
-	xz := compressMultiBlock(t, data, 64<<10)
-
-	r, err := NewParallelReader(bytes.NewReader(xz), int64(len(xz)))
-	if err != nil {
-		t.Fatalf("NewParallelReader error %s", err)
-	}
-
-	var buf bytes.Buffer
-
-	n, err := r.WriteTo(&buf)
-	if err != nil {
-		t.Fatalf("WriteTo error %s", err)
-	}
-
-	if n != int64(len(data)) || !bytes.Equal(buf.Bytes(), data) {
-		t.Fatal("WriteTo result differs from original")
-	}
-}
-
-func TestParallelReaderAgainstReader(t *testing.T) {
-	t.Parallel()
-
-	data := parallelTestData(1 << 20)
-	xz := compressMultiBlock(t, data, 128<<10)
-
-	sr, err := NewReader(bytes.NewReader(xz))
-	if err != nil {
-		t.Fatalf("NewReader error %s", err)
-	}
-
-	want, err := io.ReadAll(sr)
-	if err != nil {
-		t.Fatalf("streaming ReadAll error %s", err)
-	}
-
-	testParallelRead(t, xz, want, 4)
-}
-
-func TestParallelReaderTruncated(t *testing.T) {
-	t.Parallel()
-
-	data := parallelTestData(1 << 20)
-	xz := compressMultiBlock(t, data, 64<<10)
-	// missing footer
-	if _, err := NewParallelReader(bytes.NewReader(xz[:len(xz)-4]),
-		int64(len(xz)-4)); err == nil {
-		t.Fatal("NewParallelReader on truncated file: no error")
-	}
-	// corrupt a byte in the middle of some block
-	bad := append([]byte{}, xz...)
-	bad[len(bad)/2] ^= 0xff
-
-	r, err := NewParallelReader(bytes.NewReader(bad), int64(len(bad)))
-	if err != nil {
-		// corruption may already be detected during parsing
-		return
-	}
-
-	if _, err = io.ReadAll(r); err == nil {
-		t.Fatal("ReadAll on corrupted file: no error")
-	}
-
-	_ = r.Close()
 }
 
 // slowReaderAt delays every read so that a decode is reliably still in flight
