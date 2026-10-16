@@ -221,3 +221,39 @@ func classicStream(tb testing.TB, data []byte) []byte {
 
 	return buf.Bytes()
 }
+
+// TestEdgeMarkerAfterSizeEndsTheCoder: a stream with both a declared size
+// and an end marker must end its range coder with the marker; a byte
+// corrupted after the marker is corrupt, as it is after a marker alone.
+func TestEdgeMarkerAfterSizeEndsTheCoder(t *testing.T) {
+	t.Parallel()
+
+	data := bytes.Repeat([]byte("the quick brown fox "), 50)
+
+	var buf bytes.Buffer
+
+	w, err := lzma.WriterConfig{SizeInHeader: true, Size: int64(len(data)), EOSMarker: true}.NewWriter(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = w.Write(data); err != nil {
+		t.Fatal(err)
+	}
+
+	if err = w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	stream := buf.Bytes()
+	stream[len(stream)-2] ^= 0x01
+
+	r, err := lzma.NewReader(bytes.NewReader(stream))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got, err := io.ReadAll(r); !errors.Is(err, lzma.ErrCorrupt) {
+		t.Fatalf("%d bytes, %v; want ErrCorrupt", len(got), err)
+	}
+}

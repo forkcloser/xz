@@ -24,6 +24,11 @@ golangci:
         - path: _test\.go
           linters:
             - err113
+        # The reference decoder is the specification's code in the
+        # specification's shape: its constants are the format's numbers.
+        - path: ^internal/lzmaspec/
+          linters:
+            - mnd
     settings:
       wrapcheck:
         # A list here replaces wrapcheck's own, so its defaults come first.
