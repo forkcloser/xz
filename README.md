@@ -26,11 +26,11 @@ neither is the exact text of error messages — match errors with
 ## About this fork
 
 This here is a friendly fork of https://github.com/ulikunitz/xz, taken at
-upstream v0.5.15; v0.5.16's `IsTerminal` fallback for platforms without
-terminal detection is ported. What a user migrating from upstream will notice
-is listed in the 1.0.0 section of the changelog the fork kept until 1.0.2
-(`git show v1.0.2:CHANGELOG.md`); from there on, the
-[releases](https://github.com/forkcloser/xz/releases) carry the notes.
+upstream v0.5.15. What a user migrating from upstream will notice, every fix
+and feature this fork has that upstream does not, is the table in
+[`UPSTREAM.md`](./UPSTREAM.md), beside the fork point and what was taken from
+upstream since; the [releases](https://github.com/forkcloser/xz/releases)
+carry the notes.
 
 Upstream is not dormant — but its `master` is. Development moved to the `v2`
 branch, which is a *different module*: `github.com/ulikunitz/xz/v2`, in a
@@ -45,56 +45,6 @@ line this fork continues. `master` still takes occasional maintenance: its
 last commit is 2026-07-20 and the `v2` branch was last pushed 2026-08-02,
 both checked 2026-09-07. If you would rather carry these changes upstream
 than depend on a fork, they apply to `master`; please do.
-
-The fork diverges from upstream in three areas:
-
-**Performance.** Serial decoding is a bit over twice as fast as
-upstream, mostly by buffering each LZMA2 chunk in memory so the range
-decoder reads bytes by index instead of through a per-byte interface
-call, and by keeping the hot bit-decoding loops free of calls and error
-branches. Decoder state, probability models, dictionary and read
-buffers are reused across chunks and across the blocks of a file, which
-takes allocations down from about 1.2 million to 132 per 10 MB decode
-and from 1.2 million to 306 per encode. `ParallelReader` decodes the
-blocks of multi-block archives concurrently on top of that. The decoder
-dictionary grows on demand instead of being allocated at its declared
-size — a stream that produces little never pays for the 4 GiB its
-header may declare, at the cost of roughly twice the final size in
-allocations for streams that fill it.
-
-**Robustness.** Every number in an xz index is attacker controlled, so
-the parallel reader binds its memory use to what a block actually
-decodes to rather than what the index declares, and rejects record
-counts, sizes and overflows that upstream fed into allocations or loop
-bounds. A `ParallelReader` that is dropped without `Close` winds down
-its goroutines instead of leaking them. Decoding errors are classified:
-everything that means "this input is not valid xz" matches
-`ErrCorrupt` — container and LZMA2 payload alike, the `lzma` package
-having its own `ErrCorrupt` that the xz reader maps — unsupported-but-valid
-features match `ErrUnsupported`, and I/O errors from the underlying reader
-pass through untouched, so callers can tell a corrupt file from a failed
-transport. A truncated file is reported as such instead of decoding as a
-shorter one, and a writer flush failure surfaces instead of silently
-producing a short stream, as upstream v0.5.16 does for small-dictionary
-configurations — configurations this fork briefly rejected and now
-encodes correctly. After a write error the writers report that error
-from then on rather than continue on unknown state (upstream's LZMA2
-writer panics on the next `Write`).
-
-**Verification.** In-tree, the decoder is checked against the `xz`
-tool across check types and encoder configurations, and unit tests
-cover payload shapes, multi-stream files and dictionary-growth
-boundaries. Fuzz targets require the serial and parallel readers to
-agree and round trips through the writer to be exact. Malformed-input
-tests cover truncation and byte flips at every offset — every failure
-must match `ErrCorrupt` or `io.ErrUnexpectedEOF` — and a corpus of
-hostile index constructions with an allocation budget. A differential
-test against upstream (`internal/upstreamdiff`, its own module so the
-library does not depend on upstream; `just test-upstreamdiff`) exchanges
-streams in both directions across configurations and requires the two to
-agree on every corruption verdict except where this fork is deliberately
-stricter. [`PERF.md`](./PERF.md) keeps the performance measurements and
-the negative results that were measured and rejected.
 
 ### Benchmarks
 
