@@ -23,6 +23,22 @@ neither is the exact text of error messages — match errors with
 `ErrUnsupported`, not by string. The minimum Go version is the one in
 `go.mod`; CI runs the current release.
 
+## Assurance
+
+The `lzma` package is held to a port of the LZMA SDK's reference decoder
+(`internal/lzmaspec`, public domain, with liblzma's LZMA2 chunk rules) that
+shares no code with it: the contract tests check what the writers produce
+against it and what the readers decode and refuse against its verdict, over
+every byte flipped and every truncation of a corpus of streams, and the
+bounded tests walk every input length around the dictionary, buffer and
+chunk sizes through both. The inherited round-trip and classification tests
+retired under a mutation score: of 494 single-point mutants of the decoding
+sources, the new suite kills 404; the survivors are comparisons at an
+equality the corpus never reaches, dead and error-path code, encoder
+arithmetic no stream exercises, and the dictionary's growth internals, which
+the white-box tests keep. Fuzz targets hold both readers to the reference on
+arbitrary bytes.
+
 ## About this fork
 
 This here is a friendly fork of https://github.com/ulikunitz/xz, taken at
