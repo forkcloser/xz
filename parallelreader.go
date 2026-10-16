@@ -252,7 +252,8 @@ func skipStreamPadding(xz io.ReaderAt, pos int64) (int64, error) {
 		n -= n % 4 // only whole groups, so the scan stays aligned
 
 		p := buf[:n]
-		if _, err := xz.ReadAt(p, pos-n); err != nil {
+		// The caller vouched for pos bytes; fewer is the file cut short.
+		if err := readFullAt(xz, p, pos-n); err != nil {
 			return 0, err
 		}
 
