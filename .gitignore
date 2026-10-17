@@ -1,10 +1,5 @@
 # .gitignore
 
-build
-
-lzma/writer.txt
-lzma/reader.txt
-
 # test executables
 *.test
 
