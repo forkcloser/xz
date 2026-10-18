@@ -75,10 +75,3 @@ golangci:
         # out-of-range ones included, which a list of the enum's names could
         # not cover.
         default-signifies-exhaustive: true
-
-nilaway:
-  exclude-errors-in-files:
-    # NilAway reads p[n:] in Writer.Write as a panic on a nil p, although n
-    # is 0 there and slicing nil to [0:] is legal; TestParallelReaderEmpty
-    # writes nil. NilAway has no per-line suppression, so the file carries it.
-    - writer.go
