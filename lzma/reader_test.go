@@ -11,7 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log" //nolint:depguard // the examples show calling code, which reports through package log
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -139,21 +139,25 @@ func TestReaderAll(t *testing.T) {
 func Example_reader() {
 	f, err := os.Open("fox.lzma")
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("open fox.lzma", "err", err)
+
+		return
 	}
-	// no need for defer; Fatal calls os.Exit(1) that doesn't execute deferred functions
+	defer func() {
+		if cerr := f.Close(); cerr != nil {
+			slog.Error("close fox.lzma", "err", cerr)
+		}
+	}()
+
 	r, err := NewReader(bufio.NewReader(f))
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("newReader", "err", err)
+
+		return
 	}
 
-	_, err = io.Copy(os.Stdout, r)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if err := f.Close(); err != nil {
-		log.Fatal(err)
+	if _, err = io.Copy(os.Stdout, r); err != nil {
+		slog.Error("io.Copy", "err", err)
 	}
 	// Output:
 	// The quick brown fox jumps over the lazy dog.

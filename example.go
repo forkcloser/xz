@@ -9,7 +9,7 @@ package main
 import (
 	"bytes"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/forkcloser/xz"
@@ -21,20 +21,25 @@ func main() {
 	// compress text
 	w, err := xz.NewWriter(&buf)
 	if err != nil {
-		log.Fatalf("xz.NewWriter error %s", err)
+		slog.Error("xz.NewWriter", "err", err)
+		os.Exit(1)
 	}
 	if _, err := io.WriteString(w, text); err != nil {
-		log.Fatalf("WriteString error %s", err)
+		slog.Error("writeString", "err", err)
+		os.Exit(1)
 	}
 	if err := w.Close(); err != nil {
-		log.Fatalf("w.Close error %s", err)
+		slog.Error("w.Close", "err", err)
+		os.Exit(1)
 	}
 	// decompress buffer and write output to stdout
 	r, err := xz.NewReader(&buf)
 	if err != nil {
-		log.Fatalf("NewReader error %s", err)
+		slog.Error("newReader", "err", err)
+		os.Exit(1)
 	}
 	if _, err = io.Copy(os.Stdout, r); err != nil {
-		log.Fatalf("io.Copy error %s", err)
+		slog.Error("io.Copy", "err", err)
+		os.Exit(1)
 	}
 }
