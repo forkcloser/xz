@@ -7,7 +7,7 @@ package xz_test
 import (
 	"bytes"
 	"io"
-	"log" //nolint:depguard // the examples show calling code, which reports through package log
+	"log/slog"
 	"math/rand/v2"
 	"os"
 	"testing"
@@ -96,25 +96,35 @@ func Example() {
 	// compress text
 	w, err := xz.NewWriter(&buf)
 	if err != nil {
-		log.Fatalf("NewWriter error %s", err)
+		slog.Error("newWriter", "err", err)
+
+		return
 	}
 
 	if _, err = io.WriteString(w, text); err != nil {
-		log.Fatalf("WriteString error %s", err)
+		slog.Error("writeString", "err", err)
+
+		return
 	}
 
 	if err = w.Close(); err != nil {
-		log.Fatalf("w.Close error %s", err)
+		slog.Error("w.Close", "err", err)
+
+		return
 	}
 
 	// decompress buffer and write result to stdout
 	r, err := xz.NewReader(&buf)
 	if err != nil {
-		log.Fatalf("NewReader error %s", err)
+		slog.Error("newReader", "err", err)
+
+		return
 	}
 
 	if _, err = io.Copy(os.Stdout, r); err != nil {
-		log.Fatalf("io.Copy error %s", err)
+		slog.Error("io.Copy", "err", err)
+
+		return
 	}
 
 	// Output:

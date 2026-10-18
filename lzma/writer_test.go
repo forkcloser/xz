@@ -9,7 +9,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"log" //nolint:depguard // the examples show calling code, which reports through package log
+	"log/slog"
 	"math/rand/v2"
 	"os"
 	"testing"
@@ -195,39 +195,46 @@ func TestWriter_Size(t *testing.T) {
 	}
 }
 
+// compress writes the example's text through a Writer over bw and flushes
+// it, so the reader at the other end of the pipe gets the whole stream.
+func compress(bw *bufio.Writer) error {
+	w, err := NewWriter(bw)
+	if err != nil {
+		return err
+	}
+
+	if _, err = w.Write([]byte("The quick brown fox jumps over the lazy dog.")); err != nil {
+		return err
+	}
+
+	if err = w.Close(); err != nil {
+		return err
+	}
+
+	return bw.Flush()
+}
+
 // The example uses the buffered reader and writer from package bufio.
 func Example_writer() {
 	pr, pw := io.Pipe()
 	go func() {
-		bw := bufio.NewWriter(pw)
-
-		w, err := NewWriter(bw)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		input := []byte("The quick brown fox jumps over the lazy dog.")
-		if _, err = w.Write(input); err != nil {
-			log.Fatal(err)
-		}
-
-		if err = w.Close(); err != nil {
-			log.Fatal(err)
-		}
-		// reader waits for the data
-		if err = bw.Flush(); err != nil {
-			log.Fatal(err)
+		// A failure closes the pipe with its error, so the reader sees it
+		// instead of waiting for data that never comes.
+		if err := compress(bufio.NewWriter(pw)); err != nil {
+			slog.Error("compress", "err", err)
+			_ = pw.CloseWithError(err)
 		}
 	}()
 
 	r, err := NewReader(pr)
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("newReader", "err", err)
+
+		return
 	}
 
-	_, err = io.Copy(os.Stdout, r)
-	if err != nil {
-		log.Fatal(err)
+	if _, err = io.Copy(os.Stdout, r); err != nil {
+		slog.Error("io.Copy", "err", err)
 	}
 	// Output:
 	// The quick brown fox jumps over the lazy dog.
