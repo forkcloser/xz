@@ -650,7 +650,10 @@ func (d *parallelDecoder) decodeOne(bd *blockDesc, s *workerScratch) (res blockR
 }
 
 // getBuf returns a decode buffer of length n, reusing a pooled buffer
-// if one of sufficient capacity is available.
+// if one of sufficient capacity is available. A pooled buffer too small
+// for the request is dropped, not put back: block sizes change between
+// streams, and a pool that kept the old size would hand it out and take
+// it back on every request without ever using it.
 func (d *parallelDecoder) getBuf(n int) []byte {
 	select {
 	case b := <-d.bufPool:
