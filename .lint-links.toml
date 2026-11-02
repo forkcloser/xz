@@ -1,0 +1,9 @@
+# This project's link-check exclusions, merged with limen's .limen/lychee.toml
+# (book/mandatory-files.md, "Per-project exclusions"). 7-zip.org publishes the
+# LZMA SDK the examples under lzma/examples/ come from; the site answers slowly
+# or not at all from GitHub's runners (every branch red from 2026-11-02 02:23Z
+# on a timeout), and the reference is a citation, not a dependency: nothing in
+# the build fetches it.
+exclude = [
+  'https?://(www\.)?7-zip\.org(/|$)',
+]
