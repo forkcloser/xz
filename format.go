@@ -13,6 +13,7 @@ import (
 	"hash/crc32"
 	"io"
 
+	"github.com/forkcloser/xz/internal/filters"
 	"github.com/forkcloser/xz/lzma"
 )
 
@@ -531,61 +532,72 @@ type filter interface {
 	last() bool
 }
 
-// readFilter reads a block filter from the block header. At this point
-// in time only the LZMA2 filter is supported.
-//
-//nolint:iface // a factory keyed on the filter ID, where the format's other filters (delta, BCJ) would go
+// readFilter reads one filter flags field of the block header: the filter
+// ID, the size of its properties and the properties, dispatched on the ID
+// to the filter that parses them.
 func readFilter(r io.Reader) (f filter, err error) {
 	br := lzma.ByteReader(r)
 
-	// index
 	id, _, err := readUvarint(br)
 	if err != nil {
 		return nil, err
 	}
 
-	var data []byte
-
-	switch id {
-	case lzmaFilterID:
-		data = make([]byte, lzmaFilterLen)
-
-		data[0] = lzmaFilterID
-		if _, err = io.ReadFull(r, data[1:]); err != nil {
-			return nil, err
-		}
-
+	switch {
+	case id == lzmaFilterID:
 		f = new(lzmaFilter)
+	case id == filters.DeltaID:
+		f = new(deltaFilter)
+	case filters.IsBCJ(id):
+		f = new(bcjFilter)
+	case id >= minReservedID:
+		return nil, corruptf("xz: reserved filter id in block stream header")
 	default:
-		if id >= minReservedID {
-			return nil, corruptf(
-				"xz: reserved filter id in block stream header",
-			)
-		}
+		return nil, unsupportedf("xz: unsupported filter id 0x%x", id)
+	}
 
-		return nil, unsupportedf("xz: invalid filter id")
+	size, _, err := readUvarint(br)
+	if err != nil {
+		return nil, err
+	}
+
+	// Every filter defined has properties of one byte or four, or none: a
+	// size past a byte is no filter's, and a parser comparing a byte must
+	// not see it wrapped.
+	if size > 0xFF {
+		return nil, corruptf("xz: filter properties size %d", size)
+	}
+
+	data := make([]byte, 2+size)
+	// #nosec G115 -- the id is one of the switch's, the size is checked above
+	data[0], data[1] = byte(id), byte(size)
+
+	if _, err = io.ReadFull(r, data[2:]); err != nil {
+		return nil, err
 	}
 
 	if err = f.UnmarshalBinary(data); err != nil {
 		return nil, err
 	}
 
-	return f, err
+	return f, nil
 }
 
-// readFilters reads count filters. At this point in time only the count
-// 1 is supported.
-func readFilters(r io.Reader, count int) (filters []filter, err error) {
-	if count != 1 {
-		return nil, unsupportedf("xz: unsupported filter count")
+// readFilters reads count filters; the chain they make is checked where it
+// is used, by verifyFilters.
+func readFilters(r io.Reader, count int) ([]filter, error) {
+	chain := make([]filter, 0, count)
+
+	for range count {
+		f, err := readFilter(r)
+		if err != nil {
+			return nil, err
+		}
+
+		chain = append(chain, f)
 	}
 
-	f, err := readFilter(r)
-	if err != nil {
-		return nil, err
-	}
-
-	return []filter{f}, err
+	return chain, nil
 }
 
 // The index.

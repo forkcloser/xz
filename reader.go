@@ -7,11 +7,10 @@
 // The container format is the one described by the xz file format
 // specification (https://xz.tukaani.org/format/xz-file-format.txt): stream
 // header and footer, blocks, index, stream padding and multi-stream files,
-// with the None, CRC32, CRC64 and SHA-256 checks. The only filter
-// implemented is LZMA2, which is what xz produces by default. Blocks using
-// any other filter (the BCJ branch filters, delta) or a filter chain of more
-// than one filter are well formed but not decodable here; reading them
-// fails with an error matching ErrUnsupported.
+// with the None, CRC32, CRC64 and SHA-256 checks, and every filter the
+// format defines: LZMA2, the eight branch/call/jump filters (x86, PowerPC,
+// IA-64, ARM, ARM Thumb, SPARC, ARM64, RISC-V) and delta, in chains of up
+// to four. The writer produces LZMA2 alone.
 //
 // Errors are classified: input that is not valid xz matches ErrCorrupt,
 // input this package cannot handle matches ErrUnsupported, a stream cut

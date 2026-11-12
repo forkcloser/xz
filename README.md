@@ -8,7 +8,11 @@ have any dependency on any C code. The command-line tool built on it is
 Compression speed and ratio do not match the xz tool, whose algorithms
 have been tuned over a long time. Decompression is a different story: see
 the numbers below, and `ParallelReader` for block-parallel decoding of
-multi-block archives.
+multi-block archives. Both readers decode every filter the format defines:
+LZMA2, the eight branch/call/jump filters (x86, PowerPC, IA-64, ARM, ARM
+Thumb, SPARC, ARM64, RISC-V) and delta, in chains of up to four, so what
+`xz --x86` or `xz --delta` wrote reads here. The writer produces LZMA2
+alone.
 
 ## Stability
 
@@ -57,10 +61,17 @@ equalities the format rules out.
 Both readers and the classic LZMA reader also run XZ Utils' own decoder
 conformance files (`testdata/xzutils`, upstream's `tests/files`, 0BSD): every
 good `.xz` and `.lzma` file decodes, with the Reader and the ParallelReader
-agreeing byte for byte, except the five whose filter chain is BCJ or delta,
-which are refused as unsupported; every bad file is refused as corrupt or
-cut short; every file upstream classes as unsupported is refused, never
-decoded.
+agreeing byte for byte; every bad file is refused as corrupt or cut short;
+every file upstream classes as unsupported is refused, never decoded.
+
+The BCJ and delta filters (`internal/filters`) are held to XZ Utils: for
+each filter, with and without a start offset, for two chains and for a
+multi-block file, a committed file is what `xz` makes of one fixed input,
+regenerated from its seed, and both readers must decode it back
+(`testdata/filters`, `filters_test.go`), through reads of every small size.
+The converters are also held to themselves: each direction undoes the other
+over random and instruction-dense inputs, at several start offsets, and
+converts the same bytes whatever the chunk sizes it sees them in.
 
 ## About this fork
 
