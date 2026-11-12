@@ -173,10 +173,47 @@ func TestUnsupportedFilterID(t *testing.T) {
 		t.Errorf("unknown filter id gave %v; want a match for ErrUnsupported", err)
 	}
 
-	if _, err := readFilters(bytes.NewReader([]byte{0x21, 0x01, 0x00}), 2); !errors.Is(
-		err, ErrUnsupported,
-	) {
-		t.Errorf("two filters gave %v; want a match for ErrUnsupported", err)
+	// A chain is read whole and judged as one: LZMA2 twice is a chain the
+	// format forbids.
+	fs, err := readFilters(bytes.NewReader([]byte{0x21, 0x01, 0x00, 0x21, 0x01, 0x00}), 2)
+	if err != nil {
+		t.Fatalf("two filters: %v", err)
+	}
+
+	if verr := verifyFilters(fs); !errors.Is(verr, ErrUnsupported) {
+		t.Errorf("LZMA2 twice gave %v; want a match for ErrUnsupported", verr)
+	}
+
+	// Delta alone: a last filter that is not LZMA2.
+	fs, err = readFilters(bytes.NewReader([]byte{0x03, 0x01, 0x00}), 1)
+	if err != nil {
+		t.Fatalf("one delta filter: %v", err)
+	}
+
+	if verr := verifyFilters(fs); !errors.Is(verr, ErrUnsupported) {
+		t.Errorf("delta last gave %v; want a match for ErrUnsupported", verr)
+	}
+
+	// Delta, x86 with a start offset, LZMA2: a chain the format allows.
+	fs, err = readFilters(bytes.NewReader([]byte{
+		0x03, 0x01, 0x03,
+		0x04, 0x04, 0x00, 0x10, 0x00, 0x00,
+		0x21, 0x01, 0x00,
+	}), 3)
+	if err != nil {
+		t.Fatalf("three filters: %v", err)
+	}
+
+	if verr := verifyFilters(fs); verr != nil {
+		t.Errorf("delta, x86, LZMA2: %v", verr)
+	}
+
+	if d, ok := fs[0].(*deltaFilter); !ok || d.distance != 4 {
+		t.Errorf("first filter %#v, want delta distance 4", fs[0])
+	}
+
+	if b, ok := fs[1].(*bcjFilter); !ok || b.startOffset != 0x1000 {
+		t.Errorf("second filter %#v, want x86 start offset 0x1000", fs[1])
 	}
 }
 

@@ -24,23 +24,6 @@ import (
 // unsupported or corrupt, never decoded. The .lz files are lzip's, a format
 // this package does not read, and are not run.
 
-// vectorsUnsupported reports a good file whose filter chain this package
-// does not implement: the BCJ and delta filters. Each must be refused as
-// unsupported, so the list stays honest; a filter landing removes its files
-// from it and they decode like the rest.
-func vectorsUnsupported(name string) bool {
-	switch name {
-	case "good-1-3delta-lzma2.xz",
-		"good-1-arm64-lzma2-1.xz",
-		"good-1-arm64-lzma2-2.xz",
-		"good-1-delta-lzma2.tiff.xz",
-		"good-1-empty-bcj-lzma2.xz":
-		return true
-	}
-
-	return false
-}
-
 // vectors lists the files of one kind by extension.
 func vectors(t *testing.T, ext string) []string {
 	t.Helper()
@@ -94,10 +77,6 @@ func requireClass(t *testing.T, reader, name string, err error) {
 	t.Helper()
 
 	switch {
-	case vectorsUnsupported(name):
-		if !errors.Is(err, xz.ErrUnsupported) {
-			t.Fatalf("%s: %v, want ErrUnsupported (listed in vectorsUnsupported)", reader, err)
-		}
 	case strings.HasPrefix(name, "good-"):
 		if err != nil {
 			t.Fatalf("%s: good file refused: %v", reader, err)

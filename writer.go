@@ -20,8 +20,10 @@ var (
 	errBlockSize       = errors.New("xz: block size out of range")
 	errNoFilters       = errors.New("xz: no filters")
 	errTooManyFilters  = errors.New("xz: more than four filters")
-	errFilterNotLast   = errors.New("xz: last filter is not last")
-	errWrongLastFilter = errors.New("xz: wrong last filter")
+	// A chain in the wrong order is one the format forbids, so a reader
+	// meeting it refuses as the reference does, as unsupported.
+	errFilterNotLast   = unsupportedf("xz: LZMA2 filter is not the last of the chain")
+	errWrongLastFilter = unsupportedf("xz: last filter of the chain is not LZMA2")
 	errCounterOverflow = errors.New("xz: counter overflow")
 )
 

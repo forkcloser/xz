@@ -29,6 +29,14 @@ golangci:
         - path: ^internal/lzmaspec/
           linters:
             - mnd
+        # The BCJ converters are the reference's instruction rewriting in
+        # the reference's shape: their constants are the architectures'
+        # opcodes and field masks, and their arithmetic is the unsigned
+        # 32-bit address arithmetic the format fixes, wrapping included.
+        - path: ^internal/filters/
+          linters:
+            - mnd
+            - gosec
     settings:
       wrapcheck:
         # A list here replaces wrapcheck's own, so its defaults come first.
