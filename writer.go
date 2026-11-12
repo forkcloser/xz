@@ -10,87 +10,18 @@ import (
 	"hash"
 	"io"
 	"slices"
-
-	"github.com/forkcloser/xz/lzma"
 )
 
-// Writer configurations and filter lists the writer refuses, and a size it cannot count.
+// Filter lists the writer refuses, and a size it cannot count.
 var (
-	errWriterConfigNil = errors.New("xz: writer configuration is nil")
-	errBlockSize       = errors.New("xz: block size out of range")
-	errNoFilters       = errors.New("xz: no filters")
-	errTooManyFilters  = errors.New("xz: more than four filters")
+	errNoFilters      = errors.New("xz: no filters")
+	errTooManyFilters = errors.New("xz: more than four filters")
 	// A chain in the wrong order is one the format forbids, so a reader
 	// meeting it refuses as the reference does, as unsupported.
 	errFilterNotLast   = unsupportedf("xz: LZMA2 filter is not the last of the chain")
 	errWrongLastFilter = unsupportedf("xz: last filter of the chain is not LZMA2")
 	errCounterOverflow = errors.New("xz: counter overflow")
 )
-
-// defaultDictCap is the dictionary capacity a zero DictCap selects.
-const defaultDictCap = 8 << 20
-
-// WriterConfig describes the parameters for an xz writer. The zero value
-// selects the defaults given for each field.
-//
-//nolint:recvcheck // NewWriter copies the config, so it works on a literal; Verify and fill take the pointer
-type WriterConfig struct {
-	// Properties are the LZMA literal-context, literal-position and
-	// position bits of the encoder (default: LC 3, LP 0, PB 2, which is what
-	// xz uses).
-	Properties *lzma.Properties
-	// DictCap is the encoder dictionary size in bytes, between
-	// lzma.MinDictCap and lzma.MaxDictCap (default: 8 MiB). A larger
-	// dictionary finds longer matches at the cost of memory on both sides;
-	// the size is recorded in every block header and a reader must provide
-	// at least as much.
-	DictCap int
-	// BufSize is the size of the encoder's lookahead buffer in bytes
-	// (default: 4096). It bounds the longest match the encoder will look
-	// for.
-	BufSize int
-	// BlockSize is the number of uncompressed bytes after which the writer
-	// closes the block and starts a new one (default: no limit, one block).
-	// Multi-block files are what ParallelReader decodes concurrently.
-	BlockSize int64
-	// CheckSum selects the check method: CRC32, CRC64 or SHA256 (default:
-	// CRC64). It cannot select None: None is zero, which is indistinguishable
-	// from the field being unset, so a zero CheckSum means the default. Use
-	// NoCheckSum to write a stream with no check.
-	CheckSum byte
-	// NoCheckSum writes a stream with no integrity check, overriding
-	// CheckSum (default: false).
-	NoCheckSum bool
-	// Matcher selects the match finder the encoder uses (default:
-	// lzma.HashTable4).
-	Matcher lzma.MatchAlgorithm
-}
-
-// Verify checks the configuration for errors. Zero values will be
-// replaced by default values.
-func (c *WriterConfig) Verify() error {
-	if c == nil {
-		return errWriterConfigNil
-	}
-
-	c.fill()
-
-	lc := lzma.Writer2Config{
-		Properties: c.Properties,
-		DictCap:    c.DictCap,
-		BufSize:    c.BufSize,
-		Matcher:    c.Matcher,
-	}
-	if err := lc.Verify(); err != nil {
-		return err
-	}
-
-	if c.BlockSize <= 0 {
-		return errBlockSize
-	}
-
-	return verifyFlags(c.CheckSum)
-}
 
 // maxInt64 defines the maximum 64-bit signed integer.
 const maxInt64 = 1<<63 - 1
@@ -143,7 +74,7 @@ func nopWriteCloser(w io.Writer) io.WriteCloser {
 // may have been partly written when it happened, so the stream cannot be
 // completed; a caller that wants the data has to start over.
 type Writer struct {
-	WriterConfig
+	opts options
 
 	xz      io.Writer
 	bw      *blockWriter
@@ -154,24 +85,33 @@ type Writer struct {
 	err     error
 }
 
-// NewWriter creates a new xz writer using default parameters.
-func NewWriter(xz io.Writer) (w *Writer, err error) {
-	return WriterConfig{}.NewWriter(xz)
-}
+// NewWriter creates a writer that compresses what is written to it as an
+// xz stream and writes the stream header to xz. Options: WithDictSize,
+// WithProperties, WithBlockSize, WithCheck, WithFilters.
+func NewWriter(xz io.Writer, opts ...Option) (w *Writer, err error) {
+	o, err := apply(opts, writerOptions, "NewWriter")
+	if err != nil {
+		return nil, err
+	}
 
-// NewWriter creates a new Writer using the given configuration parameters.
-func (c WriterConfig) NewWriter(xz io.Writer) (w *Writer, err error) {
-	if err = c.Verify(); err != nil {
+	// The chain is built once here so a wrong filter is the constructor's
+	// error, not the first block's.
+	if _, err = o.chain(); err != nil {
+		return nil, err
+	}
+
+	flags, err := o.check.flags()
+	if err != nil {
 		return nil, err
 	}
 
 	w = &Writer{
-		WriterConfig: c,
-		xz:           xz,
-		h:            header{c.CheckSum},
-		index:        make([]record, 0, 4),
+		opts:  o,
+		xz:    xz,
+		h:     header{flags},
+		index: make([]record, 0, 4),
 	}
-	if w.newHash, err = newHashFunc(c.CheckSum); err != nil {
+	if w.newHash, err = newHashFunc(flags); err != nil {
 		return nil, err
 	}
 
@@ -193,52 +133,20 @@ func (c WriterConfig) NewWriter(xz io.Writer) (w *Writer, err error) {
 
 // newFilterWriteCloser converts a filter list into a WriteCloser that
 // can be used by a blockWriter.
-func (c *WriterConfig) newFilterWriteCloser(w io.Writer, f []filter) (fw io.WriteCloser, err error) {
+func (o *options) newFilterWriteCloser(w io.Writer, f []filter) (fw io.WriteCloser, err error) {
 	if err = verifyFilters(f); err != nil {
 		return nil, err
 	}
 
 	fw = nopWriteCloser(w)
 	for _, v := range slices.Backward(f) {
-		fw, err = v.writeCloser(fw, c)
+		fw, err = v.writeCloser(fw, o)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	return fw, nil
-}
-
-// filters creates the filter list for the given parameters.
-func (c *WriterConfig) filters() []filter {
-	return []filter{&lzmaFilter{int64(c.DictCap)}}
-}
-
-// fill replaces zero values with default values.
-func (c *WriterConfig) fill() {
-	if c.Properties == nil {
-		c.Properties = &lzma.Properties{LC: 3, LP: 0, PB: 2}
-	}
-
-	if c.DictCap == 0 {
-		c.DictCap = defaultDictCap
-	}
-
-	if c.BufSize == 0 {
-		c.BufSize = 4096
-	}
-
-	if c.BlockSize == 0 {
-		c.BlockSize = maxInt64
-	}
-
-	if c.CheckSum == 0 {
-		c.CheckSum = CRC64
-	}
-
-	if c.NoCheckSum {
-		c.CheckSum = None
-	}
 }
 
 // Write compresses the uncompressed data provided.
@@ -333,7 +241,7 @@ func (w *Writer) closeBlockWriter() error {
 func (w *Writer) newBlockWriter() error {
 	var err error
 
-	w.bw, err = w.WriterConfig.newBlockWriter(w.xz, w.newHash())
+	w.bw, err = w.opts.newBlockWriter(w.xz, w.newHash())
 	if err != nil {
 		return err
 	}
@@ -375,15 +283,20 @@ type blockWriter struct {
 }
 
 // newBlockWriter creates a new block writer.
-func (c *WriterConfig) newBlockWriter(xz io.Writer, check hash.Hash) (bw *blockWriter, err error) {
+func (o *options) newBlockWriter(xz io.Writer, check hash.Hash) (bw *blockWriter, err error) {
+	chain, err := o.chain()
+	if err != nil {
+		return nil, err
+	}
+
 	bw = &blockWriter{
 		cxz:       countingWriter{w: xz},
-		blockSize: c.BlockSize,
-		filters:   c.filters(),
+		blockSize: o.blockSize,
+		filters:   chain,
 		hash:      check,
 	}
 
-	bw.w, err = c.newFilterWriteCloser(&bw.cxz, bw.filters)
+	bw.w, err = o.newFilterWriteCloser(&bw.cxz, bw.filters)
 	if err != nil {
 		return nil, err
 	}

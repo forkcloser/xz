@@ -16,7 +16,7 @@ workflow: nothing is built or uploaded.
 
        just do release vX.Y.Z
 
-4. Check what the proxy sees: `go list -m github.com/forkcloser/xz@vX.Y.Z`
+4. Check what the proxy sees: `go list -m github.com/forkcloser/xz/v2@vX.Y.Z`
    from outside the tree.
 5. Publish the GitHub release from the tag with the generated notes, so the
    tag has a human-readable page:

@@ -405,11 +405,10 @@ func TestMinDictSize(t *testing.T) {
 	f := bytes.NewReader(uncompressed)
 
 	buf := new(bytes.Buffer)
-	cfg := WriterConfig{DictCap: 4096}
 
-	w, err := cfg.NewWriter(buf)
+	w, err := NewWriter(buf, WithDictSize(4096))
 	if err != nil {
-		t.Fatalf("WriterConfig(%+v).NewWriter(buf) error %s", cfg, err)
+		t.Fatalf("NewWriter(buf, WithDictSize(4096)) error %s", err)
 	}
 
 	defer func() { _ = w.Close() }()
@@ -453,7 +452,6 @@ func TestZeroPrefixIssue(t *testing.T) {
 	}
 
 	zeroPrefix := []byte{0}
-	rcfg := ReaderConfig{}
 
 	for _, tc := range files {
 		t.Run(tc, func(t *testing.T) {
@@ -468,7 +466,7 @@ func TestZeroPrefixIssue(t *testing.T) {
 			zp := bytes.NewReader(zeroPrefix)
 			z := io.MultiReader(zp, f)
 
-			l, err := rcfg.NewReader(z)
+			l, err := NewReader(z)
 			if err != nil {
 				t.Logf("NewReader(z) for %s error %s", tc, err)
 				return
@@ -480,7 +478,7 @@ func TestZeroPrefixIssue(t *testing.T) {
 			actualDictSize := len(l.d.Dict.buf.data) - 1
 			t.Logf("Actual dictionary size: %d", actualDictSize)
 
-			if actualDictSize > MinDictCap && h.Size >= 0 &&
+			if actualDictSize > MinDictSize && h.Size >= 0 &&
 				h.Size < int64(actualDictSize) {
 				t.Errorf("actualDictSize %d smaller than file size %d",
 					actualDictSize, h.Size)

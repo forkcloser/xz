@@ -6,8 +6,6 @@ package xz_test
 
 import (
 	"testing"
-
-	"github.com/forkcloser/xz"
 )
 
 // FuzzReference holds both readers to the reference container on arbitrary
@@ -17,7 +15,7 @@ import (
 func FuzzReference(f *testing.F) {
 	data := cData(700)
 
-	for _, check := range []byte{xz.None, xz.CRC32, xz.CRC64, xz.SHA256} {
+	for _, check := range []byte{flagNone, flagCRC32, flagCRC64, flagSHA256} {
 		for _, sizes := range []bool{false, true} {
 			o := refOptions{check: check, sizes: sizes, dictCode: 20}
 			f.Add(refStream(o, refBlocks(f, data, 0)))

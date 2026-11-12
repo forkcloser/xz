@@ -6,12 +6,13 @@ package xz_test
 
 import (
 	"bytes"
+	"io"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/forkcloser/xz"
+	"github.com/forkcloser/xz/v2"
 )
 
 // gatedSource is a ReaderAt whose reads, once armed, wait until the gate
@@ -48,7 +49,7 @@ func TestParallelReaderCloseWaitsForWorkers(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	w, err := xz.WriterConfig{BlockSize: 4096}.NewWriter(&buf)
+	w, err := xz.NewWriter(&buf, xz.WithBlockSize(4096))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +65,7 @@ func TestParallelReaderCloseWaitsForWorkers(t *testing.T) {
 	file := buf.Bytes()
 	src := &gatedSource{r: bytes.NewReader(file), gate: make(chan struct{}), parked: make(chan struct{})}
 
-	r, err := xz.ParallelReaderConfig{Workers: 4}.NewParallelReader(src, int64(len(file)))
+	r, err := xz.NewReader(io.NewSectionReader(src, 0, int64(len(file))), xz.WithWorkers(4))
 	if err != nil {
 		t.Fatal(err)
 	}

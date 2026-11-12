@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/forkcloser/xz/internal/hash"
+	"github.com/forkcloser/xz/v2/internal/hash"
 )
 
 // What newHashTable and the table's word lookups refuse.
@@ -86,7 +86,7 @@ func newHashTable(capacity, wordLen int) (t *hashTable, err error) {
 		return nil, errHashCapacity
 	}
 
-	// #nosec G115 -- capacity is the dictionary capacity, non-negative and at most MaxDictCap, 1<<32 - 1
+	// #nosec G115 -- capacity is the dictionary capacity, non-negative and at most MaxDictSize, 1<<32 - 1
 	exp := hashTableExponent(uint32(capacity))
 
 	if !(1 <= wordLen && wordLen <= 4) {

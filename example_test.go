@@ -12,7 +12,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/forkcloser/xz"
+	"github.com/forkcloser/xz/v2"
 )
 
 // These examples are the package's front page on pkg.go.dev, so they are

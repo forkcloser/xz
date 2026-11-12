@@ -10,7 +10,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/forkcloser/xz/lzma"
+	"github.com/forkcloser/xz/v2/lzma"
 )
 
 // The package promises that every error meaning "this input is not valid xz"
@@ -96,7 +96,7 @@ func TestCorruptionIsClassified(t *testing.T) {
 						tc.name, i, mask)
 				}
 
-				pr, err := NewParallelReader(bytes.NewReader(bad), int64(len(bad)))
+				pr, err := NewReader(bytes.NewReader(bad), WithWorkers(4))
 				if err == nil {
 					got, err = io.ReadAll(pr)
 					_ = pr.Close()
@@ -175,7 +175,7 @@ func TestSingleStreamReportsIOErrorAsIs(t *testing.T) {
 	file, want := singleBlockFile(t)
 	ioErr := errors.New("disk on fire")
 
-	r, err := ReaderConfig{SingleStream: true}.NewReader(
+	r, err := NewReader(
 		&errAfterReader{r: bytes.NewReader(file), err: ioErr},
 	)
 	if err != nil {
@@ -197,7 +197,7 @@ func TestSingleStreamReportsIOErrorAsIs(t *testing.T) {
 
 	// The two legitimate outcomes are unchanged: a clean end, and a byte
 	// after the stream.
-	r, err = ReaderConfig{SingleStream: true}.NewReader(bytes.NewReader(file))
+	r, err = NewReader(bytes.NewReader(file))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,8 +206,9 @@ func TestSingleStreamReportsIOErrorAsIs(t *testing.T) {
 		t.Errorf("clean single stream: %v", err)
 	}
 
-	r, err = ReaderConfig{SingleStream: true}.NewReader(
+	r, err = NewReader(
 		bytes.NewReader(append(append([]byte{}, file...), 0)),
+		WithSingleStream(),
 	)
 	if err != nil {
 		t.Fatal(err)

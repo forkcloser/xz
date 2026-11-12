@@ -49,7 +49,7 @@ func newDecoderDict(dictCap int) (d *decoderDict, err error) {
 // many growth steps over small dictionaries.
 func newDecoderDictSize(dictCap, initial int) (d *decoderDict, err error) {
 	// lower limit supports easy test cases
-	if !(1 <= dictCap && int64(dictCap) <= MaxDictCap) {
+	if !(1 <= dictCap && int64(dictCap) <= MaxDictSize) {
 		return nil, errDecoderDictCap
 	}
 
@@ -117,7 +117,7 @@ func (d *decoderDict) Read(p []byte) (n int, err error) { return d.buf.Read(p) }
 // stream's fault, reported as ErrCorrupt; the decoder relies on that check,
 // since a match is decoded from untrusted bytes.
 //
-// The error value ErrNoSpace indicates that no space is available in
+// The error value ErrSizeExceeded indicates that no space is available in
 // the dictionary for writing. You need to read from the dictionary
 // first.
 //
@@ -138,7 +138,7 @@ func (d *decoderDict) writeMatch(dist int64, length int) error {
 	}
 
 	if length > d.buf.Available() {
-		return ErrNoSpace
+		return ErrSizeExceeded
 	}
 
 	d.head += int64(length)

@@ -9,7 +9,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/forkcloser/xz"
+	"github.com/forkcloser/xz/v2"
 )
 
 func TestPanic(t *testing.T) {

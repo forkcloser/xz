@@ -10,7 +10,7 @@ import (
 	"math/rand/v2"
 	"testing"
 
-	"github.com/forkcloser/xz/lzma"
+	"github.com/forkcloser/xz/v2/lzma"
 )
 
 // TestWriter2SmallDictIncompressible verifies that a writer with a small
@@ -18,20 +18,20 @@ import (
 // compressed-chunk limit before the chunk is cut, so the uncompressed form of
 // the chunk would be smaller — but a dictionary below that size can no longer
 // replay the chunk's input, and choosing the uncompressed form made Write and
-// Close fail with ErrNoSpace.
+// Close fail with ErrSizeExceeded.
 func TestWriter2SmallDictIncompressible(t *testing.T) {
 	t.Parallel()
 
 	rnd := rand.NewChaCha8([32]byte{13})
 
-	for _, dictCap := range []int{lzma.MinDictCap, 8192, 16384, 1 << 16} {
+	for _, dictCap := range []int{lzma.MinDictSize, 8192, 16384, 1 << 16} {
 		for _, size := range []int{5000, 10000, 100000} {
 			data := make([]byte, size)
 			_, _ = rnd.Read(data)
 
 			var buf bytes.Buffer
 
-			w, err := lzma.Writer2Config{DictCap: dictCap}.NewWriter2(&buf)
+			w, err := lzma.NewWriter2(&buf, lzma.WithDictSize(dictCap))
 			if err != nil {
 				t.Fatalf("NewWriter2 error %s", err)
 			}
@@ -46,7 +46,7 @@ func TestWriter2SmallDictIncompressible(t *testing.T) {
 					dictCap, size, err)
 			}
 
-			r, err := lzma.NewReader2(&buf)
+			r, err := lzma.NewReader2(&buf, dictCap)
 			if err != nil {
 				t.Fatalf("NewReader2 error %s", err)
 			}

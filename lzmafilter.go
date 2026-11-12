@@ -7,7 +7,8 @@ package xz
 import (
 	"io"
 
-	"github.com/forkcloser/xz/lzma"
+	"github.com/forkcloser/xz/v2/internal/dictsize"
+	"github.com/forkcloser/xz/v2/lzma"
 )
 
 // LZMA filter constants.
@@ -19,12 +20,12 @@ const (
 // lzmaFilter declares the LZMA2 filter information stored in an xz
 // block header.
 type lzmaFilter struct {
-	dictCap int64
+	dictSize int64
 }
 
 // MarshalBinary converts the lzmaFilter in its encoded representation.
 func (f lzmaFilter) MarshalBinary() (data []byte, err error) {
-	c := lzma.EncodeDictCap(f.dictCap)
+	c := dictsize.Encode(f.dictSize)
 	return []byte{lzmaFilterID, 1, c}, nil
 }
 
@@ -43,12 +44,12 @@ func (f *lzmaFilter) UnmarshalBinary(data []byte) error {
 		return corruptf("xz: wrong LZMA2 filter size")
 	}
 
-	dc, err := lzma.DecodeDictCap(data[2])
+	dc, err := dictsize.Decode(data[2])
 	if err != nil {
 		return corruptf("xz: wrong LZMA2 dictionary size property")
 	}
 
-	f.dictCap = dc
+	f.dictSize = dc
 
 	return nil
 }
@@ -65,34 +66,29 @@ type lzma2Cache struct {
 }
 
 // reader creates a new reader for the LZMA2 filter. When a cache holds a
-// reader with the required dictionary capacity, that reader is reset and
-// reused instead.
-func (f lzmaFilter) reader(r io.Reader, c *ReaderConfig, cache *lzma2Cache) (
+// reader with the block's dictionary size, that reader is reset and reused
+// instead.
+func (f lzmaFilter) reader(r io.Reader, o *options, cache *lzma2Cache) (
 	fr io.Reader, err error,
 ) {
-	config := new(lzma.Reader2Config)
-	if c != nil {
-		config.DictCap = c.DictCap
+	if f.dictSize > o.maxDictSize {
+		return nil, unsupportedf("xz: LZMA2 dictionary size %d exceeds the limit %d", f.dictSize, o.maxDictSize)
 	}
 
-	dc := int(f.dictCap)
+	dc := int(f.dictSize)
 	if dc < 1 {
 		// Only reachable where int is 32 bits wide: the block asks for a
 		// dictionary the address space cannot hold. The file is valid; this
 		// platform cannot decode it.
-		return nil, unsupportedf("xz: LZMA2 dictionary capacity %d exceeds the address space", f.dictCap)
+		return nil, unsupportedf("xz: LZMA2 dictionary size %d exceeds the address space", f.dictSize)
 	}
 
-	if dc > config.DictCap {
-		config.DictCap = dc
-	}
-
-	if cache != nil && cache.r != nil && cache.r.DictCap() == config.DictCap {
+	if cache != nil && cache.r != nil && cache.r.DictSize() == dc {
 		cache.r.Reset(r)
 		return cache.r, nil
 	}
 
-	lr, err := config.NewReader2(r)
+	lr, err := lzma.NewReader2(r, dc)
 	if err != nil {
 		return nil, err
 	}
@@ -105,28 +101,13 @@ func (f lzmaFilter) reader(r io.Reader, c *ReaderConfig, cache *lzma2Cache) (
 }
 
 // writeCloser creates a io.WriteCloser for the LZMA2 filter.
-func (f lzmaFilter) writeCloser(w io.WriteCloser, c *WriterConfig,
-) (fw io.WriteCloser, err error) {
-	config := new(lzma.Writer2Config)
-	if c != nil {
-		*config = lzma.Writer2Config{
-			Properties: c.Properties,
-			DictCap:    c.DictCap,
-			BufSize:    c.BufSize,
-			Matcher:    c.Matcher,
-		}
-	}
-
-	dc := int(f.dictCap)
+func (f lzmaFilter) writeCloser(w io.WriteCloser, o *options) (io.WriteCloser, error) {
+	dc := int(f.dictSize)
 	if dc < 1 {
-		return nil, unsupportedf("xz: LZMA2 dictionary capacity %d exceeds the address space", f.dictCap)
+		return nil, unsupportedf("xz: LZMA2 dictionary size %d exceeds the address space", f.dictSize)
 	}
 
-	if dc > config.DictCap {
-		config.DictCap = dc
-	}
-
-	fw, err = config.NewWriter2(w)
+	fw, err := lzma.NewWriter2(w, lzma.WithDictSize(dc), lzma.WithProperties(o.props.LC, o.props.LP, o.props.PB))
 	if err != nil {
 		return nil, err
 	}

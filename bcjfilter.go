@@ -9,12 +9,11 @@ import (
 	"errors"
 	"io"
 
-	"github.com/forkcloser/xz/internal/filters"
+	"github.com/forkcloser/xz/v2/internal/filters"
 )
 
-// The non-LZMA2 filters of a block header, as the reader decodes them. The
-// writer does not emit them: writeCloser refuses, so a filter list with one
-// of them is a reader's.
+// The non-LZMA2 filters of a block header: each wraps the next filter's
+// reader or writer with its converter.
 
 // bcjFilter is one of the branch/call/jump filters in a block header, with
 // the start offset of its properties.
@@ -26,9 +25,6 @@ type bcjFilter struct {
 // bcjPropsLen is the length of a BCJ filter's properties when it has any:
 // the 32-bit little endian start offset.
 const bcjPropsLen = 4
-
-// errWriteFilter is the writer's answer to a filter it does not encode.
-var errWriteFilter = errors.New("xz: filter not supported by the writer")
 
 // MarshalBinary writes the filter as the block header carries it: the id,
 // the properties size and the start offset when it is not zero.
@@ -84,7 +80,7 @@ func (f *bcjFilter) UnmarshalBinary(data []byte) error {
 
 func (f bcjFilter) id() uint64 { return f.fid }
 
-func (f bcjFilter) reader(r io.Reader, _ *ReaderConfig, _ *lzma2Cache) (io.Reader, error) {
+func (f bcjFilter) reader(r io.Reader, _ *options, _ *lzma2Cache) (io.Reader, error) {
 	b, err := filters.NewBCJ(f.fid, f.startOffset, false)
 	if err != nil {
 		return nil, unsupportedf("xz: %v", err)
@@ -93,8 +89,13 @@ func (f bcjFilter) reader(r io.Reader, _ *ReaderConfig, _ *lzma2Cache) (io.Reade
 	return &bcjReader{r: r, bcj: b, buf: make([]byte, bcjBufSize)}, nil
 }
 
-func (bcjFilter) writeCloser(io.WriteCloser, *WriterConfig) (io.WriteCloser, error) {
-	return nil, errWriteFilter
+func (f bcjFilter) writeCloser(w io.WriteCloser, _ *options) (io.WriteCloser, error) {
+	b, err := filters.NewBCJ(f.fid, f.startOffset, true)
+	if err != nil {
+		return nil, unsupportedf("xz: %v", err)
+	}
+
+	return &bcjWriter{w: w, bcj: b, buf: make([]byte, 0, bcjBufSize)}, nil
 }
 
 func (bcjFilter) last() bool { return false }
@@ -186,7 +187,7 @@ func (f *deltaFilter) UnmarshalBinary(data []byte) error {
 
 func (deltaFilter) id() uint64 { return filters.DeltaID }
 
-func (f deltaFilter) reader(r io.Reader, _ *ReaderConfig, _ *lzma2Cache) (io.Reader, error) {
+func (f deltaFilter) reader(r io.Reader, _ *options, _ *lzma2Cache) (io.Reader, error) {
 	d, err := filters.NewDelta(f.distance)
 	if err != nil {
 		return nil, corruptf("xz: %v", err)
@@ -195,8 +196,13 @@ func (f deltaFilter) reader(r io.Reader, _ *ReaderConfig, _ *lzma2Cache) (io.Rea
 	return &deltaReader{r: r, delta: d}, nil
 }
 
-func (deltaFilter) writeCloser(io.WriteCloser, *WriterConfig) (io.WriteCloser, error) {
-	return nil, errWriteFilter
+func (f deltaFilter) writeCloser(w io.WriteCloser, _ *options) (io.WriteCloser, error) {
+	d, err := filters.NewDelta(f.distance)
+	if err != nil {
+		return nil, corruptf("xz: %v", err)
+	}
+
+	return &deltaWriter{w: w, delta: d}, nil
 }
 
 func (deltaFilter) last() bool { return false }
@@ -214,3 +220,80 @@ func (dr *deltaReader) Read(p []byte) (int, error) {
 
 	return n, err
 }
+
+// bcjWriter applies a BCJ converter to what it writes to the next filter.
+// The converter leaves an unconverted tail at the end of each buffer, which
+// waits for the next bytes; Close converts nothing more and writes the
+// tail as it is, as the format reads it.
+type bcjWriter struct {
+	w   io.WriteCloser
+	bcj *filters.BCJ
+	// buf holds the unconverted tail between writes.
+	buf []byte
+}
+
+func (bw *bcjWriter) Write(p []byte) (int, error) {
+	n := len(p)
+
+	for len(p) > 0 {
+		k := min(len(p), cap(bw.buf)-len(bw.buf))
+		bw.buf = append(bw.buf, p[:k]...)
+		p = p[k:]
+
+		done := bw.bcj.Code(bw.buf)
+		if done == 0 && len(bw.buf) < cap(bw.buf) {
+			// Too short to decide anything: wait for more.
+			continue
+		}
+
+		if _, err := bw.w.Write(bw.buf[:done]); err != nil {
+			return n - len(p), err
+		}
+
+		bw.buf = append(bw.buf[:0], bw.buf[done:]...)
+	}
+
+	return n, nil
+}
+
+func (bw *bcjWriter) Close() error {
+	if len(bw.buf) > 0 {
+		if _, err := bw.w.Write(bw.buf); err != nil {
+			return err
+		}
+
+		bw.buf = bw.buf[:0]
+	}
+
+	return bw.w.Close()
+}
+
+// deltaWriter applies the delta encoder to what it writes to the next
+// filter, byte for byte, through a buffer so the caller's bytes stay as
+// they are.
+type deltaWriter struct {
+	w     io.WriteCloser
+	delta *filters.Delta
+	buf   []byte
+}
+
+func (dw *deltaWriter) Write(p []byte) (int, error) {
+	var n int
+
+	for len(p) > 0 {
+		k := min(len(p), bcjBufSize)
+		dw.buf = append(dw.buf[:0], p[:k]...)
+		dw.delta.Encode(dw.buf)
+
+		if _, err := dw.w.Write(dw.buf); err != nil {
+			return n, err
+		}
+
+		n += k
+		p = p[k:]
+	}
+
+	return n, nil
+}
+
+func (dw *deltaWriter) Close() error { return dw.w.Close() }

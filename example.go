@@ -12,7 +12,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/forkcloser/xz"
+	"github.com/forkcloser/xz/v2"
 )
 
 func main() {

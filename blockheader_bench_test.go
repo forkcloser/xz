@@ -9,7 +9,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/forkcloser/xz"
+	"github.com/forkcloser/xz/v2"
 )
 
 // BenchmarkSmallBlocks decodes a file of many small blocks through both
@@ -19,7 +19,7 @@ func BenchmarkSmallBlocks(b *testing.B) {
 
 	var buf bytes.Buffer
 
-	w, err := xz.WriterConfig{BlockSize: 1 << 10}.NewWriter(&buf)
+	w, err := xz.NewWriter(&buf, xz.WithBlockSize(1<<10))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func BenchmarkSmallBlocks(b *testing.B) {
 		b.ReportAllocs()
 
 		for range b.N {
-			r, err := xz.ParallelReaderConfig{Workers: 2}.NewParallelReader(bytes.NewReader(file), int64(len(file)))
+			r, err := xz.NewReader(bytes.NewReader(file), xz.WithWorkers(2))
 			if err != nil {
 				b.Fatal(err)
 			}

@@ -13,38 +13,10 @@ package lzma
 import (
 	"bufio"
 	"errors"
-	"fmt"
 	"io"
-	"math"
+
+	"github.com/forkcloser/xz/v2/internal/bytereader"
 )
-
-// errDictCap is a dictionary capacity outside the range the readers and writers support.
-var (
-	errDictCap = errors.New("lzma: dictionary capacity is out of range")
-)
-
-// ReaderConfig stores the parameters for the reader of the classic LZMA
-// format.
-//
-//nolint:recvcheck // NewReader copies the config, so it works on a literal; Verify and fill take the pointer
-type ReaderConfig struct {
-	// DictCap is an upper limit for a .lzma file's dictionary size, not a
-	// size: a header declaring more is rejected with ErrDictSize, so a
-	// mangled header cannot drive the allocation.
-	DictCap int
-}
-
-// Verify checks the reader configuration for errors. Zero values will
-// be replaced by default values.
-func (c *ReaderConfig) Verify() error {
-	c.fill()
-
-	if !(MinDictCap <= c.DictCap && int64(c.DictCap) <= MaxDictCap) {
-		return errDictCap
-	}
-
-	return nil
-}
 
 // Reader provides a reader for LZMA files or streams.
 //
@@ -58,15 +30,15 @@ func (c *ReaderConfig) Verify() error {
 // and this might consume a lot of memory.
 //
 // What bounds that:
-//
-//   - The [ReaderConfig] DictCap field is a limit for the dictionary size.
-//   - The default is 2 Gigabytes minus 1 byte (2^31-1 bytes).
-//   - Users can check with the [Reader.Header] method what the actual values are in
-//     their LZMA files and set a smaller limit using [ReaderConfig].
-//   - The dictionary size doesn't exceed the larger of the file size and
-//     the minimum dictionary size. This is another measure to prevent huge
-//     memory allocations for the dictionary.
-//   - The code supports stream sizes only up to a pebibyte (1024^5).
+//   - WithMaxDictSize is a limit on the dictionary size a header may declare;
+//     a header asking for more is refused with ErrUnsupported. The default
+//     is 2 GiB-1.
+//   - The dictionary is allocated as the data needs it, never the declared
+//     size up front, and no larger than the stream's own size when the
+//     header states one.
+//   - Header reports what the header declared, so a caller can choose a
+//     limit for the files it meets.
+//   - Streams are supported up to a pebibyte (1024^5).
 //
 // # Input buffering
 //
@@ -87,52 +59,17 @@ type Reader struct {
 	d          *decoder
 }
 
-// NewReader creates a new reader for an LZMA stream using the classic
-// format. NewReader reads and checks the header of the LZMA stream.
-func NewReader(lzma io.Reader) (r *Reader, err error) {
-	return ReaderConfig{}.NewReader(lzma)
-}
-
-// ErrDictSize reports about an error of the dictionary size.
-//
-//nolint:errname // an exported name importers match with errors.As
-type ErrDictSize struct {
-	ConfigDictCap  int
-	HeaderDictSize uint32
-	Message        string
-}
-
-// Error returns the error message.
-func (e *ErrDictSize) Error() string {
-	return e.Message
-}
-
-func newErrDictSize(messageformat string,
-	configDictCap int, headerDictSize uint32,
-	args ...any,
-) *ErrDictSize {
-	newArgs := make([]any, len(args)+2)
-	newArgs[0] = configDictCap
-	newArgs[1] = headerDictSize
-	copy(newArgs[2:], args)
-
-	return &ErrDictSize{
-		ConfigDictCap:  configDictCap,
-		HeaderDictSize: headerDictSize,
-		Message:        fmt.Sprintf(messageformat, newArgs...),
-	}
-}
-
 // We support only files not larger than 1 << 50 bytes (a pebibyte, 1024^5).
 const maxStreamSize = 1 << 50
 
-// NewReader creates a new reader for an LZMA stream in the classic
-// format. The function reads and verifies the header of the LZMA
-// stream.
-func (c ReaderConfig) NewReader(lzma io.Reader) (r *Reader, err error) {
-	if err = c.Verify(); err != nil {
+// NewReader creates a reader for an LZMA stream in the classic format,
+// reading and checking its header. Options: WithMaxDictSize.
+func NewReader(lzma io.Reader, opts ...Option) (r *Reader, err error) {
+	o, err := apply(opts, optMaxDictSize, "NewReader")
+	if err != nil {
 		return nil, err
 	}
+
 	// The decoder reads compressed bytes one at a time through an
 	// io.ByteReader. Give a plain reader one buffered front-end for the
 	// header and the stream alike; an input that already is a ByteReader
@@ -159,18 +96,17 @@ func (c ReaderConfig) NewReader(lzma io.Reader) (r *Reader, err error) {
 	r.headerOrig = r.header
 
 	dictSize := int64(r.header.DictSize)
-	if int64(c.DictCap) < dictSize {
-		return nil, newErrDictSize(
-			"lzma: header dictionary size %[2]d exceeds configured dictionary capacity %[1]d",
-			// #nosec G115 -- dictSize was read from the header's uint32
-			c.DictCap, uint32(dictSize),
+	if o.maxDictSize < dictSize {
+		return nil, unsupportedf(
+			"lzma: header dictionary size %d exceeds the limit %d",
+			dictSize, o.maxDictSize,
 		)
 	}
 
-	if dictSize < MinDictCap {
-		dictSize = MinDictCap
+	if dictSize < MinDictSize {
+		dictSize = MinDictSize
 	}
-	// The dictionary is what the file states and no larger: DictCap is a
+	// The dictionary is what the file states and no larger: the limit is a
 	// ceiling, never a size to grow to.
 	size := r.header.Size
 	if size >= 0 && size < dictSize {
@@ -184,11 +120,11 @@ func (c ReaderConfig) NewReader(lzma io.Reader) (r *Reader, err error) {
 		)
 	}
 
-	if dictSize < MinDictCap {
-		dictSize = MinDictCap
+	if dictSize < MinDictSize {
+		dictSize = MinDictSize
 	}
 
-	// #nosec G115 -- the header's uint32, raised at most to MinDictCap
+	// #nosec G115 -- the header's uint32, raised at most to MinDictSize
 	r.header.DictSize = uint32(dictSize)
 
 	state := newState(r.header.Properties)
@@ -198,7 +134,7 @@ func (c ReaderConfig) NewReader(lzma io.Reader) (r *Reader, err error) {
 		return nil, err
 	}
 
-	r.d, err = newDecoder(ByteReader(lzma), state, dict, r.header.Size)
+	r.d, err = newDecoder(bytereader.New(lzma), state, dict, r.header.Size)
 	if err != nil {
 		return nil, err
 	}
@@ -206,26 +142,11 @@ func (c ReaderConfig) NewReader(lzma io.Reader) (r *Reader, err error) {
 	return r, nil
 }
 
-// fill converts the zero values of the configuration to the default values.
-func (c *ReaderConfig) fill() {
-	if c.DictCap == 0 {
-		// A ceiling, not a size: a header inflated by a byte in front of
-		// the stream still cannot ask for more than 2 GiB-1.
-		c.DictCap = math.MaxInt32
-	}
-}
-
 // Header returns the header as read from the LZMA stream. It is intended to
 // allow the user to understand what parameters are typically provided in the
-// headers of the LZMA files and set the DictCap field in [ReaderConfig]
-// accordingly.
+// headers of the LZMA files and choose a WithMaxDictSize accordingly.
 func (r *Reader) Header() (h Header, ok bool) {
 	return r.headerOrig, r.d != nil
-}
-
-// EOSMarker indicates that an EOS marker has been encountered.
-func (r *Reader) EOSMarker() bool {
-	return r.d.eosMarker
 }
 
 // Read returns uncompressed data.

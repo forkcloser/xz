@@ -44,10 +44,10 @@ func fuzzSeeds(tb testing.TB) [][]byte {
 	seeds = append(seeds, multi, append(append(append([]byte{}, multi...),
 		0, 0, 0, 0), multi...))
 
-	for _, check := range []byte{None, CRC32, CRC64, SHA256} {
+	for _, check := range []Check{CheckNone, CheckCRC32, CheckCRC64, CheckSHA256} {
 		var buf bytes.Buffer
 
-		w, err := WriterConfig{CheckSum: check}.NewWriter(&buf)
+		w, err := NewWriter(&buf, WithCheck(check))
 		if err != nil {
 			continue
 		}
@@ -91,7 +91,7 @@ func FuzzSingleStreamReader(f *testing.F) {
 	}
 
 	f.Fuzz(func(_ *testing.T, data []byte) {
-		r, err := ReaderConfig{SingleStream: true}.NewReader(bytes.NewReader(data))
+		r, err := NewReader(bytes.NewReader(data), WithSingleStream())
 		if err != nil {
 			return
 		}
@@ -108,18 +108,14 @@ func FuzzParallelReader(f *testing.F) {
 		f.Add(seed)
 	}
 
-	f.Fuzz(func(t *testing.T, data []byte) {
-		r, err := ParallelReaderConfig{Workers: 2}.NewParallelReader(
-			bytes.NewReader(data), int64(len(data)),
+	f.Fuzz(func(_ *testing.T, data []byte) {
+		r, err := NewReader(
+			bytes.NewReader(data), WithWorkers(2),
 		)
 		if err != nil {
 			return
 		}
 		defer func() { _ = r.Close() }()
-
-		if n := r.Size(); n < 0 {
-			t.Fatalf("Size() is negative: %d", n)
-		}
 
 		_, _ = io.Copy(io.Discard, io.LimitReader(r, fuzzOutputLimit))
 	})
@@ -142,7 +138,7 @@ func FuzzReadersAgree(f *testing.F) {
 			serial, serr = io.ReadAll(io.LimitReader(sr, fuzzOutputLimit))
 		}
 
-		pr, perr := NewParallelReader(bytes.NewReader(data), int64(len(data)))
+		pr, perr := NewReader(bytes.NewReader(data), WithWorkers(4))
 
 		var parallel []byte
 
@@ -180,22 +176,28 @@ func FuzzRoundTrip(f *testing.F) {
 	f.Add([]byte{0, 1, 2, 3, 0xff, 0xfe}, uint8(10), uint16(4<<10))
 
 	f.Fuzz(func(t *testing.T, data []byte, check uint8, blockSize uint16) {
-		cfg := WriterConfig{}
+		var opts []Option
 
 		switch check {
-		case None, CRC32, CRC64, SHA256:
-			cfg.CheckSum = check
+		case checkNone:
+			opts = append(opts, WithCheck(CheckNone))
+		case checkCRC32:
+			opts = append(opts, WithCheck(CheckCRC32))
+		case checkCRC64:
+			opts = append(opts, WithCheck(CheckCRC64))
+		case checkSHA256:
+			opts = append(opts, WithCheck(CheckSHA256))
 		default:
 			return // not a check type the format defines
 		}
 
 		if blockSize > 0 {
-			cfg.BlockSize = int64(blockSize)
+			opts = append(opts, WithBlockSize(int64(blockSize)))
 		}
 
 		var buf bytes.Buffer
 
-		w, err := cfg.NewWriter(&buf)
+		w, err := NewWriter(&buf, opts...)
 		if err != nil {
 			t.Fatalf("NewWriter with check %d, block size %d: %s",
 				check, blockSize, err)
@@ -229,16 +231,11 @@ func FuzzRoundTrip(f *testing.F) {
 		// The same file has to come back identically through the parallel
 		// reader, which finds the blocks through the index rather than by
 		// walking the stream.
-		pr, err := NewParallelReader(bytes.NewReader(compressed),
-			int64(len(compressed)))
+		pr, err := NewReader(bytes.NewReader(compressed), WithWorkers(4))
 		if err != nil {
-			t.Fatalf("NewParallelReader on our own output: %s", err)
+			t.Fatalf("NewReader with workers on our own output: %s", err)
 		}
 		defer func() { _ = pr.Close() }()
-
-		if pr.Size() != int64(len(data)) {
-			t.Fatalf("Size() is %d; want %d", pr.Size(), len(data))
-		}
 
 		got, err = io.ReadAll(pr)
 		if err != nil {

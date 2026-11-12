@@ -83,7 +83,7 @@ func (e *encoder) Write(p []byte) (n int, err error) {
 		k, err := e.dict.Write(p[n:])
 		n += k
 
-		if errors.Is(err, ErrNoSpace) {
+		if errors.Is(err, ErrSizeExceeded) {
 			if err = e.compress(0); err != nil {
 				return n, err
 			}

@@ -14,7 +14,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/forkcloser/xz/internal/randtxt"
+	"github.com/forkcloser/xz/v2/internal/randtxt"
 )
 
 func TestWriterCycle(t *testing.T) {
@@ -91,9 +91,9 @@ func TestWriterLongData(t *testing.T) {
 
 	buf := &bytes.Buffer{}
 
-	w, err := WriterConfig{DictCap: 0x4000}.NewWriter(buf)
+	w, err := NewWriter(buf, WithDictSize(0x4000))
 	if err != nil {
-		t.Fatalf("WriterConfig.NewWriter error %s", err)
+		t.Fatalf("NewWriter error %s", err)
 	}
 
 	n, err := w.Write(txt)
@@ -136,9 +136,9 @@ func TestWriter_Size(t *testing.T) {
 
 	buf := new(bytes.Buffer)
 
-	w, err := WriterConfig{Size: 10, EOSMarker: true}.NewWriter(buf)
+	w, err := NewWriter(buf, WithSize(10), WithEOSMarker())
 	if err != nil {
-		t.Fatalf("WriterConfig.NewWriter error %s", err)
+		t.Fatalf("NewWriter error %s", err)
 	}
 
 	q := []byte{'a'}
@@ -255,9 +255,9 @@ func BenchmarkReader(b *testing.B) {
 
 	buf := &bytes.Buffer{}
 
-	w, err := WriterConfig{DictCap: 0x4000}.NewWriter(buf)
+	w, err := NewWriter(buf, WithDictSize(0x4000))
 	if err != nil {
-		b.Fatalf("WriterConfig{}.NewWriter error %s", err)
+		b.Fatalf("NewWriter error %s", err)
 	}
 
 	if _, err = w.Write(txt); err != nil {
@@ -307,7 +307,7 @@ func BenchmarkWriter(b *testing.B) {
 	for b.Loop() {
 		buf.Reset()
 
-		w, err := WriterConfig{DictCap: 0x4000}.NewWriter(buf)
+		w, err := NewWriter(buf, WithDictSize(0x4000))
 		if err != nil {
 			b.Fatalf("NewWriter error %s", err)
 		}

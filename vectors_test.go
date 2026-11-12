@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/forkcloser/xz"
-	"github.com/forkcloser/xz/lzma"
+	"github.com/forkcloser/xz/v2"
+	"github.com/forkcloser/xz/v2/lzma"
 )
 
 // XZ Utils' decoder conformance files, testdata/xzutils (its tests/files
@@ -51,7 +51,7 @@ func decodeXZ(t *testing.T, data []byte) (out []byte, err, perr error) {
 		out, err = io.ReadAll(r)
 	}
 
-	pr, perr := xz.NewParallelReader(bytes.NewReader(data), int64(len(data)))
+	pr, perr := xz.NewReader(bytes.NewReader(data), xz.WithWorkers(4))
 
 	var pout []byte
 	if perr == nil {

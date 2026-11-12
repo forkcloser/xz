@@ -16,44 +16,8 @@ import (
 	"sync"
 )
 
-// A nil configuration, and a block decoder that panicked instead of returning.
-var (
-	errParallelConfigNil = errors.New("xz: parallel reader parameters are nil")
-	errDecodePanic       = errors.New("xz: panic while decoding block")
-)
-
-// ParallelReaderConfig defines the parameters for the parallel xz
-// reader. Workers is the number of blocks decoded concurrently; values
-// below 1 select runtime.GOMAXPROCS(0).
-//
-//nolint:recvcheck // NewParallelReader copies the config, so it works on a literal; Verify takes the pointer
-type ParallelReaderConfig struct {
-	// DictCap is the floor for the dictionary, as ReaderConfig.DictCap: a
-	// block header asking for more gets more.
-	DictCap int
-	Workers int
-}
-
-// Verify checks the configuration for errors and replaces zero values with
-// their defaults, so afterwards DictCap and Workers both hold the values that
-// will actually be used.
-func (c *ParallelReaderConfig) Verify() error {
-	if c == nil {
-		return errParallelConfigNil
-	}
-
-	rc := ReaderConfig{DictCap: c.DictCap}
-	if err := rc.Verify(); err != nil {
-		return err
-	}
-
-	c.DictCap = rc.DictCap
-	if c.Workers < 1 {
-		c.Workers = runtime.GOMAXPROCS(0)
-	}
-
-	return nil
-}
+// A block decoder that panicked instead of returning.
+var errDecodePanic = errors.New("xz: panic while decoding block")
 
 // blockDesc describes the location of a single block inside the xz
 // file, as derived from the stream indexes.
@@ -108,7 +72,7 @@ func checkUncompressedSize(rec record) error {
 	return nil
 }
 
-// ParallelReader decodes the blocks of an xz file concurrently. It
+// parallelReader decodes the blocks of an xz file concurrently. It
 // requires random access to the input (io.ReaderAt) and its total size,
 // because the block locations are read from the stream indexes at the
 // end of each stream before any data is decoded. The decoded stream is
@@ -116,12 +80,12 @@ func checkUncompressedSize(rec record) error {
 //
 // Only files consisting of multiple blocks — as produced for example by
 // xz with a block size limit or in multi-threaded mode, or by this
-// package's writer with WriterConfig.BlockSize — decode with real
+// package's writer with WithBlockSize — decode with real
 // concurrency; a single-block file decodes on one worker. Memory in flight
 // is a bounded number of uncompressed blocks, about twice Workers plus a
 // few: the decoded queue, the block being read, and the buffer pool.
 //
-// The ParallelReader verifies the block checks, the block sizes against
+// The parallelReader verifies the block checks, the block sizes against
 // the index, and the header, footer and index checksums of every
 // stream.
 //
@@ -129,11 +93,11 @@ func checkUncompressedSize(rec record) error {
 // exception: it may be called from another goroutine to cancel a Read that is
 // waiting on a block, which is what makes it usable for abandoning a reader
 // whose input has gone slow.
-type ParallelReader struct {
-	ParallelReaderConfig
+type parallelReader struct {
+	opts options
 
 	// dec holds everything the dispatcher and the workers touch. Those
-	// goroutines must not reference the ParallelReader itself: the cleanup
+	// goroutines must not reference the parallelReader itself: the cleanup
 	// that stops them when a reader is abandoned without Close can only run
 	// once the reader is unreachable, which it never becomes while a
 	// goroutine stack still roots it.
@@ -155,7 +119,9 @@ type ParallelReader struct {
 // parallelDecoder is the part of the parallel reader that the dispatcher
 // and the decode workers operate on.
 type parallelDecoder struct {
-	dictCap int
+	// opts is a copy: the decoder is the cleanup's argument, so it must not
+	// reach the reader it is registered on.
+	opts options
 
 	xz     io.ReaderAt
 	blocks []blockDesc
@@ -178,13 +144,6 @@ type parallelDecoder struct {
 	readBufSize int
 }
 
-// NewParallelReader creates a reader that decodes the blocks of an xz
-// file concurrently using the default parameters. See ParallelReader
-// for the conditions under which this actually parallelizes.
-func NewParallelReader(xz io.ReaderAt, size int64) (r *ParallelReader, err error) {
-	return ParallelReaderConfig{}.NewParallelReader(xz, size)
-}
-
 // blockResult is the outcome of decoding one block.
 type blockResult struct {
 	data []byte
@@ -198,27 +157,28 @@ type blockWork struct {
 	result chan blockResult
 }
 
-// NewParallelReader creates a new parallel reader using the given
-// configuration. It reads and verifies the stream headers, footers and
+// newParallelReader creates a reader that decodes the blocks of the xz file
+// in xz concurrently. It reads and verifies the stream headers, footers and
 // indexes, but does not decode any block data yet.
-func (c ParallelReaderConfig) NewParallelReader(xz io.ReaderAt, size int64) (r *ParallelReader, err error) {
-	if err = c.Verify(); err != nil {
-		return nil, err
-	}
-
-	blocks, total, err := parseBlocks(xz, size)
+func newParallelReader(xz io.ReaderAt, size int64, o options) (r *parallelReader, err error) {
+	l, err := parseBlocks(xz, size)
 	if err != nil {
 		return nil, err
 	}
 
-	r = &ParallelReader{
-		ParallelReaderConfig: c,
+	if o.singleStream && l.streams > 1 {
+		return nil, errUnexpectedData
+	}
+
+	r = &parallelReader{
+		opts: o,
 		dec: &parallelDecoder{
+			opts:   o,
 			xz:     xz,
-			blocks: blocks,
+			blocks: l.blocks,
 			done:   make(chan struct{}),
 		},
-		size: total,
+		size: l.total,
 	}
 	// Workers and the dispatcher are goroutines, and goroutines are not
 	// collected just because nothing references the reader that started them.
@@ -230,10 +190,6 @@ func (c ParallelReaderConfig) NewParallelReader(xz io.ReaderAt, size int64) (r *
 
 	return r, nil
 }
-
-// Size returns the total number of uncompressed bytes in the file, as
-// recorded in the stream indexes.
-func (r *ParallelReader) Size() int64 { return r.size }
 
 // paddingScanBufSize is how much trailing padding is examined per read. Stream
 // padding comes in groups of four zero bytes and can be arbitrarily long, so
@@ -292,24 +248,32 @@ func readFullAt(xz io.ReaderAt, p []byte, off int64) error {
 // parseBlocks locates all blocks of the xz file by walking the streams
 // backwards from the end of the file: footer, index, stream header.
 // The header, footer and index checksums of every stream are verified.
-func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, err error) {
+// layout is what parseBlocks finds: the blocks in file order, the total
+// uncompressed size, and how many streams the file holds.
+type layout struct {
+	blocks  []blockDesc
+	total   int64
+	streams int
+}
+
+func parseBlocks(xz io.ReaderAt, size int64) (l layout, err error) {
 	streams := make([][]blockDesc, 0, 1)
 
 	pos := size
 	for pos > 0 {
 		if pos%4 != 0 {
-			return nil, 0, corruptf("xz: file size not a multiple of four bytes")
+			return layout{}, corruptf("xz: file size not a multiple of four bytes")
 		}
 
 		if pos, err = skipStreamPadding(xz, pos); err != nil {
-			return nil, 0, err
+			return layout{}, err
 		}
 
 		if pos == 0 {
 			if len(streams) > 0 {
 				// Padding is between streams or after the last; at the
 				// start of the file it stands where a stream must be.
-				return nil, 0, corruptf("xz: stream padding before the first stream")
+				return layout{}, corruptf("xz: stream padding before the first stream")
 			}
 
 			break
@@ -320,7 +284,7 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 			headerPos int64
 		)
 		if descs, headerPos, err = parseStream(xz, pos); err != nil {
-			return nil, 0, err
+			return layout{}, err
 		}
 
 		streams = append(streams, descs)
@@ -328,17 +292,20 @@ func parseBlocks(xz io.ReaderAt, size int64) (blocks []blockDesc, total int64, e
 		// terminate. That follows from the bounds in parseStream, but state it
 		// here so termination is checkable locally and survives future edits.
 		if headerPos >= pos {
-			return nil, 0, corruptf("xz: stream does not precede its index")
+			return layout{}, corruptf("xz: stream does not precede its index")
 		}
 
 		pos = headerPos
 	}
 
 	if len(streams) == 0 {
-		return nil, 0, corruptf("xz: no streams found")
+		return layout{}, corruptf("xz: no streams found")
 	}
 
-	return joinStreams(streams)
+	l.blocks, l.total, err = joinStreams(streams)
+	l.streams = len(streams)
+
+	return l, err
 }
 
 // parseStream reads the stream that ends at pos back to front: its footer,
@@ -534,8 +501,7 @@ var errReaderClosed = &kindError{
 // start launches the dispatcher and the decode workers. The queue
 // capacity bounds the number of blocks in flight (decoding or decoded
 // but not yet consumed) and thereby the memory use.
-func (d *parallelDecoder) start(workers, dictCap int) {
-	d.dictCap = dictCap
+func (d *parallelDecoder) start(workers int) {
 	// Each worker reads its block through one reusable buffered reader.
 	// Size it for the largest block of the file rather than always taking
 	// the maximum: for a file of small blocks the fixed size would make the
@@ -722,9 +688,7 @@ func (d *parallelDecoder) decodeBlock(bd *blockDesc, bufp *[]byte, s *workerScra
 		return nil, err
 	}
 
-	c := ReaderConfig{DictCap: d.dictCap}
-
-	br, err := c.newBlockReader(s.xr, h, hlen, bd.newHash(), &s.lz)
+	br, err := d.opts.newBlockReader(s.xr, h, hlen, bd.newHash(), &s.lz)
 	if err != nil {
 		return nil, err
 	}
@@ -784,7 +748,7 @@ func (d *parallelDecoder) decodeBlock(bd *blockDesc, bufp *[]byte, s *workerScra
 
 // Read reads the uncompressed data stream. The blocks are decoded
 // concurrently but delivered in order.
-func (r *ParallelReader) Read(p []byte) (n int, err error) {
+func (r *parallelReader) Read(p []byte) (n int, err error) {
 	if err = r.begin(); err != nil {
 		return 0, err
 	}
@@ -815,7 +779,7 @@ func (r *ParallelReader) Read(p []byte) (n int, err error) {
 // decoded block buffers directly to the writer.
 //
 //nolint:gocognit // delivers blocks in order, each end or error classified where it happens
-func (r *ParallelReader) WriteTo(w io.Writer) (n int64, err error) {
+func (r *parallelReader) WriteTo(w io.Writer) (n int64, err error) {
 	// An exhausted reader has nothing left to write, which is success, not
 	// failure: io.Copy does not report io.EOF for an ordinary reader, and a
 	// caller checking err would otherwise see a fully drained stream as an
@@ -881,7 +845,7 @@ func (d *parallelDecoder) stop() {
 // Unlike Read and WriteTo, Close may be called from another goroutine, and
 // doing so cancels a read that is waiting on a block. A reader that already
 // reached io.EOF keeps reporting io.EOF rather than the close.
-func (r *ParallelReader) Close() error {
+func (r *parallelReader) Close() error {
 	r.dec.stop()
 
 	r.mu.Lock()
@@ -908,7 +872,7 @@ func (r *ParallelReader) Close() error {
 // It gives up if the reader is cancelled: a cancelled dispatcher can leave a
 // block queued that no worker will ever report on, so both receives have to
 // watch done rather than only the queue.
-func (r *ParallelReader) nextBlock() error {
+func (r *parallelReader) nextBlock() error {
 	r.dec.putBuf(r.cur)
 	r.cur = nil
 	r.curPos = 0
@@ -951,7 +915,7 @@ func (r *ParallelReader) nextBlock() error {
 // the decode workers on the first call. Starting and Close's check of
 // whether anything started share the lock, so a Close from another
 // goroutine either finds the workers to wait for or forbids their start.
-func (r *ParallelReader) begin() error {
+func (r *parallelReader) begin() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -964,14 +928,7 @@ func (r *ParallelReader) begin() error {
 	}
 
 	r.started = true
-	// Workers and DictCap are promoted fields, so they are writable between
-	// construction and the first read. Re-apply the floor here: zero workers
-	// would leave every read waiting for a block that nothing is decoding.
-	if r.Workers < 1 {
-		r.Workers = runtime.GOMAXPROCS(0)
-	}
-
-	r.dec.start(r.Workers, r.DictCap)
+	r.dec.start(r.opts.workers)
 
 	return nil
 }
@@ -979,7 +936,7 @@ func (r *ParallelReader) begin() error {
 // setErr records the first error the reader saw and returns the error it will
 // report from here on. Later errors do not displace the first, so the reason a
 // stream stopped stays stable across calls.
-func (r *ParallelReader) setErr(err error) error {
+func (r *parallelReader) setErr(err error) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

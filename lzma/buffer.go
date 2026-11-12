@@ -110,13 +110,13 @@ func (b *buffer) Discard(n int) (discarded int, err error) {
 	return n, err
 }
 
-// ErrNoSpace reports that a write did not fit. It reaches callers of the
+// ErrSizeExceeded reports that a write did not fit. It reaches callers of the
 // classic Writer: when the header declares an uncompressed size, Write
-// accepts exactly that many bytes and returns ErrNoSpace for the rest.
-var ErrNoSpace = errors.New("lzma: insufficient space")
+// accepts exactly that many bytes and returns ErrSizeExceeded for the rest.
+var ErrSizeExceeded = errors.New("lzma: insufficient space")
 
 // Write puts data into the  buffer. If less bytes are written than
-// requested ErrNoSpace is returned.
+// requested ErrSizeExceeded is returned.
 func (b *buffer) Write(p []byte) (n int, err error) {
 	m := b.Available()
 
@@ -124,7 +124,7 @@ func (b *buffer) Write(p []byte) (n int, err error) {
 	if m < n {
 		n = m
 		p = p[:m]
-		err = ErrNoSpace
+		err = ErrSizeExceeded
 	}
 
 	k := copy(b.data[b.front:], p)
@@ -137,11 +137,11 @@ func (b *buffer) Write(p []byte) (n int, err error) {
 	return n, err
 }
 
-// WriteByte writes a single byte into the buffer. The error ErrNoSpace
+// WriteByte writes a single byte into the buffer. The error ErrSizeExceeded
 // is returned if no single byte is available in the buffer for writing.
 func (b *buffer) WriteByte(c byte) error {
 	if b.Available() < 1 {
-		return ErrNoSpace
+		return ErrSizeExceeded
 	}
 
 	b.data[b.front] = c

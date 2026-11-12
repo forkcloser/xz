@@ -10,7 +10,7 @@ import (
 	"math/rand/v2"
 	"testing"
 
-	"github.com/forkcloser/xz/lzma"
+	"github.com/forkcloser/xz/v2/lzma"
 )
 
 // lzma2Stream compresses data into an LZMA2 chunk sequence.
@@ -105,7 +105,7 @@ func TestWriterErrorIsSticky(t *testing.T) {
 	fw := &countingFailingWriter{allow: 1, err: ioErr} // the header is the first write
 	// The smallest dictionary, so the encoder compresses during Write
 	// rather than buffering the whole input until Close.
-	w, err := lzma.WriterConfig{DictCap: lzma.MinDictCap}.NewWriter(fw)
+	w, err := lzma.NewWriter(fw, lzma.WithDictSize(lzma.MinDictSize))
 	if err != nil {
 		t.Fatal(err)
 	}

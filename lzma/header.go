@@ -35,7 +35,7 @@ func (h *Header) marshalBinary() (data []byte, err error) {
 		return nil, err
 	}
 
-	if !(h.DictSize <= MaxDictCap) {
+	if !(h.DictSize <= MaxDictSize) {
 		return nil, fmt.Errorf("%w: %d", errHeaderDictSize, h.DictSize)
 	}
 
@@ -99,7 +99,7 @@ func (h *Header) unmarshalBinary(data []byte) error {
 // validDictSize checks whether the dictionary capacity is correct. This
 // is used to weed out wrong file headers.
 func validDictSize(dictcap int) bool {
-	if int64(dictcap) == MaxDictCap {
+	if int64(dictcap) == MaxDictSize {
 		return true
 	}
 

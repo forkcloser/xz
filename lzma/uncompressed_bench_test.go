@@ -10,7 +10,7 @@ import (
 	"math/rand/v2"
 	"testing"
 
-	"github.com/forkcloser/xz/lzma"
+	"github.com/forkcloser/xz/v2/lzma"
 )
 
 // BenchmarkReader2Uncompressed decodes a sequence of uncompressed chunks,
@@ -27,7 +27,7 @@ func BenchmarkReader2Uncompressed(b *testing.B) {
 
 	stream := lzma2Stream(b, data)
 
-	r, err := lzma.NewReader2(bytes.NewReader(stream))
+	r, err := lzma.NewReader2(bytes.NewReader(stream), 8<<20)
 	if err != nil {
 		b.Fatal(err)
 	}
