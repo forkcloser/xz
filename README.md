@@ -7,25 +7,38 @@ have any dependency on any C code. The command-line tool built on it is
 
 Compression speed and ratio do not match the xz tool, whose algorithms
 have been tuned over a long time. Decompression is a different story: see
-the numbers below, and `ParallelReader` for block-parallel decoding of
-multi-block archives. Both readers decode every filter the format defines:
+the numbers below, and `WithWorkers` for block-parallel decoding of
+multi-block files. The reader decodes every filter the format defines:
 LZMA2, the eight branch/call/jump filters (x86, PowerPC, IA-64, ARM, ARM
 Thumb, SPARC, ARM64, RISC-V) and delta, in chains of up to four, so what
-`xz --x86` or `xz --delta` wrote reads here. The writer produces LZMA2
-alone.
+`xz --x86` or `xz --delta` wrote reads here, and the writer applies them
+on request (`WithFilters`).
+
+```go
+r, err := xz.NewReader(f, xz.WithWorkers(0))            // all CPUs on a multi-block file
+w, err := xz.NewWriter(out, xz.WithBlockSize(1<<24), xz.WithCheck(xz.CheckSHA256))
+```
 
 ## Stability
 
-From v1.0.0 the exported API of `xz` and `lzma` follows the Go 1
-compatibility promise within the v1 line: no exported name changes
-meaning or disappears, and code that compiles against v1.0.0 keeps
-compiling. Additive changes (new functions, new fields with zero-value
-defaults) can land in minor releases. `internal/` is not covered, and
+The module is `github.com/forkcloser/xz/v2`. From v2.0.0 the exported API
+of `xz` and `lzma` follows the Go 1 compatibility promise within the v2
+line: no exported name changes meaning or disappears, and code that
+compiles against v2.0.0 keeps compiling. Additive changes (new options, new
+functions) can land in minor releases. `internal/` is not covered, and
 neither is the exact text of error messages — match errors with
 `errors.Is` against `ErrCorrupt`, `ErrUnsupported`, `ErrClosed`,
-`io.ErrUnexpectedEOF` and the `lzma` package's `ErrCorrupt` and
-`ErrUnsupported`, not by string. The minimum Go version is the one in
-`go.mod`; CI runs the current release.
+`io.ErrUnexpectedEOF` and the `lzma` package's `ErrCorrupt`,
+`ErrUnsupported` and `ErrSizeExceeded`, not by string. The minimum Go
+version is the one in `go.mod`; CI runs the current release.
+
+The v1 line (`github.com/forkcloser/xz`) is what v2 replaces: configuration
+structs with a `Verify` that mutated them, a `DictCap` that meant a floor
+in one reader and a limit in another, a separate `ParallelReader`, and a
+check selected by a wire byte that could not say "none". v2 configures
+readers and writers with options, has one `Reader` whose `WithWorkers`
+decodes blocks concurrently, bounds a reader's dictionary with
+`WithMaxDictSize`, and selects the check and the filters by name.
 
 ## Assurance
 
@@ -58,16 +71,17 @@ capacities and buffer sizes, header fields the writer never emits (block
 sizes, several filters), bounds a nine-byte integer cannot reach, and
 equalities the format rules out.
 
-Both readers and the classic LZMA reader also run XZ Utils' own decoder
+The reader and the classic LZMA reader also run XZ Utils' own decoder
 conformance files (`testdata/xzutils`, upstream's `tests/files`, 0BSD): every
-good `.xz` and `.lzma` file decodes, with the Reader and the ParallelReader
-agreeing byte for byte; every bad file is refused as corrupt or cut short;
+good `.xz` and `.lzma` file decodes, with the reader with and without
+workers agreeing byte for byte; every bad file is refused as corrupt or cut short;
 every file upstream classes as unsupported is refused, never decoded.
 
 The BCJ and delta filters (`internal/filters`) are held to XZ Utils: for
 each filter, with and without a start offset, for two chains and for a
 multi-block file, a committed file is what `xz` makes of one fixed input,
-regenerated from its seed, and both readers must decode it back
+regenerated from its seed, and the reader must decode it back with and
+without workers
 (`testdata/filters`, `filters_test.go`), through reads of every small size.
 The converters are also held to themselves: each direction undoes the other
 over random and instruction-dense inputs, at several start offsets, and
@@ -114,14 +128,14 @@ the same benchmark bodies. Reproduce with:
 [`PERF.md`](./PERF.md) has the methodology, what each change bought, the
 negative results, and what is left.
 
-Multi-block files (the shape `xz -T` produces, and the one
-`ParallelReader` exists for), same corpus:
+Multi-block files (the shape `xz -T` produces, and the one `WithWorkers`
+exists for), same corpus:
 
 | Benchmark                                | Throughput | Allocs/op |
 | ---------------------------------------- | ---------- | --------- |
-| Reader, 153 × 64 KiB blocks              | 73 MB/s    | 2,576     |
-| ParallelReader, 10 × 1 MiB blocks, 18 workers | 700 MB/s | ~1,265 |
-| ParallelReader, 153 × 64 KiB blocks, 18 workers | ~980 MB/s | — |
+| Reader, 153 × 64 KiB blocks, 1 worker   | 73 MB/s    | 2,576     |
+| Reader, 10 × 1 MiB blocks, 18 workers   | 700 MB/s   | ~1,265    |
+| Reader, 153 × 64 KiB blocks, 18 workers | ~980 MB/s  | —         |
 
 Compression ratio is identical to upstream in the default
 configuration. Multi-block serial decoding is slower than single-block
@@ -142,7 +156,7 @@ import (
     "log"
     "os"
 
-    "github.com/forkcloser/xz"
+    "github.com/forkcloser/xz/v2"
 )
 
 func main() {
@@ -172,7 +186,7 @@ func main() {
 
 ## Documentation
 
-You can find the full documentation at [pkg.go.dev](https://pkg.go.dev/github.com/forkcloser/xz).
+You can find the full documentation on [pkg.go.dev](https://pkg.go.dev/github.com/forkcloser/xz), under the module's v2 once it is tagged, or with `go doc github.com/forkcloser/xz/v2`.
 
 ## Security & Vulnerabilities
 

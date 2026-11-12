@@ -16,53 +16,6 @@ var (
 	errEmptyCompressed   = errors.New("writeCompressedChunk: empty chunk")
 )
 
-// Writer2Config is used to create a Writer2 using parameters.
-//
-//nolint:recvcheck // NewWriter2 copies the config, so it works on a literal; Verify and fill take the pointer
-type Writer2Config struct {
-	// The properties for the encoding. If the it is nil the value
-	// {LC: 3, LP: 0, PB: 2} will be chosen.
-	Properties *Properties
-	// The capacity of the dictionary. If DictCap is zero, the value
-	// 8 MiB will be chosen.
-	DictCap int
-	// Size of the lookahead buffer; value 0 indicates default size
-	// 4096
-	BufSize int
-	// Match algorithm
-	Matcher MatchAlgorithm
-}
-
-// Verify checks the Writer2Config for correctness. Zero values will be
-// replaced by default values.
-func (c *Writer2Config) Verify() error {
-	c.fill()
-
-	var err error
-
-	if c == nil {
-		return errWriterConfigNil
-	}
-
-	if c.Properties == nil {
-		return errNoProperties
-	}
-
-	if err = c.Properties.verify(); err != nil {
-		return err
-	}
-
-	if !(MinDictCap <= c.DictCap && int64(c.DictCap) <= MaxDictCap) {
-		return errDictCap
-	}
-
-	if !(maxMatchLen <= c.BufSize) {
-		return errBufSizeSmall
-	}
-
-	return c.Matcher.verify()
-}
-
 // Writer2 supports the creation of an LZMA2 stream. But note that
 // written data is buffered, so call Flush or Close to write data to the
 // underlying writer. The Close method writes the end-of-stream marker
@@ -89,33 +42,29 @@ type Writer2 struct {
 	lbw limitedByteWriter
 }
 
-// NewWriter2 creates an LZMA2 chunk sequence writer with the default
-// parameters and options.
-func NewWriter2(lzma2 io.Writer) (w *Writer2, err error) {
-	return Writer2Config{}.NewWriter2(lzma2)
-}
-
-// NewWriter2 creates a new LZMA2 writer using the given configuration.
-func (c Writer2Config) NewWriter2(lzma2 io.Writer) (w *Writer2, err error) {
-	if err = c.Verify(); err != nil {
+// NewWriter2 creates an LZMA2 chunk sequence writer. Options: WithDictSize,
+// WithProperties.
+func NewWriter2(lzma2 io.Writer, opts ...Option) (w *Writer2, err error) {
+	o, err := apply(opts, optDictSize|optProperties, "NewWriter2")
+	if err != nil {
 		return nil, err
 	}
 
 	w = &Writer2{
 		w:      lzma2,
-		start:  newState(*c.Properties),
+		start:  newState(o.props),
 		cstate: start,
 		ctype:  start.defaultChunkType(),
 	}
 	w.buf.Grow(maxCompressed)
 	w.lbw = limitedByteWriter{BW: &w.buf, N: maxCompressed}
 
-	m, err := c.Matcher.new(c.DictCap)
+	m, err := newHashTable(o.dictSize, 4)
 	if err != nil {
 		return nil, err
 	}
 
-	d, err := newEncoderDict(c.DictCap, c.BufSize, m)
+	d, err := newEncoderDict(o.dictSize, lookaheadSize, m)
 	if err != nil {
 		return nil, err
 	}
@@ -123,21 +72,6 @@ func (c Writer2Config) NewWriter2(lzma2 io.Writer) (w *Writer2, err error) {
 	w.encoder = newEncoder(&w.lbw, cloneState(w.start), d, 0)
 
 	return w, nil
-}
-
-// fill replaces zero values with default values.
-func (c *Writer2Config) fill() {
-	if c.Properties == nil {
-		c.Properties = &Properties{LC: 3, LP: 0, PB: 2}
-	}
-
-	if c.DictCap == 0 {
-		c.DictCap = defaultDictCap
-	}
-
-	if c.BufSize == 0 {
-		c.BufSize = 4096
-	}
 }
 
 // errClosed indicates that the writer is closed.

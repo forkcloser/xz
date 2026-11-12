@@ -10,7 +10,8 @@
 // with the None, CRC32, CRC64 and SHA-256 checks, and every filter the
 // format defines: LZMA2, the eight branch/call/jump filters (x86, PowerPC,
 // IA-64, ARM, ARM Thumb, SPARC, ARM64, RISC-V) and delta, in chains of up
-// to four. The writer produces LZMA2 alone.
+// to four. The writer applies the BCJ and delta filters on request
+// (WithFilters).
 //
 // Errors are classified: input that is not valid xz matches ErrCorrupt,
 // input this package cannot handle matches ErrUnsupported, a stream cut
@@ -24,62 +25,31 @@ import (
 	"hash"
 	"io"
 	"slices"
-
-	"github.com/forkcloser/xz/lzma"
 )
 
-// errReaderConfigNil is a nil *ReaderConfig handed to Verify.
-var (
-	errReaderConfigNil = errors.New("xz: reader parameters are nil")
-)
-
-// ReaderConfig defines the parameters for the xz reader.
+// Reader decodes an xz file: one stream or several, concatenated with or
+// without padding between them.
 //
-//nolint:recvcheck // NewReader copies the config, so it works on a literal; Verify and fill take the pointer
-type ReaderConfig struct {
-	// DictCap is the smallest dictionary the reader will use. A block whose
-	// header asks for more gets what it asks for, so this raises the floor
-	// rather than capping memory; the dictionary itself is grown on demand
-	// and costs only what the stream actually decodes. Zero selects 8 MiB.
-	DictCap int
-	// SingleStream makes the reader stop after the first xz stream instead
-	// of continuing through stream padding into further concatenated
-	// streams. Any byte after the stream is then reported as corruption,
-	// which is what the reference tool does with --single-stream.
-	SingleStream bool
-}
-
-// Verify checks the reader parameters for validity and replaces zero values
-// with their defaults, so afterwards DictCap holds the value that will
-// actually be used.
-func (c *ReaderConfig) Verify() error {
-	if c == nil {
-		return errReaderConfigNil
-	}
-
-	lc := lzma.Reader2Config{DictCap: c.DictCap}
-	if err := lc.Verify(); err != nil {
-		return err
-	}
-
-	c.DictCap = lc.DictCap
-
-	return nil
-}
-
-// Reader supports the reading of one or multiple xz streams.
+// With WithWorkers above one, blocks decode concurrently when the input is
+// an io.ReaderAt whose start and size the reader can learn (an io.Seeker,
+// as a file or a bytes.Reader is), through the file's indexes; a stream
+// decodes in order. A reader with workers must be closed when abandoned
+// before io.EOF. The decoded stream is presented in order through Read and
+// WriteTo.
 type Reader struct {
-	ReaderConfig
+	opts options
 
 	xz io.Reader
 	sr *streamReader
 	// lz carries the LZMA2 reader across the blocks and streams of the file.
 	lz lzma2Cache
+	// par decodes in its place when the input allows concurrent decoding.
+	par *parallelReader
 }
 
 // streamReader decodes a single xz stream.
 type streamReader struct {
-	ReaderConfig
+	opts *options
 
 	xz      io.Reader
 	br      *blockReader
@@ -90,26 +60,29 @@ type streamReader struct {
 	hdr     [maxBlockHeaderLen]byte
 }
 
-// NewReader creates a new xz reader using the default parameters.
-// The function reads and checks the header of the first XZ stream. The
-// reader will process multiple streams including padding.
-func NewReader(xz io.Reader) (r *Reader, err error) {
-	return ReaderConfig{}.NewReader(xz)
-}
-
-// NewReader creates an xz stream reader. The created reader will be
-// able to process multiple streams and padding unless a SingleStream
-// has been set in the reader configuration c.
-func (c ReaderConfig) NewReader(xz io.Reader) (r *Reader, err error) {
-	if err = c.Verify(); err != nil {
+// NewReader creates a reader for the xz file read from xz, reading and
+// checking the first stream header. Options: WithMaxDictSize,
+// WithSingleStream, WithWorkers.
+func NewReader(xz io.Reader, opts ...Option) (r *Reader, err error) {
+	o, err := apply(opts, readerOptions, "NewReader")
+	if err != nil {
 		return nil, err
 	}
 
-	r = &Reader{
-		ReaderConfig: c,
-		xz:           xz,
+	r = &Reader{opts: o, xz: xz}
+
+	if o.workers > 1 {
+		if section, ok := randomAccess(xz); ok {
+			r.par, err = newParallelReader(section, section.Size(), o)
+			if err != nil {
+				return nil, err
+			}
+
+			return r, nil
+		}
 	}
-	if r.sr, err = c.newStreamReader(xz, &r.lz); err != nil {
+
+	if r.sr, err = o.newStreamReader(xz, &r.lz); err != nil {
 		switch {
 		case errors.Is(err, io.EOF):
 			err = io.ErrUnexpectedEOF
@@ -125,6 +98,84 @@ func (c ReaderConfig) NewReader(xz io.Reader) (r *Reader, err error) {
 	return r, nil
 }
 
+// randomAccess returns r as a section from its current position to its
+// end when it can be read by offset: an io.ReaderAt that is also an
+// io.Seeker, which tells the position and the size. The position is left
+// where it was.
+func randomAccess(r io.Reader) (*io.SectionReader, bool) {
+	rs, ok := r.(interface {
+		io.ReaderAt
+		io.Seeker
+	})
+	if !ok {
+		return nil, false
+	}
+
+	start, err := rs.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return nil, false
+	}
+
+	end, err := rs.Seek(0, io.SeekEnd)
+	if err != nil {
+		return nil, false
+	}
+
+	if _, err = rs.Seek(start, io.SeekStart); err != nil {
+		return nil, false
+	}
+
+	return io.NewSectionReader(rs, start, end-start), true
+}
+
+// Close releases the workers of a reader that decodes concurrently; it is
+// required when such a reader is abandoned before io.EOF, and may be
+// called after. Close may be called from another goroutine, and then
+// cancels a Read waiting on a block. On a reader without workers it does
+// nothing.
+func (r *Reader) Close() error {
+	if r.par != nil {
+		return r.par.Close()
+	}
+
+	return nil
+}
+
+// WriteTo writes the whole remaining uncompressed data to w.
+func (r *Reader) WriteTo(w io.Writer) (int64, error) {
+	if r.par != nil {
+		return r.par.WriteTo(w)
+	}
+
+	buf := make([]byte, 32<<10) //nolint:mnd // the copy buffer, io.Copy's size
+
+	var n int64
+
+	for {
+		k, err := r.Read(buf)
+		if k > 0 {
+			written, werr := w.Write(buf[:k])
+			n += int64(written)
+
+			if werr != nil {
+				return n, werr
+			}
+
+			if written < k {
+				return n, io.ErrShortWrite
+			}
+		}
+
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return n, nil
+			}
+
+			return n, err
+		}
+	}
+}
+
 var errUnexpectedData = corruptf("xz: unexpected data after stream")
 
 // Read reads uncompressed data from the stream.
@@ -137,9 +188,13 @@ var errUnexpectedData = corruptf("xz: unexpected data after stream")
 //
 //nolint:gocognit // the loop over streams: how a single stream ends and the padding between streams, each commented in place
 func (r *Reader) Read(p []byte) (n int, err error) {
+	if r.par != nil {
+		return r.par.Read(p)
+	}
+
 	for n < len(p) {
 		if r.sr == nil {
-			if r.SingleStream {
+			if r.opts.singleStream {
 				// One byte past the stream decides: nothing there is the
 				// clean end, a byte is trailing data, and a failing read
 				// is the transport's problem — not the file's — so the
@@ -164,7 +219,7 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 			}
 
 			for {
-				r.sr, err = r.newStreamReader(r.xz, &r.lz)
+				r.sr, err = r.opts.newStreamReader(r.xz, &r.lz)
 				if !errors.Is(err, errPadding) {
 					break
 				}
@@ -196,11 +251,7 @@ var errPadding = errors.New("xz: padding (4 zero bytes) encountered")
 // newStreamReader creates a new xz stream reader using the given configuration
 // parameters. NewReader reads and checks the header of the xz stream. A
 // non-nil cache lets the stream's blocks reuse one LZMA2 reader.
-func (c ReaderConfig) newStreamReader(xz io.Reader, cache *lzma2Cache) (r *streamReader, err error) {
-	if err = c.Verify(); err != nil {
-		return nil, err
-	}
-
+func (o *options) newStreamReader(xz io.Reader, cache *lzma2Cache) (r *streamReader, err error) {
 	data := make([]byte, HeaderLen)
 
 	k, err := io.ReadFull(xz, data[:4])
@@ -228,10 +279,10 @@ func (c ReaderConfig) newStreamReader(xz io.Reader, cache *lzma2Cache) (r *strea
 	}
 
 	r = &streamReader{
-		ReaderConfig: c,
-		xz:           xz,
-		index:        make([]record, 0, 4),
-		lz:           cache,
+		opts:  o,
+		xz:    xz,
+		index: make([]record, 0, 4),
+		lz:    cache,
 	}
 	if err = r.h.UnmarshalBinary(data); err != nil {
 		return nil, err
@@ -271,7 +322,7 @@ func (r *streamReader) Read(p []byte) (n int, err error) {
 				return n, err
 			}
 
-			r.br, err = r.newBlockReader(r.xz, bh,
+			r.br, err = r.opts.newBlockReader(r.xz, bh,
 				hlen, r.newHash(), r.lz)
 			if err != nil {
 				return n, err
@@ -363,7 +414,7 @@ type blockReader struct {
 
 // newBlockReader creates a new block reader. A non-nil cache lets the block
 // reuse the LZMA2 reader of the previous block.
-func (c *ReaderConfig) newBlockReader(xz io.Reader, h *blockHeader,
+func (o *options) newBlockReader(xz io.Reader, h *blockHeader,
 	hlen int, check hash.Hash, cache *lzma2Cache,
 ) (br *blockReader, err error) {
 	br = &blockReader{
@@ -373,7 +424,7 @@ func (c *ReaderConfig) newBlockReader(xz io.Reader, h *blockHeader,
 		hash:      check,
 	}
 
-	fr, err := c.newFilterReader(&br.lxz, h.filters, cache)
+	fr, err := o.newFilterReader(&br.lxz, h.filters, cache)
 	if err != nil {
 		return nil, err
 	}
@@ -467,7 +518,7 @@ func (br *blockReader) uncompressedSize() int64 {
 	return br.n
 }
 
-func (c *ReaderConfig) newFilterReader(r io.Reader, f []filter,
+func (o *options) newFilterReader(r io.Reader, f []filter,
 	cache *lzma2Cache,
 ) (fr io.Reader, err error) {
 	if err = verifyFilters(f); err != nil {
@@ -476,7 +527,7 @@ func (c *ReaderConfig) newFilterReader(r io.Reader, f []filter,
 
 	fr = r
 	for _, v := range slices.Backward(f) {
-		fr, err = v.reader(fr, c, cache)
+		fr, err = v.reader(fr, o, cache)
 		if err != nil {
 			return nil, err
 		}

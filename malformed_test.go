@@ -14,7 +14,7 @@ import (
 	"math/rand/v2"
 	"testing"
 
-	"github.com/forkcloser/xz/lzma"
+	"github.com/forkcloser/xz/v2/lzma"
 )
 
 // The parser's error branches are most of its code and were among its least
@@ -112,7 +112,7 @@ func TestGarbageInputIsRejected(t *testing.T) {
 				}
 			}
 
-			pr, err := NewParallelReader(bytes.NewReader(data), int64(len(data)))
+			pr, err := NewReader(bytes.NewReader(data), WithWorkers(4))
 			if err != nil {
 				return
 			}
@@ -222,7 +222,7 @@ func TestUnsupportedFilterID(t *testing.T) {
 func TestHeaderAndFooterValidation(t *testing.T) {
 	t.Parallel()
 
-	good, err := (&header{flags: CRC64}).MarshalBinary()
+	good, err := (&header{flags: checkCRC64}).MarshalBinary()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +254,7 @@ func TestHeaderAndFooterValidation(t *testing.T) {
 		})
 	}
 
-	goodFooter, err := (&footer{indexSize: 8, flags: CRC64}).MarshalBinary()
+	goodFooter, err := (&footer{indexSize: 8, flags: checkCRC64}).MarshalBinary()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +264,7 @@ func TestHeaderAndFooterValidation(t *testing.T) {
 		t.Fatalf("rejected a footer we just marshalled: %s", err)
 	}
 
-	if f.indexSize != 8 || f.flags != CRC64 {
+	if f.indexSize != 8 || f.flags != checkCRC64 {
 		t.Errorf("footer round trip gave %+v", f)
 	}
 
@@ -295,56 +295,66 @@ func TestHeaderAndFooterValidation(t *testing.T) {
 	}
 }
 
-// TestWriterConfigValidation covers the configuration errors, which are the
-// difference between a clear failure at construction and a confusing one
-// later.
-func TestWriterConfigValidation(t *testing.T) {
+// TestOptionValidation covers the option errors, which are the difference
+// between a clear failure at construction and a confusing one later, and
+// the option a constructor does not take.
+func TestOptionValidation(t *testing.T) {
 	t.Parallel()
 
-	cases := map[string]WriterConfig{
-		"negative block size": {BlockSize: -1},
-		"bad checksum":        {CheckSum: 0x7},
-		"tiny dict":           {DictCap: 1},
+	cases := map[string]Option{
+		"negative block size": WithBlockSize(-1),
+		"bad check":           WithCheck(Check(9)),
+		"tiny dict":           WithDictSize(1),
+		"four filters": WithFilters(
+			Filter{ID: X86},
+			Filter{ID: ARM},
+			Filter{ID: ARM64},
+			Filter{ID: Delta, Distance: 1},
+		),
+		"unknown filter":     WithFilters(Filter{ID: FilterID(42)}),
+		"delta distance":     WithFilters(Filter{ID: Delta, Distance: 257}),
+		"delta start offset": WithFilters(Filter{ID: Delta, Distance: 1, StartOffset: 4}),
+		"bcj distance":       WithFilters(Filter{ID: X86, Distance: 1}),
+		"bcj misaligned":     WithFilters(Filter{ID: ARM, StartOffset: 2}),
+		"reader option":      WithSingleStream(),
 	}
-	// A dictionary capacity above lzma.MaxDictCap (1<<32 - 1) is representable
+	// A dictionary size above lzma.MaxDictSize (1<<32 - 1) is representable
 	// only where int is 64 bits wide. On a 32-bit platform every positive int
-	// is a legal capacity, so there is no over-range value to reject — and
+	// is a legal size, so there is no over-range value to reject — and
 	// spelling one as a constant would not compile there. Both branches are
 	// type-checked on every platform, so math.MaxInt is what keeps this
 	// portable: it is in range for the int of whatever platform builds it.
-	if math.MaxInt > lzma.MaxDictCap {
-		cases["huge dict"] = WriterConfig{DictCap: math.MaxInt}
+	if math.MaxInt > lzma.MaxDictSize {
+		cases["huge dict"] = WithDictSize(math.MaxInt)
 	}
 
-	for name, c := range cases {
+	for name, opt := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			cfg := c
-			if err := cfg.Verify(); err == nil {
-				t.Errorf("Verify accepted %+v", c)
-			}
-
-			if _, err := c.NewWriter(io.Discard); err == nil {
-				t.Errorf("NewWriter accepted %+v", c)
+			if _, err := NewWriter(io.Discard, opt); err == nil {
+				t.Errorf("NewWriter accepted %s", name)
 			}
 		})
 	}
 
-	// A nil config pointer must be reported, not dereferenced.
-	var nilCfg *WriterConfig
-	if err := nilCfg.Verify(); err == nil {
-		t.Error("nil WriterConfig.Verify returned no error")
-	}
+	// Each refusal is named: an empty input refuses too, for its own reason,
+	// which a bare "err != nil" could not tell from the option's.
+	for name, tc := range map[string]struct {
+		opt  Option
+		want error
+	}{
+		"writer option":    {WithBlockSize(1), errOptionScope},
+		"tiny limit":       {WithMaxDictSize(1), errMaxDictSize},
+		"negative workers": {WithWorkers(-1), errWorkers},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	var nilReader *ReaderConfig
-	if err := nilReader.Verify(); err == nil {
-		t.Error("nil ReaderConfig.Verify returned no error")
-	}
-
-	var nilParallel *ParallelReaderConfig
-	if err := nilParallel.Verify(); err == nil {
-		t.Error("nil ParallelReaderConfig.Verify returned no error")
+			if _, err := NewReader(bytes.NewReader(nil), tc.opt); !errors.Is(err, tc.want) {
+				t.Errorf("NewReader with %s: %v, want %v", name, err, tc.want)
+			}
+		})
 	}
 }
 
@@ -422,7 +432,7 @@ func TestBlockHeaderPaddingIsCorrupt(t *testing.T) {
 			err)
 	}
 
-	pr, err := NewParallelReader(bytes.NewReader(bad), int64(len(bad)))
+	pr, err := NewReader(bytes.NewReader(bad), WithWorkers(4))
 	if err == nil {
 		_, err = io.ReadAll(pr)
 		_ = pr.Close()
@@ -467,7 +477,7 @@ func TestIndexIndicatorAtBlockIsCorrupt(t *testing.T) {
 		t.Fatal("sequential reader accepted an index indicator in place of the block")
 	}
 
-	pr, err := NewParallelReader(bytes.NewReader(bad), int64(len(bad)))
+	pr, err := NewReader(bytes.NewReader(bad), WithWorkers(4))
 	if err == nil {
 		_, err = io.ReadAll(pr)
 		_ = pr.Close()
@@ -500,10 +510,12 @@ func TestBlockHeaderRunningPastBlockIsCorrupt(t *testing.T) {
 	data := bytes.Repeat([]byte("a"), 180000)
 	full := compressMultiBlock(t, data, 60000)
 
-	blocks, _, err := parseBlocks(bytes.NewReader(full), int64(len(full)))
+	l, err := parseBlocks(bytes.NewReader(full), int64(len(full)))
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	blocks := l.blocks
 
 	if len(blocks) == 0 {
 		t.Fatal("the fixture has no blocks")
@@ -520,9 +532,9 @@ func TestBlockHeaderRunningPastBlockIsCorrupt(t *testing.T) {
 	bad := append([]byte{}, full...)
 	bad[hdrOff] = 0xff
 
-	pr, err := NewParallelReader(bytes.NewReader(bad), int64(len(bad)))
+	pr, err := NewReader(bytes.NewReader(bad), WithWorkers(4))
 	if err != nil {
-		t.Fatalf("NewParallelReader: %v", err)
+		t.Fatalf("NewReader: %v", err)
 	}
 
 	got, err := io.ReadAll(pr)

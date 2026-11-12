@@ -113,8 +113,8 @@ func readAllParallel(t *testing.T, file []byte) error {
 	runtime.ReadMemStats(&before)
 
 	err := func() error {
-		r, err := ParallelReaderConfig{Workers: 4}.NewParallelReader(
-			bytes.NewReader(file), int64(len(file)),
+		r, err := NewReader(
+			bytes.NewReader(file), WithWorkers(4),
 		)
 		if err != nil {
 			return err
@@ -235,7 +235,7 @@ func TestParallelReaderNoHangOnLoopFile(t *testing.T) {
 	done := make(chan error, 1)
 
 	go func() {
-		_, err := NewParallelReader(bytes.NewReader(loopFile()), int64(len(loopFile())))
+		_, err := NewReader(bytes.NewReader(loopFile()), WithWorkers(4))
 		done <- err
 	}()
 
@@ -296,7 +296,7 @@ func TestParallelReaderHostileSizeRealBlock(t *testing.T) {
 
 	var out bytes.Buffer
 	// CRC32, matching the stream flags hostileStream writes.
-	w, err := WriterConfig{CheckSum: CRC32}.NewWriter(&out)
+	w, err := NewWriter(&out, WithCheck(CheckCRC32))
 	if err != nil {
 		t.Fatalf("NewWriter error %s", err)
 	}
@@ -311,10 +311,12 @@ func TestParallelReaderHostileSizeRealBlock(t *testing.T) {
 
 	genuine := out.Bytes() // single block
 
-	blocks, _, err := parseBlocks(bytes.NewReader(genuine), int64(len(genuine)))
+	l, err := parseBlocks(bytes.NewReader(genuine), int64(len(genuine)))
 	if err != nil {
 		t.Fatalf("parseBlocks error %s", err)
 	}
+
+	blocks := l.blocks
 
 	if len(blocks) != 1 {
 		t.Fatalf("got %d blocks; want 1", len(blocks))
@@ -361,7 +363,7 @@ func TestParallelReaderHostileRecordCountIsBoundedEarly(t *testing.T) {
 	runtime.GC()
 	runtime.ReadMemStats(&before)
 
-	_, err := NewParallelReader(bytes.NewReader(file), int64(len(file)))
+	_, err := NewReader(bytes.NewReader(file), WithWorkers(4))
 
 	runtime.ReadMemStats(&after)
 

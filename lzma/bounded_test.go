@@ -15,8 +15,8 @@ import (
 	"math/rand/v2"
 	"testing"
 
-	"github.com/forkcloser/xz/internal/lzmaspec"
-	"github.com/forkcloser/xz/lzma"
+	"github.com/forkcloser/xz/v2/internal/lzmaspec"
+	"github.com/forkcloser/xz/v2/lzma"
 )
 
 // around is n-1, n and n+1, for n at least 1.
@@ -73,11 +73,11 @@ func TestBoundedClassic(t *testing.T) {
 	for _, n := range lengths(false) {
 		data := pattern(n)
 
-		configs := map[string]lzma.WriterConfig{
+		configs := map[string]wcase{
 			"default":    {},
-			"smallest":   {DictCap: lzma.MinDictCap, BufSize: 273},
-			"size":       {SizeInHeader: true, Size: int64(n)},
-			"small size": {DictCap: lzma.MinDictCap, BufSize: 273, SizeInHeader: true, Size: int64(n)},
+			"smallest":   {opts: []lzma.Option{lzma.WithDictSize(lzma.MinDictSize)}},
+			"size":       {opts: []lzma.Option{lzma.WithSize(int64(n))}},
+			"small size": {opts: []lzma.Option{lzma.WithDictSize(lzma.MinDictSize), lzma.WithSize(int64(n))}},
 		}
 
 		for cname, c := range configs {
@@ -134,21 +134,16 @@ func TestBoundedLZMA2(t *testing.T) {
 	for _, n := range lengths(true) {
 		data := pattern(n)
 
-		configs := map[string]lzma.Writer2Config{
+		configs := map[string]w2case{
 			"default":  {},
-			"smallest": {DictCap: lzma.MinDictCap, BufSize: 273},
+			"smallest": {opts: []lzma.Option{lzma.WithDictSize(lzma.MinDictSize)}, dict: lzma.MinDictSize},
 		}
 
 		for cname, c := range configs {
 			for _, cut := range cuts(n) {
 				stream := lzma2(t, c, data, cut...)
 
-				dictCap := c.DictCap
-				if dictCap == 0 {
-					dictCap = 8 << 20
-				}
-
-				got, err := lzmaspec.DecodeLZMA2(stream, uint32(dictCap))
+				got, err := lzmaspec.DecodeLZMA2(stream, uint32(c.dictSize()))
 				if err != nil || !bytes.Equal(got, data) {
 					t.Fatalf("len %d, %s, cuts %v: the reference: %d bytes, %v", n, cname, cut, len(got), err)
 				}
@@ -158,7 +153,7 @@ func TestBoundedLZMA2(t *testing.T) {
 						continue // a byte at a time over a megabyte says nothing more
 					}
 
-					r, err := lzma.Reader2Config{DictCap: c.DictCap}.NewReader2(bytes.NewReader(stream))
+					r, err := lzma.NewReader2(bytes.NewReader(stream), c.dictSize())
 					if err != nil {
 						t.Fatalf("len %d, %s: %v", n, cname, err)
 					}
@@ -181,14 +176,14 @@ func TestBoundedLZMA2Compressible(t *testing.T) {
 
 	for _, n := range around(1 << 21) {
 		data := make([]byte, n)
-		stream := lzma2(t, lzma.Writer2Config{}, data)
+		stream := lzma2(t, w2case{}, data)
 
 		got, err := lzmaspec.DecodeLZMA2(stream, 8<<20)
 		if err != nil || !bytes.Equal(got, data) {
 			t.Fatalf("len %d: the reference: %d bytes, %v", n, len(got), err)
 		}
 
-		r, err := lzma.NewReader2(bytes.NewReader(stream))
+		r, err := lzma.NewReader2(bytes.NewReader(stream), defaultDict)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -208,14 +203,14 @@ func TestBoundedReader2Reuse(t *testing.T) {
 	ls := lengths(false)
 	order := append(append([]int{}, ls...), 1<<17, 0, 1, 4096)
 
-	r, err := lzma.NewReader2(bytes.NewReader(lzma2(t, lzma.Writer2Config{}, []byte{})))
+	r, err := lzma.NewReader2(bytes.NewReader(lzma2(t, w2case{}, []byte{})), defaultDict)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for _, n := range order {
 		data := pattern(n)
-		stream := lzma2(t, lzma.Writer2Config{}, data, cuts(n)[len(cuts(n))-1]...)
+		stream := lzma2(t, w2case{}, data, cuts(n)[len(cuts(n))-1]...)
 
 		r.Reset(bytes.NewReader(stream))
 
@@ -232,7 +227,7 @@ func TestBoundedReader2Reuse(t *testing.T) {
 
 // TestBoundedWriterSize: the classic writer with a declared size takes
 // exactly that many bytes, in writes around the size, refuses more with
-// ErrNoSpace, and refuses to close short.
+// ErrSizeExceeded, and refuses to close short.
 func TestBoundedWriterSize(t *testing.T) {
 	t.Parallel()
 
@@ -241,7 +236,7 @@ func TestBoundedWriterSize(t *testing.T) {
 	for _, size := range []int{1, 2, 4095, 4096, 4097, 5000} {
 		var buf bytes.Buffer
 
-		w, err := lzma.WriterConfig{SizeInHeader: true, Size: int64(size)}.NewWriter(&buf)
+		w, err := lzma.NewWriter(&buf, lzma.WithSize(int64(size)))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -282,7 +277,7 @@ func TestBoundedStreaming(t *testing.T) {
 
 	data := pattern(10000)
 
-	r, err := lzma.NewReader(&oneByteReader{bytes.NewReader(classic(t, lzma.WriterConfig{}, data))})
+	r, err := lzma.NewReader(&oneByteReader{bytes.NewReader(classic(t, wcase{}, data))})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -292,7 +287,7 @@ func TestBoundedStreaming(t *testing.T) {
 		t.Fatalf("classic: %d bytes, %v", len(got), err)
 	}
 
-	r2, err := lzma.NewReader2(&oneByteReader{bytes.NewReader(lzma2(t, lzma.Writer2Config{}, data, 5000))})
+	r2, err := lzma.NewReader2(&oneByteReader{bytes.NewReader(lzma2(t, w2case{}, data, 5000))}, defaultDict)
 	if err != nil {
 		t.Fatal(err)
 	}

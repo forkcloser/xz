@@ -10,7 +10,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/forkcloser/xz"
+	"github.com/forkcloser/xz/v2"
 )
 
 // TestParallelReaderSizeThatLies: a size larger than the bytes the
@@ -23,10 +23,13 @@ func TestParallelReaderSizeThatLies(t *testing.T) {
 	t.Parallel()
 
 	data := cData(5000)
-	file := refStream(refOptions{check: xz.CRC32, dictCode: 20}, refBlocks(t, data, 1000))
+	file := refStream(refOptions{check: flagCRC32, dictCode: 20}, refBlocks(t, data, 1000))
 
 	for _, extra := range []int64{4, 12, 4096, 1 << 20} {
-		pr, err := xz.NewParallelReader(bytes.NewReader(file), int64(len(file))+extra)
+		pr, err := xz.NewReader(
+			io.NewSectionReader(bytes.NewReader(file), 0, int64(len(file))+extra),
+			xz.WithWorkers(4),
+		)
 		if err == nil {
 			_, err = io.ReadAll(pr)
 			_ = pr.Close()

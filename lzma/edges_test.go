@@ -10,7 +10,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/forkcloser/xz/lzma"
+	"github.com/forkcloser/xz/v2/lzma"
 )
 
 // TestEdgeShortCompressedChunk: a compressed LZMA2 chunk whose size field
@@ -23,7 +23,7 @@ func TestEdgeShortCompressedChunk(t *testing.T) {
 		// cLRND, one uncompressed byte, compressed size n, properties 0x5D.
 		in := append([]byte{0xE0, 0x00, 0x00, 0x00, byte(n - 1), 0x5D}, make([]byte, n)...)
 
-		r, err := lzma.NewReader2(bytes.NewReader(in))
+		r, err := lzma.NewReader2(bytes.NewReader(in), 8<<20)
 		if err != nil {
 			t.Fatalf("n=%d: NewReader2: %v", n, err)
 		}
@@ -93,7 +93,7 @@ func TestEdgeReader2ResetDropsUnread(t *testing.T) {
 	first := lzma2Stream(t, bytes.Repeat([]byte("A"), 1000))
 	second := lzma2Stream(t, bytes.Repeat([]byte("B"), 10))
 
-	r, err := lzma.NewReader2(bytes.NewReader(first))
+	r, err := lzma.NewReader2(bytes.NewReader(first), 8<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestEdgeSizeZero(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	w, err := lzma.WriterConfig{SizeInHeader: true, Size: 0}.NewWriter(&buf)
+	w, err := lzma.NewWriter(&buf, lzma.WithSize(0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func TestEdgeWriterClosed(t *testing.T) {
 func TestEdgeShortSizeIsNotCorruption(t *testing.T) {
 	t.Parallel()
 
-	w, err := lzma.WriterConfig{Size: 10}.NewWriter(io.Discard)
+	w, err := lzma.NewWriter(io.Discard, lzma.WithSize(10))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func TestEdgeMarkerAfterSizeEndsTheCoder(t *testing.T) {
 
 	var buf bytes.Buffer
 
-	w, err := lzma.WriterConfig{SizeInHeader: true, Size: int64(len(data)), EOSMarker: true}.NewWriter(&buf)
+	w, err := lzma.NewWriter(&buf, lzma.WithSize(int64(len(data))), lzma.WithEOSMarker())
 	if err != nil {
 		t.Fatal(err)
 	}

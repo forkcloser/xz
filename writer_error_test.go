@@ -42,7 +42,7 @@ func TestWriterErrorIsSticky(t *testing.T) {
 	// first block's data is the third.
 	fw := &failingWriter{allow: 2, err: ioErr}
 
-	w, err := WriterConfig{BlockSize: 1024}.NewWriter(fw)
+	w, err := NewWriter(fw, WithBlockSize(1024))
 	if err != nil {
 		t.Fatal(err)
 	}

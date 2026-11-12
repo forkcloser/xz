@@ -6,6 +6,7 @@ package lzma
 
 import (
 	"errors"
+	"fmt"
 	"io"
 )
 
@@ -13,25 +14,6 @@ import (
 var (
 	errNoProgress = errors.New("lzma: Reader2 doesn't get data")
 )
-
-// Reader2Config stores the parameters for the LZMA2 reader.
-//
-//nolint:recvcheck // NewReader2 copies the config, so it works on a literal; Verify and fill take the pointer
-type Reader2Config struct {
-	DictCap int
-}
-
-// Verify checks the reader configuration for errors. Zero configuration values
-// will be replaced by default values.
-func (c *Reader2Config) Verify() error {
-	c.fill()
-
-	if !(MinDictCap <= c.DictCap && int64(c.DictCap) <= MaxDictCap) {
-		return errDictCap
-	}
-
-	return nil
-}
 
 // Reader2 supports the reading of LZMA2 chunk sequences. Note that the
 // first chunk should have a dictionary reset and the first compressed
@@ -61,20 +43,17 @@ type Reader2 struct {
 	cstate chunkState
 }
 
-// NewReader2 creates a reader for an LZMA2 chunk sequence.
-func NewReader2(lzma2 io.Reader) (r *Reader2, err error) {
-	return Reader2Config{}.NewReader2(lzma2)
-}
-
-// NewReader2 creates an LZMA2 reader using the given configuration.
-func (c Reader2Config) NewReader2(lzma2 io.Reader) (r *Reader2, err error) {
-	if err = c.Verify(); err != nil {
-		return nil, err
+// NewReader2 creates a reader for an LZMA2 chunk sequence encoded with a
+// dictionary of dictSize bytes, MinDictSize to MaxDictSize: the format
+// carries no dictionary size of its own, the container does.
+func NewReader2(lzma2 io.Reader, dictSize int) (r *Reader2, err error) {
+	if !(MinDictSize <= dictSize && int64(dictSize) <= MaxDictSize) {
+		return nil, fmt.Errorf("%w: %d", errDictSize, dictSize)
 	}
 
 	r = &Reader2{r: lzma2, cstate: start}
 
-	r.dict, err = newDecoderDict(c.DictCap)
+	r.dict, err = newDecoderDict(dictSize)
 	if err != nil {
 		return nil, err
 	}
@@ -86,20 +65,13 @@ func (c Reader2Config) NewReader2(lzma2 io.Reader) (r *Reader2, err error) {
 	return r, nil
 }
 
-// fill converts the zero values of the configuration to the default values.
-func (c *Reader2Config) fill() {
-	if c.DictCap == 0 {
-		c.DictCap = defaultDictCap
-	}
-}
-
-// DictCap returns the dictionary capacity the reader was created with.
-func (r *Reader2) DictCap() int { return r.dict.dictCap }
+// DictSize returns the dictionary size the reader was created with.
+func (r *Reader2) DictSize() int { return r.dict.dictCap }
 
 // Reset prepares the reader to decode a fresh LZMA2 chunk sequence from z,
 // reusing the reader's allocations: the decoder with its probability models,
-// the dictionary buffer and the chunk buffer. The dictionary capacity stays
-// what the reader was created with. As with NewReader2, the first chunk
+// the dictionary buffer and the chunk buffer. The dictionary size stays what the
+// reader was created with. As with NewReader2, the first chunk
 // header is read immediately, and the chunk sequence must start with a
 // dictionary reset; an error is deferred to the first Read.
 //

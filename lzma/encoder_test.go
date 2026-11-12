@@ -11,7 +11,7 @@ import (
 	"math/rand/v2"
 	"testing"
 
-	"github.com/forkcloser/xz/internal/randtxt"
+	"github.com/forkcloser/xz/v2/internal/randtxt"
 )
 
 const testString = `LZMA decoder test example
@@ -37,7 +37,7 @@ func cycle(t *testing.T, n int) {
 			len(testString))
 	}
 
-	const dictCap = MinDictCap
+	const dictCap = MinDictSize
 
 	m, err := newHashTable(dictCap, 4)
 	if err != nil {
@@ -124,7 +124,7 @@ func TestEncoderCycle2(t *testing.T) {
 	txt := buf.String()
 	buf.Reset()
 
-	const dictCap = MinDictCap
+	const dictCap = MinDictSize
 
 	m, err := newHashTable(dictCap, 4)
 	if err != nil {

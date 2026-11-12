@@ -8,7 +8,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/forkcloser/xz/lzma"
+	"github.com/forkcloser/xz/v2/lzma"
 )
 
 // tailReader is a reader over a chunk sequence followed by a suffix that
@@ -28,7 +28,7 @@ func TestContractReader2StopsAtTheSequencesEnd(t *testing.T) {
 			stream := lzma2(t, c, data)
 			src := tailReader(stream, "SUFFIX after the sequence")
 
-			r, err := lzma.Reader2Config{DictCap: 8 << 20}.NewReader2(src)
+			r, err := lzma.NewReader2(src, 8<<20)
 			if err != nil {
 				t.Fatalf("%s, %s: NewReader2: %v", name, cname, err)
 			}
@@ -63,9 +63,9 @@ func TestContractReader2NeverReturnsNothingWithoutAnError(t *testing.T) {
 
 	for name, data := range corpus(t) {
 		for _, size := range []int{1, 3, 7, 64, 4096} {
-			stream := lzma2(t, lzma.Writer2Config{}, data)
+			stream := lzma2(t, w2case{}, data)
 
-			r, err := lzma.Reader2Config{DictCap: 8 << 20}.NewReader2(bytes.NewReader(stream))
+			r, err := lzma.NewReader2(bytes.NewReader(stream), 8<<20)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -105,7 +105,7 @@ func TestContractReader2NeverReturnsNothingWithoutAnError(t *testing.T) {
 //
 //nolint:paralleltest // measures the heap; another test's allocations in the window would be counted
 func TestContractReader2AllocatesTheDictionaryLazily(t *testing.T) {
-	stream := lzma2(t, lzma.Writer2Config{}, []byte("a small stream of a few bytes"))
+	stream := lzma2(t, w2case{}, []byte("a small stream of a few bytes"))
 
 	var before, after runtime.MemStats
 
@@ -115,7 +115,7 @@ func TestContractReader2AllocatesTheDictionaryLazily(t *testing.T) {
 	runtime.GC()
 	runtime.ReadMemStats(&before)
 
-	r, err := lzma.Reader2Config{DictCap: 1 << 30}.NewReader2(bytes.NewReader(stream))
+	r, err := lzma.NewReader2(bytes.NewReader(stream), 1<<30)
 	if err != nil {
 		t.Fatal(err)
 	}

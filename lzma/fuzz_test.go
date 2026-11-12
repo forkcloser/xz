@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/forkcloser/xz/lzma"
+	"github.com/forkcloser/xz/v2/lzma"
 )
 
 // FuzzClassic holds the classic reader to the reference decoder on
@@ -44,7 +44,12 @@ func FuzzLZMA2(f *testing.F) {
 			return
 		}
 
-		classify(t, "fuzz", referenceLZMA2Verdict(lzma.MinDictCap<<4)(stream), lzma2Verdict(lzma.MinDictCap<<4)(stream))
+		classify(
+			t,
+			"fuzz",
+			referenceLZMA2Verdict(lzma.MinDictSize<<4)(stream),
+			lzma2Verdict(lzma.MinDictSize<<4)(stream),
+		)
 	})
 }
 
@@ -60,7 +65,7 @@ func FuzzRoundTrip(f *testing.F) {
 			return
 		}
 
-		stream := classic(t, lzma.WriterConfig{}, data)
+		stream := classic(t, wcase{}, data)
 
 		got := classicVerdict(stream)
 		if got.err != nil || !bytes.Equal(got.data, data) {
@@ -72,9 +77,9 @@ func FuzzRoundTrip(f *testing.F) {
 			t.Fatalf("classic through the reference: %d bytes, %v", len(ref.data), ref.err)
 		}
 
-		stream = lzma2(t, lzma.Writer2Config{}, data)
+		stream = lzma2(t, w2case{}, data)
 
-		got = lzma2Verdict(0)(stream)
+		got = lzma2Verdict(defaultDict)(stream)
 		if got.err != nil || !bytes.Equal(got.data, data) {
 			t.Fatalf("lzma2: %d bytes, %v", len(got.data), got.err)
 		}

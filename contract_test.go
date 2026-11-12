@@ -33,8 +33,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/forkcloser/xz"
-	"github.com/forkcloser/xz/lzma"
+	"github.com/forkcloser/xz/v2"
+	"github.com/forkcloser/xz/v2/lzma"
 )
 
 // cData is n bytes of text with a random run in the middle.
@@ -95,9 +95,21 @@ func refBlocks(tb testing.TB, data []byte, size int) []refBlock {
 	return blocks
 }
 
-// checks are the check types by name.
-func checks() map[string]byte {
-	return map[string]byte{"none": xz.None, "crc32": xz.CRC32, "crc64": xz.CRC64, "sha256": xz.SHA256}
+// checks are the check types by name, as the writer takes them and as the
+// stream flags carry them.
+func checks() map[string]struct {
+	check xz.Check
+	flags byte
+} {
+	return map[string]struct {
+		check xz.Check
+		flags byte
+	}{
+		"none":   {xz.CheckNone, flagNone},
+		"crc32":  {xz.CheckCRC32, flagCRC32},
+		"crc64":  {xz.CheckCRC64, flagCRC64},
+		"sha256": {xz.CheckSHA256, flagSHA256},
+	}
 }
 
 // both decodes data through the sequential and the parallel reader and
@@ -111,7 +123,7 @@ func both(data []byte) (sequential, parallel verdict) {
 		sequential = verdict{data: out, err: rerr}
 	}
 
-	pr, err := xz.NewParallelReader(bytes.NewReader(data), int64(len(data)))
+	pr, err := xz.NewReader(bytes.NewReader(data), xz.WithWorkers(4))
 	if err != nil {
 		return sequential, verdict{err: err}
 	}
@@ -143,9 +155,12 @@ func TestContractWriter(t *testing.T) {
 			for _, blockSize := range []int64{0, 1024, 65536} {
 				var buf bytes.Buffer
 
-				c := xz.WriterConfig{CheckSum: check, NoCheckSum: check == xz.None, BlockSize: blockSize}
+				opts := []xz.Option{xz.WithCheck(check.check)}
+				if blockSize > 0 {
+					opts = append(opts, xz.WithBlockSize(blockSize))
+				}
 
-				w, err := c.NewWriter(&buf)
+				w, err := xz.NewWriter(&buf, opts...)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -165,7 +180,7 @@ func TestContractWriter(t *testing.T) {
 					t.Fatalf("len %d, %s, block %d: the reference: %d bytes, %v", n, cname, blockSize, len(got), err)
 				}
 
-				if file[7] != check {
+				if file[7] != check.flags {
 					t.Fatalf("len %d, %s: the stream flags say check %#x", n, cname, file[7])
 				}
 
@@ -218,7 +233,7 @@ func TestContractReaders(t *testing.T) {
 
 	for cname, check := range checks() {
 		for _, sizes := range []bool{false, true} {
-			o := refOptions{check: check, sizes: sizes, dictCode: 35}
+			o := refOptions{check: check.flags, sizes: sizes, dictCode: 35}
 
 			files := map[string][]byte{
 				"one block": refStream(o, refBlocks(t, data, 0)),
@@ -317,14 +332,14 @@ func TestContractMalformed(t *testing.T) {
 	data := cData(600)
 
 	files := map[string][]byte{
-		"crc32 sizes":  refStream(refOptions{check: xz.CRC32, sizes: true, dictCode: 20}, refBlocks(t, data, 250)),
-		"crc64":        refStream(refOptions{check: xz.CRC64, dictCode: 20}, refBlocks(t, data, 0)),
-		"sha256 empty": refStream(refOptions{check: xz.SHA256, sizes: true, dictCode: 20}, refBlocks(t, []byte{}, 0)),
-		"no blocks":    refStream(refOptions{check: xz.CRC32, sizes: true, dictCode: 20}, nil),
+		"crc32 sizes":  refStream(refOptions{check: flagCRC32, sizes: true, dictCode: 20}, refBlocks(t, data, 250)),
+		"crc64":        refStream(refOptions{check: flagCRC64, dictCode: 20}, refBlocks(t, data, 0)),
+		"sha256 empty": refStream(refOptions{check: flagSHA256, sizes: true, dictCode: 20}, refBlocks(t, []byte{}, 0)),
+		"no blocks":    refStream(refOptions{check: flagCRC32, sizes: true, dictCode: 20}, nil),
 		"none streams": refFile(
 			4,
-			refStream(refOptions{check: xz.None, dictCode: 20}, refBlocks(t, data[:300], 0)),
-			refStream(refOptions{check: xz.None, sizes: true, dictCode: 20}, refBlocks(t, data[300:], 0)),
+			refStream(refOptions{check: flagNone, dictCode: 20}, refBlocks(t, data[:300], 0)),
+			refStream(refOptions{check: flagNone, sizes: true, dictCode: 20}, refBlocks(t, data[300:], 0)),
 		),
 	}
 
@@ -375,7 +390,7 @@ func TestContractAlignment(t *testing.T) {
 
 	for cname, check := range checks() {
 		for n := 1; n <= 8; n++ {
-			o := refOptions{check: check, dictCode: 20}
+			o := refOptions{check: check.flags, dictCode: 20}
 			files := map[string][]byte{
 				"alone": refStream(o, []refBlock{rawBlock(data[:n])}),
 				"last":  refStream(o, []refBlock{rawBlock(data[:5]), rawBlock(data[5 : 5+n])}),
@@ -406,7 +421,7 @@ func TestContractLongPadding(t *testing.T) {
 	t.Parallel()
 
 	data := cData(2000)
-	o := refOptions{check: xz.CRC32, dictCode: 20}
+	o := refOptions{check: flagCRC32, dictCode: 20}
 
 	for _, padding := range []int{4, 40 << 10, 70 << 10} {
 		file := refFile(padding, refStream(o, refBlocks(t, data[:1000], 0)), refStream(o, refBlocks(t, data[1000:], 0)))
@@ -464,7 +479,7 @@ func TestContractWriteTo(t *testing.T) {
 	t.Parallel()
 
 	data := cData(40000)
-	file := refStream(refOptions{check: xz.CRC64, dictCode: 20}, refBlocks(t, data, 9000))
+	file := refStream(refOptions{check: flagCRC64, dictCode: 20}, refBlocks(t, data, 9000))
 
 	want, err := refParse(file)
 	if err != nil {
@@ -483,7 +498,7 @@ func TestContractWriteTo(t *testing.T) {
 		{"failing", 12345, errSink, errSink},
 		{"stuck", 12345, nil, io.ErrShortWrite},
 	} {
-		pr, err := xz.NewParallelReader(bytes.NewReader(file), int64(len(file)))
+		pr, err := xz.NewReader(bytes.NewReader(file), xz.WithWorkers(4))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -559,7 +574,7 @@ func TestContractLyingIndex(t *testing.T) {
 
 	for cname, check := range checks() {
 		for _, sizes := range []bool{false, true} {
-			file := refStream(refOptions{check: check, sizes: sizes, dictCode: 20}, refBlocks(t, data, 250))
+			file := refStream(refOptions{check: check.flags, sizes: sizes, dictCode: 20}, refBlocks(t, data, 250))
 
 			if _, err := refParse(file); err != nil {
 				t.Fatal(err)

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/forkcloser/xz"
+	"github.com/forkcloser/xz/v2"
 )
 
 // gatedReaderAt serves the first open bytes of data and its last tail
@@ -36,7 +36,7 @@ func (g *gatedReaderAt) Release() { g.once.Do(func() { close(g.release) }) }
 
 func anyCheck() byte {
 	for _, c := range checks() {
-		return c
+		return c.flags
 	}
 
 	return 0
@@ -64,7 +64,7 @@ func TestContractParallelReaderCloseFreesAWaitingRead(t *testing.T) {
 	file := refStream(refOptions{check: anyCheck(), sizes: true, dictCode: 35}, refBlocks(t, data, 64<<10))
 	gate := &gatedReaderAt{data: file, open: int64(len(file) / 2), tail: 96 << 10, release: make(chan struct{})}
 
-	r, err := xz.ParallelReaderConfig{Workers: 2}.NewParallelReader(gate, int64(len(file)))
+	r, err := xz.NewReader(io.NewSectionReader(gate, 0, int64(len(file))), xz.WithWorkers(2))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestContractParallelReaderCloseFreesAWaitingRead(t *testing.T) {
 
 	// The whole file through a source that answers: io.EOF, and io.EOF
 	// still after Close.
-	whole, err := xz.ParallelReaderConfig{Workers: 2}.NewParallelReader(bytes.NewReader(file), int64(len(file)))
+	whole, err := xz.NewReader(bytes.NewReader(file), xz.WithWorkers(2))
 	if err != nil {
 		t.Fatal(err)
 	}

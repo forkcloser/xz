@@ -9,7 +9,6 @@ import (
 	"errors"
 	"io"
 	"testing"
-	"time"
 )
 
 // errFailingReaderAt fails every read with a distinctive I/O error.
@@ -29,7 +28,7 @@ func TestErrCorruptDistinguishesFromIO(t *testing.T) {
 	bad := hostileStream([]byte{0, 0, 0, 0},
 		[]hostileRecord{{unpaddedSize: 1, uncompressedSize: 1 << 60}}, -1)
 
-	_, err := NewParallelReader(bytes.NewReader(bad), int64(len(bad)))
+	_, err := NewReader(bytes.NewReader(bad), WithWorkers(4))
 	if err == nil {
 		t.Fatal("hostile file accepted")
 	}
@@ -41,7 +40,7 @@ func TestErrCorruptDistinguishesFromIO(t *testing.T) {
 	// A transport failure must not be mistaken for corruption.
 	ioErr := errors.New("disk on fire")
 
-	_, err = NewParallelReader(errFailingReaderAt{err: ioErr}, 1024)
+	_, err = NewReader(io.NewSectionReader(errFailingReaderAt{err: ioErr}, 0, 1024), WithWorkers(4))
 	if !errors.Is(err, ioErr) {
 		t.Errorf("I/O failure gave %v; want it to wrap the reader's error", err)
 	}
@@ -59,7 +58,7 @@ func TestErrClosedMatchesSentinel(t *testing.T) {
 	data := parallelTestData(1 << 14)
 	xz := compressMultiBlock(t, data, 4<<10)
 
-	r, err := NewParallelReader(bytes.NewReader(xz), int64(len(xz)))
+	r, err := NewReader(bytes.NewReader(xz), WithWorkers(4))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,44 +121,5 @@ func TestNonCanonicalUvarintRejected(t *testing.T) {
 		if err != nil || x != u || m != n {
 			t.Errorf("round trip of %d: got (%d, %d, %v)", u, x, m, err)
 		}
-	}
-}
-
-// TestZeroWorkersStillDecodes covers the promoted Workers field being set to
-// something unusable between construction and the first read. It used to leave
-// Read waiting on blocks that nothing was decoding.
-func TestZeroWorkersStillDecodes(t *testing.T) {
-	t.Parallel()
-
-	data := parallelTestData(1 << 16)
-	xz := compressMultiBlock(t, data, 8<<10)
-
-	r, err := NewParallelReader(bytes.NewReader(xz), int64(len(xz)))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	defer func() { _ = r.Close() }()
-
-	r.Workers = 0
-
-	done := make(chan error, 1)
-
-	go func() {
-		got, err := io.ReadAll(r)
-		if err == nil && !bytes.Equal(got, data) {
-			err = errors.New("decoded data differs from original")
-		}
-
-		done <- err
-	}()
-
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatal(err)
-		}
-	case <-time.After(20 * time.Second):
-		t.Fatal("Read never returned with Workers set to zero")
 	}
 }

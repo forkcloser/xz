@@ -13,7 +13,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/forkcloser/xz"
+	"github.com/forkcloser/xz/v2"
 )
 
 // bothReaders decodes data with the sequential and the parallel reader and
@@ -37,7 +37,7 @@ func bothReaders(t *testing.T, name string, data []byte, want error) {
 		t.Errorf("%s: sequential reader: %d bytes, %v; want %v", name, len(got), err, want)
 	}
 
-	pr, err := xz.NewParallelReader(bytes.NewReader(data), int64(len(data)))
+	pr, err := xz.NewReader(bytes.NewReader(data), xz.WithWorkers(4))
 	if err == nil {
 		got, err = io.ReadAll(pr)
 

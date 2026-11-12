@@ -46,7 +46,7 @@ Beyond these two benchmarks:
 
 - Repetitive data (RLE-heavy 10 MB corpus: zero runs, short patterns):
   decode 333 → 1,461 MB/s (4.4×), from the dictionary match-copy fast path.
-- Multi-block files: `ParallelReader` decodes a 470-block, 1.65 GiB
+- Multi-block files: the reader with 18 workers decodes a 470-block, 1.65 GiB
   `llvm.tar.xz` in 7.4 s against 79.7 s serial (10.7× on 18 workers), output
   hash identical to `xz -dc`.
 - `NewReader(*os.File)` on the classic LZMA1 format: 7 → 84 MB/s (11.6×),
@@ -70,7 +70,7 @@ machine (the final row is within noise of the current figure above):
 | 7 | Thread range/code through the whole operation: every codec `decode` takes and returns them, state committed once per `readOp`; dead error plumbing removed (`decoder.go`, `lengthcodec.go`, `distcodec.go`, `prob.go`, the codecs). | 103.2 |
 | 8 | Direct dictionary match copy with pattern doubling for overlapping matches, wrap-around kept on the old segment loop (`lzma/decoderdict.go`). Flat on enwik7; the 4.4× repetitive-data result above. | 103.4 |
 | 9 | Hand-inline the six per-operation `isMatch`/`isRep*` bits in `readOp`. The same on `lengthCodec`'s two choice bits measured nothing and was reverted. | 106.3 |
-| 10 | `ParallelReader`: parse the index backwards, decode independent blocks concurrently, deliver in order, bounded to `Workers+2` blocks in flight (`parallelreader.go`, `format.go`). | — |
+| 10 | Block-parallel decoding (v1's `ParallelReader`, v2's `WithWorkers`): parse the index backwards, decode independent blocks concurrently, deliver in order, bounded to `Workers+2` blocks in flight (`parallelreader.go`, `format.go`). | — |
 | 11 | Reuse coder state across LZMA2 property resets instead of rebuilding ~145 probability trees per resetting chunk (`lzma/state.go`, the codecs): 385 → 18.6 MiB allocated on a 20 000-chunk stream, 30% less time. Invisible on enwik7. | — |
 | 12 | Wrap a plain `io.Reader` in `bufio` inside the LZMA1 `NewReader`; an input that is already an `io.ByteReader` is left alone so its position stays exact. | — |
 
@@ -120,7 +120,7 @@ effectively random index for every input byte.
 
 Throughput against dictionary size, same corpus, same code:
 
-| DictCap         | Throughput | Ratio  |
+| Dictionary      | Throughput | Ratio  |
 | --------------- | ---------- | ------ |
 | 64 KiB          | 24.8 MB/s  | 0.3557 |
 | 256 KiB         | 25.5 MB/s  | 0.3444 |
@@ -150,7 +150,7 @@ Decode profile after step 9, share of decode time:
   callers read from the window is an API change with a modest,
   bandwidth-bound upside.
 - **Parallelism.** Chunks within one LZMA2 block share dictionary state, so
-  single-block decode is inherently serial. `ParallelReader` covers
+  single-block decode is inherently serial. `WithWorkers` covers
   multi-block files only.
 - **Writer.** See above: the working set of the match finder, and pulling that
   lever changes the output.

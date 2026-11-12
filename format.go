@@ -13,8 +13,8 @@ import (
 	"hash/crc32"
 	"io"
 
-	"github.com/forkcloser/xz/internal/filters"
-	"github.com/forkcloser/xz/lzma"
+	"github.com/forkcloser/xz/v2/internal/bytereader"
+	"github.com/forkcloser/xz/v2/internal/filters"
 )
 
 // Values the footer and block-header encoders refuse to write.
@@ -60,12 +60,12 @@ const headerMagic = "\xfd7zXZ\x00"
 // HeaderLen provides the length of the xz file header.
 const HeaderLen = 12
 
-// Constants for the checksum methods supported by xz.
+// The check values of the stream flags.
 const (
-	None   byte = 0x0
-	CRC32  byte = 0x1
-	CRC64  byte = 0x4
-	SHA256 byte = 0xa
+	checkNone   byte = 0x0
+	checkCRC32  byte = 0x1
+	checkCRC64  byte = 0x4
+	checkSHA256 byte = 0xa
 )
 
 // errInvalidFlags indicates that flags are invalid.
@@ -75,7 +75,7 @@ var errInvalidFlags = corruptf("xz: invalid flags")
 // invalid.
 func verifyFlags(flags byte) error {
 	switch flags {
-	case None, CRC32, CRC64, SHA256:
+	case checkNone, checkCRC32, checkCRC64, checkSHA256:
 		return nil
 	default:
 		return errInvalidFlags
@@ -86,13 +86,13 @@ func verifyFlags(flags byte) error {
 // hash method encoded in flags.
 func newHashFunc(flags byte) (newHash func() hash.Hash, err error) {
 	switch flags {
-	case None:
+	case checkNone:
 		newHash = newNoneHash
-	case CRC32:
+	case checkCRC32:
 		newHash = newCRC32
-	case CRC64:
+	case checkCRC64:
 		newHash = newCRC64
-	case SHA256:
+	case checkSHA256:
 		newHash = sha256.New
 	default:
 		err = errInvalidFlags
@@ -526,8 +526,8 @@ type filter interface {
 	id() uint64
 	UnmarshalBinary(data []byte) error
 	MarshalBinary() (data []byte, err error)
-	reader(r io.Reader, c *ReaderConfig, cache *lzma2Cache) (fr io.Reader, err error)
-	writeCloser(w io.WriteCloser, c *WriterConfig) (fw io.WriteCloser, err error)
+	reader(r io.Reader, o *options, cache *lzma2Cache) (fr io.Reader, err error)
+	writeCloser(w io.WriteCloser, o *options) (fw io.WriteCloser, err error)
 	// filter must be last filter
 	last() bool
 }
@@ -536,7 +536,7 @@ type filter interface {
 // ID, the size of its properties and the properties, dispatched on the ID
 // to the filter that parses them.
 func readFilter(r io.Reader) (f filter, err error) {
-	br := lzma.ByteReader(r)
+	br := bytereader.New(r)
 
 	id, _, err := readUvarint(br)
 	if err != nil {
@@ -726,7 +726,7 @@ func readIndexBody(r io.Reader, expectedRecordLen, maxRecords int) (records []re
 	// index indicator
 	crc.Write([]byte{0})
 
-	br := lzma.ByteReader(io.TeeReader(r, crc))
+	br := bytereader.New(io.TeeReader(r, crc))
 
 	// number of records
 	u, k, err := readUvarint(br)

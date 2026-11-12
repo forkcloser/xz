@@ -12,13 +12,21 @@ import (
 	"hash/crc32"
 	"hash/crc64"
 
-	"github.com/forkcloser/xz/internal/lzmaspec"
+	"github.com/forkcloser/xz/v2/internal/lzmaspec"
 )
 
 // The reference container: a .xz stream written and read from the file
 // format specification (xz-file-format.txt), with the LZMA2 payload decoded
 // by the reference decoder. It shares nothing with the package: the tests
 // hold the package's writer to refParse and its readers to refStream.
+
+// The check values of the stream flags, as the format defines them.
+const (
+	flagNone   byte = 0x0
+	flagCRC32  byte = 0x1
+	flagCRC64  byte = 0x4
+	flagSHA256 byte = 0xa
+)
 
 // refBlock is one block of a reference stream: its data and that data as
 // an LZMA2 chunk sequence.
@@ -29,7 +37,7 @@ type refBlock struct {
 
 // refOptions shape a reference stream.
 type refOptions struct {
-	check    byte // None, CRC32, CRC64 or SHA256
+	check    byte // flagNone, flagCRC32, flagCRC64 or flagSHA256
 	sizes    bool // Compressed Size and Uncompressed Size in every block header
 	dictCode byte // the LZMA2 filter's dictionary size code
 }
@@ -47,7 +55,7 @@ func refVLI(v uint64) []byte {
 	return append(out, byte(v))
 }
 
-// refCRC32 appends the little-endian CRC-32 of data.
+// flagCRC32 appends the little-endian CRC-32 of data.
 func refCRC32(data []byte) []byte {
 	var c [4]byte
 

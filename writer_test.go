@@ -12,8 +12,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/forkcloser/xz"
-	"github.com/forkcloser/xz/internal/randtxt"
+	"github.com/forkcloser/xz/v2"
+	"github.com/forkcloser/xz/v2/internal/randtxt"
 )
 
 func TestWriter(t *testing.T) {
@@ -196,7 +196,7 @@ func TestWriterNoneCheck(t *testing.T) {
 
 	buf.Reset()
 
-	w, err := xz.WriterConfig{NoCheckSum: true}.NewWriter(&buf)
+	w, err := xz.NewWriter(&buf, xz.WithCheck(xz.CheckNone))
 	if err != nil {
 		t.Fatalf("NewWriter error %s", err)
 	}

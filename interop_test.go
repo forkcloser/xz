@@ -16,8 +16,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/forkcloser/xz"
-	"github.com/forkcloser/xz/lzma"
+	"github.com/forkcloser/xz/v2"
+	"github.com/forkcloser/xz/v2/lzma"
 )
 
 // The interop lane: XZ Utils, the reference implementation, as the oracle.
@@ -150,8 +150,8 @@ func TestInteropWriterToXZUtils(t *testing.T) {
 
 	bin := xzUtils(t)
 
-	xzWriter := func(c xz.WriterConfig) func(io.Writer) (io.WriteCloser, error) {
-		return func(w io.Writer) (io.WriteCloser, error) { return c.NewWriter(w) }
+	xzWriter := func(opts ...xz.Option) func(io.Writer) (io.WriteCloser, error) {
+		return func(w io.Writer) (io.WriteCloser, error) { return xz.NewWriter(w, opts...) }
 	}
 
 	cases := []struct {
@@ -160,13 +160,33 @@ func TestInteropWriterToXZUtils(t *testing.T) {
 		// The options xz needs to read the stream.
 		read []string
 	}{
-		{"default", xzWriter(xz.WriterConfig{}), nil},
-		{"no-check", xzWriter(xz.WriterConfig{NoCheckSum: true}), nil},
-		{"crc32", xzWriter(xz.WriterConfig{CheckSum: xz.CRC32}), nil},
-		{"sha256", xzWriter(xz.WriterConfig{CheckSum: xz.SHA256}), nil},
-		{"blocks-64k", xzWriter(xz.WriterConfig{BlockSize: 64 << 10}), nil},
-		{"min-dict", xzWriter(xz.WriterConfig{DictCap: lzma.MinDictCap}), nil},
-		{"lc0-lp2-pb0", xzWriter(xz.WriterConfig{Properties: &lzma.Properties{LC: 0, LP: 2, PB: 0}}), nil},
+		{"default", xzWriter(), nil},
+		{"no-check", xzWriter(xz.WithCheck(xz.CheckNone)), nil},
+		{"crc32", xzWriter(xz.WithCheck(xz.CheckCRC32)), nil},
+		{"sha256", xzWriter(xz.WithCheck(xz.CheckSHA256)), nil},
+		{"blocks-64k", xzWriter(xz.WithBlockSize(64 << 10)), nil},
+		{"min-dict", xzWriter(xz.WithDictSize(lzma.MinDictSize)), nil},
+		{"lc0-lp2-pb0", xzWriter(xz.WithProperties(0, 2, 0)), nil},
+		// The write side of every filter: what the writer applies, xz must
+		// undo, with and without a start offset, and in a chain.
+		{"x86", xzWriter(xz.WithFilters(xz.Filter{ID: xz.X86})), nil},
+		{"x86-start", xzWriter(xz.WithFilters(xz.Filter{ID: xz.X86, StartOffset: 4096})), nil},
+		{"powerpc", xzWriter(xz.WithFilters(xz.Filter{ID: xz.PowerPC})), nil},
+		{"ia64", xzWriter(xz.WithFilters(xz.Filter{ID: xz.IA64, StartOffset: 16})), nil},
+		{"arm", xzWriter(xz.WithFilters(xz.Filter{ID: xz.ARM})), nil},
+		{"armthumb", xzWriter(xz.WithFilters(xz.Filter{ID: xz.ARMThumb, StartOffset: 2})), nil},
+		{"sparc", xzWriter(xz.WithFilters(xz.Filter{ID: xz.SPARC})), nil},
+		{"arm64", xzWriter(xz.WithFilters(xz.Filter{ID: xz.ARM64, StartOffset: 8192})), nil},
+		{"riscv", xzWriter(xz.WithFilters(xz.Filter{ID: xz.RISCV})), nil},
+		{"delta", xzWriter(xz.WithFilters(xz.Filter{ID: xz.Delta, Distance: 4})), nil},
+		{
+			"delta-x86-blocks",
+			xzWriter(
+				xz.WithFilters(xz.Filter{ID: xz.Delta, Distance: 2}, xz.Filter{ID: xz.X86}),
+				xz.WithBlockSize(64<<10),
+			),
+			nil,
+		},
 		{"lzma", func(w io.Writer) (io.WriteCloser, error) { return lzma.NewWriter(w) }, []string{"--format=lzma"}},
 		{
 			"lzma2-raw",
@@ -209,9 +229,9 @@ func readAll(open func(io.Reader) (io.Reader, error), stream []byte) ([]byte, er
 	return io.ReadAll(r)
 }
 
-// readParallel decodes a stream through the ParallelReader.
+// readParallel decodes a stream through the Reader with workers.
 func readParallel(stream []byte) ([]byte, error) {
-	r, err := xz.NewParallelReader(bytes.NewReader(stream), int64(len(stream)))
+	r, err := xz.NewReader(bytes.NewReader(stream), xz.WithWorkers(4))
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +289,7 @@ func TestInteropXZUtilsToReaders(t *testing.T) {
 		{
 			"lzma2-raw",
 			[]string{"--format=raw", "--lzma2=preset=6"},
-			func(r io.Reader) (io.Reader, error) { return lzma.NewReader2(r) },
+			func(r io.Reader) (io.Reader, error) { return lzma.NewReader2(r, 8<<20) },
 		},
 	}
 
@@ -388,9 +408,10 @@ func TestInteropConcatenated(t *testing.T) {
 				t.Fatalf("xz --single-stream decodes %d bytes, want %d", len(out), len(first))
 			}
 
-			single := xz.ReaderConfig{SingleStream: true}
-
-			out, err = readAll(func(r io.Reader) (io.Reader, error) { return single.NewReader(r) }, tc.stream)
+			out, err = readAll(
+				func(r io.Reader) (io.Reader, error) { return xz.NewReader(r, xz.WithSingleStream()) },
+				tc.stream,
+			)
 			if !errors.Is(err, xz.ErrCorrupt) {
 				t.Fatalf("SingleStream: %v, want ErrCorrupt after the first stream", err)
 			}

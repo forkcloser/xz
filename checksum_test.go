@@ -12,51 +12,39 @@ import (
 	"testing"
 )
 
-// TestNoneCheckSumFieldIsNotSelectable pins a trap in the writer API. None is
-// 0x0 and WriterConfig.fill treats a zero CheckSum as "not set", so
-// WriterConfig{CheckSum: None} silently produces a CRC-64 stream instead of an
-// unchecked one, with no error. Selecting None requires the separate
-// NoCheckSum field.
-func TestNoneCheckSumFieldIsNotSelectable(t *testing.T) {
+// TestWithCheck: WithCheck(CheckNone) writes an unchecked stream, and the
+// default is CRC64; None is the stream flags' zero, which an API with a zero
+// default could not have selected.
+func TestWithCheck(t *testing.T) {
 	t.Parallel()
 
-	var buf bytes.Buffer
+	for _, tc := range []struct {
+		opts []Option
+		want byte
+	}{
+		{nil, checkCRC64},
+		{[]Option{WithCheck(CheckNone)}, checkNone},
+		{[]Option{WithCheck(CheckCRC32)}, checkCRC32},
+		{[]Option{WithCheck(CheckSHA256)}, checkSHA256},
+	} {
+		var buf bytes.Buffer
 
-	w, err := WriterConfig{CheckSum: None}.NewWriter(&buf)
-	if err != nil {
-		t.Fatal(err)
-	}
+		w, err := NewWriter(&buf, tc.opts...)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	if _, err = w.Write([]byte("x")); err != nil {
-		t.Fatal(err)
-	}
+		if _, err = w.Write([]byte("x")); err != nil {
+			t.Fatal(err)
+		}
 
-	if err = w.Close(); err != nil {
-		t.Fatal(err)
-	}
+		if err = w.Close(); err != nil {
+			t.Fatal(err)
+		}
 
-	if got := buf.Bytes()[7]; got != CRC64 {
-		t.Fatalf("CheckSum: None produced check %#x; documenting it as %#x",
-			got, CRC64)
-	}
-
-	buf.Reset()
-
-	w, err = WriterConfig{NoCheckSum: true}.NewWriter(&buf)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err = w.Write([]byte("x")); err != nil {
-		t.Fatal(err)
-	}
-
-	if err = w.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	if got := buf.Bytes()[7]; got != None {
-		t.Fatalf("NoCheckSum produced check %#x; want %#x", got, None)
+		if got := buf.Bytes()[7]; got != tc.want {
+			t.Fatalf("check %#x; want %#x", got, tc.want)
+		}
 	}
 }
 
@@ -94,9 +82,9 @@ func TestReadReferenceFiles(t *testing.T) {
 				t.Error("sequential decode differs from the original")
 			}
 
-			pr, err := NewParallelReader(bytes.NewReader(file), int64(len(file)))
+			pr, err := NewReader(bytes.NewReader(file), WithWorkers(4))
 			if err != nil {
-				t.Fatalf("NewParallelReader: %s", err)
+				t.Fatalf("NewReader: %s", err)
 			}
 			defer func() { _ = pr.Close() }()
 

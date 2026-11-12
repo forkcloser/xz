@@ -12,7 +12,7 @@ import (
 func TestHeader(t *testing.T) {
 	t.Parallel()
 
-	h := header{flags: CRC32}
+	h := header{flags: checkCRC32}
 
 	data, err := h.MarshalBinary()
 	if err != nil {
@@ -32,7 +32,7 @@ func TestHeader(t *testing.T) {
 func TestFooter(t *testing.T) {
 	t.Parallel()
 
-	f := footer{indexSize: 64, flags: CRC32}
+	f := footer{indexSize: 64, flags: checkCRC32}
 
 	data, err := f.MarshalBinary()
 	if err != nil {
@@ -181,7 +181,7 @@ func TestBlockHeader(t *testing.T) {
 		t.Fatalf("want filter %T is not *lzmaFilter", h.filters[0])
 	}
 
-	if glf.dictCap != hlf.dictCap {
-		t.Errorf("got dictCap %d; want %d", glf.dictCap, hlf.dictCap)
+	if glf.dictSize != hlf.dictSize {
+		t.Errorf("got dictSize %d; want %d", glf.dictSize, hlf.dictSize)
 	}
 }

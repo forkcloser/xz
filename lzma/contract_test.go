@@ -26,8 +26,8 @@ import (
 	"math/rand/v2"
 	"testing"
 
-	"github.com/forkcloser/xz/internal/lzmaspec"
-	"github.com/forkcloser/xz/lzma"
+	"github.com/forkcloser/xz/v2/internal/lzmaspec"
+	"github.com/forkcloser/xz/v2/lzma"
 )
 
 // corpus is the inputs every contract runs over: empty, one byte, a chunk
@@ -58,27 +58,57 @@ func corpus(tb testing.TB) map[string][]byte {
 	}
 }
 
+// wcase is one classic writer configuration under test: its options, the
+// dictionary they select (the default when zero) and whether the stream
+// carries an end marker.
+type wcase struct {
+	opts   []lzma.Option
+	dict   int
+	marker bool
+}
+
+// w2case is one LZMA2 writer configuration under test.
+type w2case struct {
+	opts []lzma.Option
+	dict int
+}
+
+// defaultDict is the writers' dictionary when the options name none.
+const defaultDict = 8 << 20
+
+func (c w2case) dictSize() int {
+	if c.dict == 0 {
+		return defaultDict
+	}
+
+	return c.dict
+}
+
 // writerConfigs are the classic writer's configurations the contracts run
 // with: the default, an explicit size, size and marker both, the smallest
 // dictionary, and the properties at their extremes.
-func writerConfigs(n int) map[string]lzma.WriterConfig {
-	return map[string]lzma.WriterConfig{
-		"default":         {},
-		"size":            {SizeInHeader: true, Size: int64(n)},
-		"size and marker": {SizeInHeader: true, Size: int64(n), EOSMarker: true},
-		"small dict":      {DictCap: lzma.MinDictCap, BufSize: 273},
-		"lc0 lp4":         {Properties: &lzma.Properties{LC: 0, LP: 4, PB: 2}},
-		"lc4 lp0 pb0":     {Properties: &lzma.Properties{LC: 4, LP: 0, PB: 0}},
-		"pb4":             {Properties: &lzma.Properties{LC: 3, LP: 0, PB: 4}},
+func writerConfigs(n int) map[string]wcase {
+	return map[string]wcase{
+		"default":         {marker: true},
+		"size":            {opts: []lzma.Option{lzma.WithSize(int64(n))}},
+		"size and marker": {opts: []lzma.Option{lzma.WithSize(int64(n)), lzma.WithEOSMarker()}, marker: true},
+		"small dict": {
+			opts:   []lzma.Option{lzma.WithDictSize(lzma.MinDictSize)},
+			dict:   lzma.MinDictSize,
+			marker: true,
+		},
+		"lc0 lp4":     {opts: []lzma.Option{lzma.WithProperties(0, 4, 2)}, marker: true},
+		"lc4 lp0 pb0": {opts: []lzma.Option{lzma.WithProperties(4, 0, 0)}, marker: true},
+		"pb4":         {opts: []lzma.Option{lzma.WithProperties(3, 0, 4)}, marker: true},
 	}
 }
 
-func classic(tb testing.TB, c lzma.WriterConfig, data []byte) []byte {
+func classic(tb testing.TB, c wcase, data []byte) []byte {
 	tb.Helper()
 
 	var buf bytes.Buffer
 
-	w, err := c.NewWriter(&buf)
+	w, err := lzma.NewWriter(&buf, c.opts...)
 	if err != nil {
 		tb.Fatal(err)
 	}
@@ -118,7 +148,7 @@ func TestContractClassicWriter(t *testing.T) {
 				t.Fatalf("%s, %s: the reference read %d of %d bytes", name, cname, out.Read, len(stream))
 			}
 
-			if wantMarker := c.EOSMarker || !c.SizeInHeader; out.Marker != wantMarker {
+			if wantMarker := c.marker; out.Marker != wantMarker {
 				t.Fatalf("%s, %s: end marker %v, want %v", name, cname, out.Marker, wantMarker)
 			}
 
@@ -153,22 +183,18 @@ func TestContractClassicReader(t *testing.T) {
 			if in.Len() != 0 {
 				t.Fatalf("%s, %s: %d bytes of the stream left unread", name, cname, in.Len())
 			}
-
-			if r.EOSMarker() != (c.EOSMarker || !c.SizeInHeader) {
-				t.Fatalf("%s, %s: EOSMarker %v", name, cname, r.EOSMarker())
-			}
 		}
 	}
 }
 
 // lzma2 writes data as a chunk sequence, flushing at each cut so the
 // sequence has several chunks and a chunk boundary inside the data.
-func lzma2(tb testing.TB, c lzma.Writer2Config, data []byte, cuts ...int) []byte {
+func lzma2(tb testing.TB, c w2case, data []byte, cuts ...int) []byte {
 	tb.Helper()
 
 	var buf bytes.Buffer
 
-	w, err := c.NewWriter2(&buf)
+	w, err := lzma.NewWriter2(&buf, c.opts...)
 	if err != nil {
 		tb.Fatal(err)
 	}
@@ -199,12 +225,12 @@ func lzma2(tb testing.TB, c lzma.Writer2Config, data []byte, cuts ...int) []byte
 }
 
 // writer2Configs are the LZMA2 writer's configurations.
-func writer2Configs() map[string]lzma.Writer2Config {
-	return map[string]lzma.Writer2Config{
+func writer2Configs() map[string]w2case {
+	return map[string]w2case{
 		"default":    {},
-		"small dict": {DictCap: lzma.MinDictCap, BufSize: 273},
-		"lc0 lp4":    {Properties: &lzma.Properties{LC: 0, LP: 4, PB: 2}},
-		"lc4 pb4":    {Properties: &lzma.Properties{LC: 4, LP: 0, PB: 4}},
+		"small dict": {opts: []lzma.Option{lzma.WithDictSize(lzma.MinDictSize)}, dict: lzma.MinDictSize},
+		"lc0 lp4":    {opts: []lzma.Option{lzma.WithProperties(0, 4, 2)}},
+		"lc4 pb4":    {opts: []lzma.Option{lzma.WithProperties(4, 0, 4)}},
 	}
 }
 
@@ -229,12 +255,7 @@ func TestContractLZMA2Writer(t *testing.T) {
 			for _, cut := range cuts(len(data)) {
 				stream := lzma2(t, c, data, cut...)
 
-				dictCap := c.DictCap
-				if dictCap == 0 {
-					dictCap = 8 << 20
-				}
-
-				got, err := lzmaspec.DecodeLZMA2(stream, uint32(dictCap))
+				got, err := lzmaspec.DecodeLZMA2(stream, uint32(c.dictSize()))
 				if err != nil || !bytes.Equal(got, data) {
 					t.Fatalf("%s, %s, cuts %v: the reference: %d bytes, %v", name, cname, cut, len(got), err)
 				}
@@ -255,7 +276,7 @@ func TestContractLZMA2Reader(t *testing.T) {
 				stream := lzma2(t, c, data, cut...)
 				in := bytes.NewReader(stream)
 
-				r, err := lzma.Reader2Config{DictCap: c.DictCap}.NewReader2(in)
+				r, err := lzma.NewReader2(in, c.dictSize())
 				if err != nil {
 					t.Fatalf("%s, %s: NewReader2: %v", name, cname, err)
 				}
@@ -333,7 +354,7 @@ func classify(t *testing.T, what string, ref, got verdict) {
 func classicVerdict(stream []byte) verdict {
 	// The dictionary cap is the reader's own limit, held to by its own
 	// test; the differential lets a flipped header declare any size.
-	r, err := lzma.ReaderConfig{DictCap: lzma.MaxDictCap}.NewReader(bytes.NewReader(stream))
+	r, err := lzma.NewReader(bytes.NewReader(stream), lzma.WithMaxDictSize(lzma.MaxDictSize))
 	if err != nil {
 		return verdict{err: err}
 	}
@@ -401,7 +422,7 @@ func TestContractClassicMalformed(t *testing.T) {
 
 func lzma2Verdict(dictCap int) func([]byte) verdict {
 	return func(stream []byte) verdict {
-		r, err := lzma.Reader2Config{DictCap: dictCap}.NewReader2(bytes.NewReader(stream))
+		r, err := lzma.NewReader2(bytes.NewReader(stream), dictCap)
 		if err != nil {
 			return verdict{err: err}
 		}
@@ -432,13 +453,8 @@ func TestContractLZMA2Malformed(t *testing.T) {
 		}
 
 		for cname, c := range writer2Configs() {
-			dictCap := c.DictCap
-			if dictCap == 0 {
-				dictCap = 8 << 20
-			}
-
 			stream := lzma2(t, c, data, cuts(len(data))[len(cuts(len(data)))-1]...)
-			malformed(t, name+", "+cname, stream, referenceLZMA2Verdict(dictCap), lzma2Verdict(dictCap))
+			malformed(t, name+", "+cname, stream, referenceLZMA2Verdict(c.dictSize()), lzma2Verdict(c.dictSize()))
 		}
 	}
 }
@@ -473,49 +489,6 @@ func TestContractProperties(t *testing.T) {
 				t.Errorf("code %d encodes back to %d", code, p.Code())
 			}
 		}
-	}
-}
-
-// TestContractDictCapCodes: the 41 dictionary codes decode to 2^n and
-// 2^n+2^(n-1) up to 2^32-1, encode back to themselves, a value between two
-// codes encodes to the next code up, and code 41 is refused.
-func TestContractDictCapCodes(t *testing.T) {
-	t.Parallel()
-
-	for code := range byte(41) {
-		n, err := lzma.DecodeDictCap(code)
-		if err != nil {
-			t.Fatalf("code %d: %v", code, err)
-		}
-
-		var want int64
-
-		switch {
-		case code == 40:
-			want = 1<<32 - 1
-		case code%2 == 0:
-			want = 1 << (code/2 + 12)
-		default:
-			want = 3 << (code/2 + 11)
-		}
-
-		if n != want {
-			t.Errorf("code %d: %d, want %d", code, n, want)
-		}
-
-		if back := lzma.EncodeDictCap(n); back != code {
-			t.Errorf("value %d encodes to code %d; want %d", n, back, code)
-		}
-
-		if code > 0 && code < 40 {
-			if up := lzma.EncodeDictCap(n - 1); up != code {
-				t.Errorf("value %d encodes to code %d; want %d (the next code up)", n-1, up, code)
-			}
-		}
-	}
-
-	if _, err := lzma.DecodeDictCap(41); err == nil {
-		t.Error("code 41 decodes")
 	}
 }
 
@@ -561,87 +534,98 @@ func TestContractValidHeader(t *testing.T) {
 	}
 }
 
-// TestContractConfigBounds: the readers' and writers' configurations are
-// accepted at the bounds of the dictionary capacity and the properties,
-// and refused one past them.
-func TestContractConfigBounds(t *testing.T) {
+// TestContractOptionBounds: the readers' and writers' options are accepted
+// at the bounds of the dictionary size and the properties, and refused one
+// past them.
+func TestContractOptionBounds(t *testing.T) {
 	t.Parallel()
 
-	stream := classic(t, lzma.WriterConfig{DictCap: lzma.MinDictCap}, []byte("hello"))
+	stream := classic(t, wcase{opts: []lzma.Option{lzma.WithDictSize(lzma.MinDictSize)}}, []byte("hello"))
 	sequence := lzma2Stream(t, []byte("hello"))
 
-	// A reader grows its dictionary as the data needs it; a writer
-	// allocates the whole capacity on construction, four gigabytes at the
-	// upper bound, so the writers are held at Verify, where acceptance is
-	// decided.
-	for _, dictCap := range []int{lzma.MinDictCap, lzma.MaxDictCap} {
-		if _, err := (lzma.ReaderConfig{DictCap: dictCap}).NewReader(bytes.NewReader(stream)); err != nil {
-			t.Errorf("ReaderConfig DictCap %d: %v; want accepted", dictCap, err)
+	// A reader grows its dictionary as the data needs it, so both bounds are
+	// constructed; a writer allocates the whole dictionary on construction,
+	// four gigabytes at the upper bound, so the writers are held at the
+	// lower one.
+	for _, dictSize := range []int{lzma.MinDictSize, lzma.MaxDictSize} {
+		if _, err := lzma.NewReader(bytes.NewReader(stream), lzma.WithMaxDictSize(int64(dictSize))); err != nil {
+			t.Errorf("WithMaxDictSize %d: %v; want accepted", dictSize, err)
 		}
 
-		if _, err := (lzma.Reader2Config{DictCap: dictCap}).NewReader2(bytes.NewReader(sequence)); err != nil {
-			t.Errorf("Reader2Config DictCap %d: %v; want accepted", dictCap, err)
-		}
-
-		if err := (&lzma.WriterConfig{DictCap: dictCap}).Verify(); err != nil {
-			t.Errorf("WriterConfig DictCap %d: %v; want accepted", dictCap, err)
-		}
-
-		if err := (&lzma.Writer2Config{DictCap: dictCap}).Verify(); err != nil {
-			t.Errorf("Writer2Config DictCap %d: %v; want accepted", dictCap, err)
+		if _, err := lzma.NewReader2(bytes.NewReader(sequence), dictSize); err != nil {
+			t.Errorf("NewReader2 dictionary %d: %v; want accepted", dictSize, err)
 		}
 	}
 
-	for _, dictCap := range []int{1, lzma.MinDictCap - 1, lzma.MaxDictCap + 1} {
-		if _, err := (lzma.ReaderConfig{DictCap: dictCap}).NewReader(bytes.NewReader(stream)); err == nil {
-			t.Errorf("ReaderConfig DictCap %d accepted", dictCap)
+	if _, err := lzma.NewWriter(io.Discard, lzma.WithDictSize(lzma.MinDictSize)); err != nil {
+		t.Errorf("writer WithDictSize %d: %v; want accepted", lzma.MinDictSize, err)
+	}
+
+	if _, err := lzma.NewWriter2(io.Discard, lzma.WithDictSize(lzma.MinDictSize)); err != nil {
+		t.Errorf("LZMA2 writer WithDictSize %d: %v; want accepted", lzma.MinDictSize, err)
+	}
+
+	for _, dictSize := range []int{1, lzma.MinDictSize - 1, lzma.MaxDictSize + 1} {
+		if _, err := lzma.NewReader(bytes.NewReader(stream), lzma.WithMaxDictSize(int64(dictSize))); err == nil {
+			t.Errorf("WithMaxDictSize %d accepted", dictSize)
 		}
 
-		if _, err := (lzma.Reader2Config{DictCap: dictCap}).NewReader2(bytes.NewReader(sequence)); err == nil {
-			t.Errorf("Reader2Config DictCap %d accepted", dictCap)
+		if _, err := lzma.NewReader2(bytes.NewReader(sequence), dictSize); err == nil {
+			t.Errorf("NewReader2 dictionary %d accepted", dictSize)
 		}
 
-		if _, err := (lzma.WriterConfig{DictCap: dictCap}).NewWriter(io.Discard); err == nil {
-			t.Errorf("WriterConfig DictCap %d accepted", dictCap)
+		if _, err := lzma.NewWriter(io.Discard, lzma.WithDictSize(dictSize)); err == nil {
+			t.Errorf("writer WithDictSize %d accepted", dictSize)
 		}
 
-		if _, err := (lzma.Writer2Config{DictCap: dictCap}).NewWriter2(io.Discard); err == nil {
-			t.Errorf("Writer2Config DictCap %d accepted", dictCap)
+		if _, err := lzma.NewWriter2(io.Discard, lzma.WithDictSize(dictSize)); err == nil {
+			t.Errorf("LZMA2 writer WithDictSize %d accepted", dictSize)
 		}
 	}
 
-	for _, p := range []lzma.Properties{{LC: 4, LP: 0, PB: 4}, {LC: 0, LP: 4, PB: 0}, {LC: 2, LP: 2, PB: 2}} {
-		if _, err := (lzma.WriterConfig{Properties: &p}).NewWriter(io.Discard); err != nil {
-			t.Errorf("properties %+v: %v; want accepted", p, err)
+	for _, p := range [][3]int{{4, 0, 4}, {0, 4, 0}, {2, 2, 2}} {
+		if _, err := lzma.NewWriter(io.Discard, lzma.WithProperties(p[0], p[1], p[2])); err != nil {
+			t.Errorf("properties %v: %v; want accepted", p, err)
 		}
 	}
 
-	for _, p := range []lzma.Properties{{LC: 9}, {LC: -1}, {LP: 5}, {LP: -1}, {PB: 5}, {PB: -1}, {LC: 5, LP: 4}} {
-		if _, err := (lzma.WriterConfig{Properties: &p}).NewWriter(io.Discard); err == nil {
-			t.Errorf("properties %+v accepted by the writer", p)
+	for _, p := range [][3]int{{9, 0, 0}, {-1, 0, 0}, {0, 5, 0}, {0, -1, 0}, {0, 0, 5}, {0, 0, -1}, {5, 4, 0}} {
+		if _, err := lzma.NewWriter(io.Discard, lzma.WithProperties(p[0], p[1], p[2])); err == nil {
+			t.Errorf("properties %v accepted by the writer", p)
 		}
 
-		if _, err := (lzma.Writer2Config{Properties: &p}).NewWriter2(io.Discard); err == nil {
-			t.Errorf("properties %+v accepted by the LZMA2 writer", p)
+		if _, err := lzma.NewWriter2(io.Discard, lzma.WithProperties(p[0], p[1], p[2])); err == nil {
+			t.Errorf("properties %v accepted by the LZMA2 writer", p)
 		}
+	}
+
+	// An option of the other constructor is refused, not ignored.
+	if _, err := lzma.NewReader(bytes.NewReader(stream), lzma.WithDictSize(lzma.MinDictSize)); err == nil {
+		t.Error("the reader accepted WithDictSize")
+	}
+
+	if _, err := lzma.NewWriter2(io.Discard, lzma.WithSize(5)); err == nil {
+		t.Error("the LZMA2 writer accepted WithSize")
+	}
+
+	if _, err := lzma.NewWriter(io.Discard, lzma.WithMaxDictSize(lzma.MinDictSize)); err == nil {
+		t.Error("the writer accepted WithMaxDictSize")
 	}
 }
 
-// TestContractDictCapLimit: a classic header declaring a dictionary above
-// ReaderConfig.DictCap is refused with ErrDictSize carrying both sizes.
-func TestContractDictCapLimit(t *testing.T) {
+// TestContractMaxDictSize: a classic header declaring a dictionary above
+// WithMaxDictSize is refused as unsupported; one at the limit is read.
+func TestContractMaxDictSize(t *testing.T) {
 	t.Parallel()
 
-	stream := classic(t, lzma.WriterConfig{DictCap: 1 << 20}, []byte("hello"))
+	stream := classic(t, wcase{opts: []lzma.Option{lzma.WithDictSize(1 << 20)}}, []byte("hello"))
 
-	_, err := lzma.ReaderConfig{DictCap: 1 << 16}.NewReader(bytes.NewReader(stream))
-
-	var dictErr *lzma.ErrDictSize
-	if !errors.As(err, &dictErr) || dictErr.ConfigDictCap != 1<<16 || dictErr.HeaderDictSize != 1<<20 {
-		t.Fatalf("%v; want ErrDictSize with 65536 and 1048576", err)
+	_, err := lzma.NewReader(bytes.NewReader(stream), lzma.WithMaxDictSize(1<<16))
+	if !errors.Is(err, lzma.ErrUnsupported) {
+		t.Fatalf("%v; want ErrUnsupported", err)
 	}
 
-	r, err := lzma.ReaderConfig{DictCap: 1 << 20}.NewReader(bytes.NewReader(stream))
+	r, err := lzma.NewReader(bytes.NewReader(stream), lzma.WithMaxDictSize(1<<20))
 	if err != nil {
 		t.Fatalf("a limit equal to the header's size refuses: %v", err)
 	}
@@ -718,7 +702,7 @@ func TestContractChunkRules(t *testing.T) {
 	for _, c := range cases {
 		in := bytes.NewReader(c.in)
 
-		r, err := lzma.NewReader2(in)
+		r, err := lzma.NewReader2(in, 8<<20)
 		if err != nil {
 			t.Fatalf("%s: NewReader2: %v", c.name, err)
 		}

@@ -14,8 +14,8 @@ import (
 	upstream "github.com/ulikunitz/xz"
 	upstreamlzma "github.com/ulikunitz/xz/lzma"
 
-	fork "github.com/forkcloser/xz"
-	forklzma "github.com/forkcloser/xz/lzma"
+	fork "github.com/forkcloser/xz/v2"
+	forklzma "github.com/forkcloser/xz/v2/lzma"
 )
 
 // corpora returns the inputs both sides are driven with: the shapes a
@@ -51,10 +51,10 @@ func corpora(tb testing.TB) map[string][]byte {
 	return c
 }
 
-func forkCompress(tb testing.TB, cfg fork.WriterConfig, data []byte) []byte {
+func forkCompress(tb testing.TB, opts []fork.Option, data []byte) []byte {
 	tb.Helper()
 	var buf bytes.Buffer
-	w, err := cfg.NewWriter(&buf)
+	w, err := fork.NewWriter(&buf, opts...)
 	if err != nil {
 		tb.Fatalf("fork NewWriter: %v", err)
 	}
@@ -92,7 +92,7 @@ func forkDecompress(file []byte) ([]byte, error) {
 }
 
 func forkDecompressParallel(file []byte) ([]byte, error) {
-	r, err := fork.NewParallelReader(bytes.NewReader(file), int64(len(file)))
+	r, err := fork.NewReader(bytes.NewReader(file), fork.WithWorkers(4))
 	if err != nil {
 		return nil, err
 	}
@@ -114,14 +114,14 @@ func upstreamDecompress(file []byte) ([]byte, error) {
 // read would be a format bug; a file upstream writes that this fork cannot
 // read would be a regression in the reader.
 func TestXZInterchange(t *testing.T) {
-	forkConfigs := map[string]fork.WriterConfig{
-		"default":    {},
-		"crc32":      {CheckSum: fork.CRC32},
-		"sha256":     {CheckSum: fork.SHA256},
-		"none":       {NoCheckSum: true},
-		"blocks 64K": {BlockSize: 64 << 10},
-		"blocks 4K":  {BlockSize: 4 << 10, CheckSum: fork.CRC32},
-		"small dict": {DictCap: forklzma.MinDictCap},
+	forkConfigs := map[string][]fork.Option{
+		"default":    nil,
+		"crc32":      {fork.WithCheck(fork.CheckCRC32)},
+		"sha256":     {fork.WithCheck(fork.CheckSHA256)},
+		"none":       {fork.WithCheck(fork.CheckNone)},
+		"blocks 64K": {fork.WithBlockSize(64 << 10)},
+		"blocks 4K":  {fork.WithBlockSize(4 << 10), fork.WithCheck(fork.CheckCRC32)},
+		"small dict": {fork.WithDictSize(forklzma.MinDictSize)},
 	}
 	upstreamConfigs := map[string]upstream.WriterConfig{
 		"default":    {},
@@ -243,7 +243,7 @@ func TestLZMAInterchange(t *testing.T) {
 			if err = uw.Close(); err != nil {
 				t.Fatal(err)
 			}
-			fr, err := forklzma.NewReader2(bytes.NewReader(buf.Bytes()))
+			fr, err := forklzma.NewReader2(bytes.NewReader(buf.Bytes()), 8<<20)
 			if err != nil {
 				t.Fatalf("fork lzma.NewReader2 on upstream's stream: %v", err)
 			}
@@ -264,8 +264,8 @@ func TestLZMAInterchange(t *testing.T) {
 func TestCorruptionVerdictsAgree(t *testing.T) {
 	data := corpora(t)["text"][:4096]
 	for cname, file := range map[string][]byte{
-		"single block": forkCompress(t, fork.WriterConfig{}, data),
-		"multi block":  forkCompress(t, fork.WriterConfig{BlockSize: 1024}, data),
+		"single block": forkCompress(t, nil, data),
+		"multi block":  forkCompress(t, []fork.Option{fork.WithBlockSize(1024)}, data),
 	} {
 		var stricter int
 		for i := range file {
@@ -290,7 +290,7 @@ func TestCorruptionVerdictsAgree(t *testing.T) {
 
 	// Truncation: every prefix. Upstream accepts a file cut exactly at the
 	// end of its last block; the fork must never accept a prefix.
-	file := forkCompress(t, fork.WriterConfig{BlockSize: 1024}, data)
+	file := forkCompress(t, []fork.Option{fork.WithBlockSize(1024)}, data)
 	for n := range file {
 		if out, err := forkDecompress(file[:n]); err == nil && bytes.Equal(out, data) {
 			t.Errorf("the fork accepted a %d byte prefix of a %d byte file as complete", n, len(file))

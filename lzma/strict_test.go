@@ -10,7 +10,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/forkcloser/xz/lzma"
+	"github.com/forkcloser/xz/v2/lzma"
 )
 
 // TestStrictTrailingChunkBytes: a compressed LZMA2 chunk whose size field
@@ -29,7 +29,7 @@ func TestStrictTrailingChunkBytes(t *testing.T) {
 	bad = append(bad, stream[6+packed:]...)
 	bad[3], bad[4] = byte(packed>>8), byte(packed) // packed+1, stored minus one
 
-	r, err := lzma.NewReader2(bytes.NewReader(bad))
+	r, err := lzma.NewReader2(bytes.NewReader(bad), 8<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestStrictTrailingChunkBytes(t *testing.T) {
 		t.Fatalf("%d bytes, %v; want ErrCorrupt", len(got), err)
 	}
 
-	r, err = lzma.NewReader2(bytes.NewReader(stream))
+	r, err = lzma.NewReader2(bytes.NewReader(stream), 8<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestStrictEOSMarkerInChunk(t *testing.T) {
 	// 13-byte header is LZMA data ending in the marker.
 	var buf bytes.Buffer
 
-	w, err := lzma.WriterConfig{EOSMarker: true}.NewWriter(&buf)
+	w, err := lzma.NewWriter(&buf, lzma.WithEOSMarker())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestStrictEOSMarkerInChunk(t *testing.T) {
 	chunk = append(chunk, payload...)
 	chunk = append(chunk, 0x00) // end of the sequence
 
-	r, err := lzma.NewReader2(bytes.NewReader(chunk))
+	r, err := lzma.NewReader2(bytes.NewReader(chunk), 8<<20)
 	if err != nil {
 		t.Fatal(err)
 	}

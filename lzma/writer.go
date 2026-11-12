@@ -10,89 +10,15 @@ import (
 	"io"
 )
 
-// What WriterConfig.Verify refuses; the dictionary capacity is errDictCap.
-var (
-	errWriterConfigNil = errors.New("lzma: WriterConfig is nil")
-	errNoProperties    = errors.New("lzma: WriterConfig has no Properties set")
-	errBufSizeSmall    = errors.New("lzma: lookahead buffer size too small")
-	errNegativeSize    = errors.New("lzma: negative size not supported")
-	errEOSRequired     = errors.New("lzma: EOS marker is required")
-)
-
-// defaultDictCap is the dictionary capacity a zero DictCap selects.
-const defaultDictCap = 8 << 20
-
-// MinDictCap and MaxDictCap provide the range of supported dictionary
-// capacities.
+// MinDictSize and MaxDictSize bound the dictionary size.
 const (
-	MinDictCap = 1 << 12
-	MaxDictCap = 1<<32 - 1
+	MinDictSize = 1 << 12
+	MaxDictSize = 1<<32 - 1
 )
 
-// WriterConfig defines the configuration parameter for a writer.
-//
-//nolint:recvcheck // NewWriter copies the config, so it works on a literal; Verify and fill take the pointer
-type WriterConfig struct {
-	// Properties for the encoding. If the it is nil the value
-	// {LC: 3, LP: 0, PB: 2} will be chosen.
-	Properties *Properties
-	// The capacity of the dictionary. If DictCap is zero, the value
-	// 8 MiB will be chosen.
-	DictCap int
-	// Size of the lookahead buffer; value 0 indicates default size
-	// 4096
-	BufSize int
-	// Match algorithm
-	Matcher MatchAlgorithm
-	// SizeInHeader indicates that the header will contain an
-	// explicit size.
-	SizeInHeader bool
-	// Size of the data to be encoded. A positive value will imply
-	// than an explicit size will be set in the header.
-	Size int64
-	// EOSMarker requests whether the EOSMarker needs to be written.
-	// If no explicit size is been given the EOSMarker will be
-	// set automatically.
-	EOSMarker bool
-}
-
-// Verify checks WriterConfig for errors. Verify will replace zero
-// values with default values.
-func (c *WriterConfig) Verify() error {
-	c.fill()
-
-	var err error
-
-	if c == nil {
-		return errWriterConfigNil
-	}
-
-	if c.Properties == nil {
-		return errNoProperties
-	}
-
-	if err = c.Properties.verify(); err != nil {
-		return err
-	}
-
-	if !(MinDictCap <= c.DictCap && int64(c.DictCap) <= MaxDictCap) {
-		return errDictCap
-	}
-
-	if !(maxMatchLen <= c.BufSize) {
-		return errBufSizeSmall
-	}
-
-	if c.SizeInHeader {
-		if c.Size < 0 {
-			return errNegativeSize
-		}
-	} else if !c.EOSMarker {
-		return errEOSRequired
-	}
-
-	return c.Matcher.verify()
-}
+// lookaheadSize is the encoder's lookahead buffer, which bounds the longest
+// match it looks for.
+const lookaheadSize = 4096
 
 // Writer writes an LZMA stream in the classic format.
 type Writer struct {
@@ -108,14 +34,21 @@ type Writer struct {
 	closed bool
 }
 
-// NewWriter creates a new LZMA writer for the classic format. The
-// method will write the header to the underlying stream.
-func (c WriterConfig) NewWriter(lzma io.Writer) (w *Writer, err error) {
-	if err = c.Verify(); err != nil {
+// NewWriter creates a writer for an LZMA stream in the classic format and
+// writes the header to lzma. Options: WithDictSize, WithProperties,
+// WithSize, WithEOSMarker.
+func NewWriter(lzma io.Writer, opts ...Option) (w *Writer, err error) {
+	o, err := apply(opts, optDictSize|optProperties|optSize|optEOSMarker, "NewWriter")
+	if err != nil {
 		return nil, err
 	}
 
-	w = &Writer{h: c.header()}
+	w = &Writer{h: Header{
+		Properties: o.props,
+		// #nosec G115 -- the dictionary size is within MinDictSize to MaxDictSize
+		DictSize: uint32(o.dictSize),
+		Size:     o.size,
+	}}
 
 	var ok bool
 
@@ -127,18 +60,18 @@ func (c WriterConfig) NewWriter(lzma io.Writer) (w *Writer, err error) {
 
 	state := newState(w.h.Properties)
 
-	m, err := c.Matcher.new(int(w.h.DictSize))
+	m, err := newHashTable(int(w.h.DictSize), 4)
 	if err != nil {
 		return nil, err
 	}
 
-	dict, err := newEncoderDict(int(w.h.DictSize), c.BufSize, m)
+	dict, err := newEncoderDict(int(w.h.DictSize), lookaheadSize, m)
 	if err != nil {
 		return nil, err
 	}
 
 	var flags encoderFlags
-	if c.EOSMarker {
+	if o.eosMarker {
 		flags = eosMarker
 	}
 
@@ -151,52 +84,8 @@ func (c WriterConfig) NewWriter(lzma io.Writer) (w *Writer, err error) {
 	return w, nil
 }
 
-// header returns the header structure for this configuration.
-func (c *WriterConfig) header() Header {
-	h := Header{
-		Properties: *c.Properties,
-		// #nosec G115 -- DictCap is verified to be MinDictCap to MaxDictCap, 1<<32 - 1
-		DictSize: uint32(c.DictCap),
-		Size:     -1,
-	}
-	if c.SizeInHeader {
-		h.Size = c.Size
-	}
-
-	return h
-}
-
-// fill converts zero-value fields to their explicit default values.
-func (c *WriterConfig) fill() {
-	if c.Properties == nil {
-		c.Properties = &Properties{LC: 3, LP: 0, PB: 2}
-	}
-
-	if c.DictCap == 0 {
-		c.DictCap = defaultDictCap
-	}
-
-	if c.BufSize == 0 {
-		c.BufSize = 4096
-	}
-
-	if c.Size > 0 {
-		c.SizeInHeader = true
-	}
-
-	if !c.SizeInHeader {
-		c.EOSMarker = true
-	}
-}
-
-// NewWriter creates a new LZMA writer using the classic format. The
-// function writes the header to the underlying stream.
-func NewWriter(lzma io.Writer) (w *Writer, err error) {
-	return WriterConfig{}.NewWriter(lzma)
-}
-
 // Write puts data into the Writer. When the header declares a size, Write
-// accepts at most that many bytes in total and returns ErrNoSpace for the
+// accepts at most that many bytes in total and returns ErrSizeExceeded for the
 // rest.
 func (w *Writer) Write(p []byte) (n int, err error) {
 	if w.err != nil {
@@ -217,7 +106,7 @@ func (w *Writer) Write(p []byte) (n int, err error) {
 
 		if m < int64(len(p)) {
 			p = p[:m]
-			err = ErrNoSpace
+			err = ErrSizeExceeded
 		}
 	}
 

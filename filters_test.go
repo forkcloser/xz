@@ -18,7 +18,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/forkcloser/xz"
+	"github.com/forkcloser/xz/v2"
 )
 
 // The BCJ and delta filters, held to XZ Utils: testdata/filters holds, for
@@ -215,7 +215,7 @@ func TestFiltersAgainstXZUtils(t *testing.T) {
 				)
 			}
 
-			pr, err := xz.NewParallelReader(bytes.NewReader(data), int64(len(data)))
+			pr, err := xz.NewReader(bytes.NewReader(data), xz.WithWorkers(4))
 			if err != nil {
 				t.Fatalf("NewParallelReader: %v", err)
 			}

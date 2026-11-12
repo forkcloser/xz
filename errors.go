@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/forkcloser/xz/lzma"
+	"github.com/forkcloser/xz/v2/lzma"
 )
 
 // Sentinel errors that callers can test for with errors.Is.
@@ -90,8 +90,7 @@ func classify(err error) error {
 // io.Copy picks up silently, so it is worth pinning rather than leaving to be
 // noticed when it disappears.
 var (
-	_ io.ReadCloser  = (*ParallelReader)(nil)
-	_ io.WriterTo    = (*ParallelReader)(nil)
-	_ io.Reader      = (*Reader)(nil)
+	_ io.ReadCloser  = (*Reader)(nil)
+	_ io.WriterTo    = (*Reader)(nil)
 	_ io.WriteCloser = (*Writer)(nil)
 )

@@ -15,16 +15,17 @@ import (
 	"io"
 	"testing"
 
-	"github.com/forkcloser/xz"
+	"github.com/forkcloser/xz/v2"
+	"github.com/forkcloser/xz/v2/lzma"
 )
 
 // writeAll writes data through w in the given pieces and closes it.
-func writeAll(tb testing.TB, c xz.WriterConfig, pieces ...[]byte) []byte {
+func writeAll(tb testing.TB, opts []xz.Option, pieces ...[]byte) []byte {
 	tb.Helper()
 
 	var buf bytes.Buffer
 
-	w, err := c.NewWriter(&buf)
+	w, err := xz.NewWriter(&buf, opts...)
 	if err != nil {
 		tb.Fatal(err)
 	}
@@ -52,7 +53,7 @@ func TestBoundedWriterBlocks(t *testing.T) {
 	const size = 1024
 
 	data := cData(3 * size)
-	c := xz.WriterConfig{BlockSize: size}
+	c := []xz.Option{xz.WithBlockSize(size)}
 
 	cases := []struct {
 		name   string
@@ -112,15 +113,10 @@ func TestBoundedParallelBlocks(t *testing.T) {
 
 	for _, blockSize := range []int64{initial - 1, initial, initial + 1, 2*initial + 1} {
 		data := cData(int(2*blockSize) + 3)
-		file := writeAll(t, xz.WriterConfig{BlockSize: blockSize}, data)
+		file := writeAll(t, []xz.Option{xz.WithBlockSize(blockSize)}, data)
 
 		for _, workers := range []int{1, 2, 5} {
-			r, err := xz.ParallelReaderConfig{
-				Workers: workers,
-			}.NewParallelReader(
-				bytes.NewReader(file),
-				int64(len(file)),
-			)
+			r, err := xz.NewReader(bytes.NewReader(file), xz.WithWorkers(workers))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -137,10 +133,10 @@ func TestBoundedParallelBlocks(t *testing.T) {
 	}
 
 	data := cData(100000)
-	file := writeAll(t, xz.WriterConfig{BlockSize: 4096}, data)
+	file := writeAll(t, []xz.Option{xz.WithBlockSize(4096)}, data)
 
 	for _, size := range []int{1, 7, 4096, 1 << 20} {
-		r, err := xz.ParallelReaderConfig{Workers: 3}.NewParallelReader(bytes.NewReader(file), int64(len(file)))
+		r, err := xz.NewReader(bytes.NewReader(file), xz.WithWorkers(3))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -192,7 +188,7 @@ func TestBoundedStreams(t *testing.T) {
 	streams := make([][]byte, 0, len(parts))
 
 	for i, part := range parts {
-		check := []byte{xz.None, xz.CRC32, xz.CRC64, xz.SHA256}[i]
+		check := []byte{flagNone, flagCRC32, flagCRC64, flagSHA256}[i]
 		streams = append(
 			streams,
 			refStream(refOptions{check: check, sizes: i%2 == 0, dictCode: 30}, refBlocks(t, part, 3000)),
@@ -216,7 +212,7 @@ func TestBoundedStreams(t *testing.T) {
 			t.Fatalf("padding %d: parallel: %d bytes, %v", padding, len(parallel.data), parallel.err)
 		}
 
-		r, err := xz.ReaderConfig{SingleStream: true}.NewReader(bytes.NewReader(file))
+		r, err := xz.NewReader(bytes.NewReader(file), xz.WithSingleStream())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -242,9 +238,11 @@ func TestBoundedWriterSizes(t *testing.T) {
 	for _, n := range []int{0, 1, 4095, 4096, 4097, 65535, 65536, 65537, 1<<21 - 1, 1 << 21, 1<<21 + 1} {
 		data := cData(n)
 
-		got, err := refParse(writeAll(t, xz.WriterConfig{}, data))
-		if err != nil || !bytes.Equal(got, data) {
-			t.Fatalf("len %d: the reference: %d bytes, %v", n, len(got), err)
+		for _, opts := range [][]xz.Option{nil, {xz.WithProperties(0, 2, 0)}, {xz.WithDictSize(lzma.MinDictSize)}} {
+			got, err := refParse(writeAll(t, opts, data))
+			if err != nil || !bytes.Equal(got, data) {
+				t.Fatalf("len %d: the reference: %d bytes, %v", n, len(got), err)
+			}
 		}
 	}
 }

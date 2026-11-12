@@ -39,7 +39,7 @@ type encoderDict struct {
 // newEncoderDict creates the encoder dictionary. The argument bufSize
 // defines the size of the additional buffer.
 func newEncoderDict(dictCap, bufSize int, m matcher) (d *encoderDict, err error) {
-	if !(1 <= dictCap && int64(dictCap) <= MaxDictCap) {
+	if !(1 <= dictCap && int64(dictCap) <= MaxDictSize) {
 		return nil, errEncoderDictCap
 	}
 
@@ -99,12 +99,12 @@ func (d *encoderDict) Available() int {
 
 // Write writes data into the dictionary buffer. Note that the position
 // of the dictionary head will not be moved. If there is not enough
-// space in the buffer ErrNoSpace will be returned.
+// space in the buffer ErrSizeExceeded will be returned.
 func (d *encoderDict) Write(p []byte) (n int, err error) {
 	m := d.Available()
 	if len(p) > m {
 		p = p[:m]
-		err = ErrNoSpace
+		err = ErrSizeExceeded
 	}
 
 	var e error
@@ -143,7 +143,7 @@ func (d *encoderDict) CopyN(w io.Writer, n int) (written int, err error) {
 	m := d.Len()
 	if n > m {
 		n = m
-		err = ErrNoSpace
+		err = ErrSizeExceeded
 	}
 
 	i := d.buf.rear - n

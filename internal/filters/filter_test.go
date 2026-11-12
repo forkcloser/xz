@@ -10,7 +10,7 @@ import (
 	"math/rand/v2"
 	"testing"
 
-	"github.com/forkcloser/xz/internal/filters"
+	"github.com/forkcloser/xz/v2/internal/filters"
 )
 
 // bcjIDs lists every BCJ filter with its alignment.
