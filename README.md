@@ -54,6 +54,14 @@ capacities and buffer sizes, header fields the writer never emits (block
 sizes, several filters), bounds a nine-byte integer cannot reach, and
 equalities the format rules out.
 
+Both readers and the classic LZMA reader also run XZ Utils' own decoder
+conformance files (`testdata/xzutils`, upstream's `tests/files`, 0BSD): every
+good `.xz` and `.lzma` file decodes, with the Reader and the ParallelReader
+agreeing byte for byte, except the five whose filter chain is BCJ or delta,
+which are refused as unsupported; every bad file is refused as corrupt or
+cut short; every file upstream classes as unsupported is refused, never
+decoded.
+
 ## About this fork
 
 This here is a friendly fork of https://github.com/ulikunitz/xz, taken at
